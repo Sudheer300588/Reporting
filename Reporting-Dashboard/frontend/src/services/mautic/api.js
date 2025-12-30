@@ -6,7 +6,7 @@
 
 import axios from "axios";
 
-const baseURL = import.meta.env.VITE_API_URL || "https://dev.hcddev.com";
+const baseURL = import.meta.env.VITE_API_URL || "";
 
 const mauticAPI = axios.create({
   baseURL: `${baseURL}/api/mautic`,
@@ -14,6 +14,14 @@ const mauticAPI = axios.create({
     "Content-Type": "application/json",
   },
   timeout: 120000, // 2 minutes for large data operations
+});
+
+mauticAPI.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
 // ============================================
