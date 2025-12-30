@@ -109,7 +109,7 @@ async function startServer() {
 
     // Start listening
     const server = app.listen(PORT, () => {
-      logger.info(`Server running at https://hcdteam.com:${PORT}`);
+      logger.info(`Server running on port ${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
       logger.info('Application ready');
     });
