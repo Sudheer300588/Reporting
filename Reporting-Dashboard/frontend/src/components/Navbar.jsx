@@ -34,18 +34,46 @@ const Navbar = () => {
 
     const isActive = (path) => location.pathname === path;
 
-    // 🔹 Define nav links dynamically
+    // Helper to check if user has full access
+    const hasFullAccess = () => {
+        if (user?.customRole?.fullAccess === true) return true;
+        if (!user?.customRoleId && ['superadmin', 'admin'].includes(user?.role)) return true;
+        return false;
+    };
+
+    // Helper to check page access from customRole.permissions.Pages
+    const hasPageAccess = (pageKey) => {
+        if (hasFullAccess()) return true;
+        
+        // Check customRole.permissions.Pages
+        const pages = user?.customRole?.permissions?.Pages;
+        if (pages && pages[pageKey] === true) return true;
+        
+        // Backward compatibility for legacy users without customRole
+        if (!user?.customRoleId) {
+            if (['superadmin', 'admin'].includes(user?.role)) return true;
+            if (user?.role === 'manager') {
+                return ['Dashboard', 'Clients', 'Users', 'Services', 'Activities', 'Notifications'].includes(pageKey);
+            }
+            if (['employee', 'telecaller'].includes(user?.role)) {
+                return ['Dashboard', 'Clients', 'Notifications'].includes(pageKey);
+            }
+        }
+        return false;
+    };
+
+    // 🔹 Define nav links dynamically with page keys matching permissions.Pages
     const navLinks = [
-        { to: '/dashboard', label: 'Dashboard', icon: BarChart3, roles: ['admin', 'employee', 'telecaller', 'manager', 'superadmin'] },
-        { to: '/clients', label: 'Clients', icon: UserPlus, roles: ['admin', 'employee', 'telecaller', 'manager', 'superadmin'] },
-        { to: '/users', label: 'Employees', icon: Users, roles: ['admin', 'manager', 'superadmin'] },
-        { to: '/services', label: 'Services', icon: HeartHandshake, roles: ['admin', 'manager', 'superadmin'] },
-        { to: '/activities', label: 'Activities', icon: Activity, roles: ['admin', 'manager', 'superadmin'] },
-        { to: '/notifications', label: 'Notifications', icon: Bell, roles: ['admin', 'employee', 'telecaller', 'manager', 'superadmin'] },
-        { to: '/settings', label: 'Settings', icon: Settings, roles: ['admin', 'superadmin'] }
+        { to: '/dashboard', label: 'Dashboard', icon: BarChart3, pageKey: 'Dashboard' },
+        { to: '/clients', label: 'Clients', icon: UserPlus, pageKey: 'Clients' },
+        { to: '/users', label: 'Employees', icon: Users, pageKey: 'Users' },
+        { to: '/services', label: 'Services', icon: HeartHandshake, pageKey: 'Services' },
+        { to: '/activities', label: 'Activities', icon: Activity, pageKey: 'Activities' },
+        { to: '/notifications', label: 'Notifications', icon: Bell, pageKey: 'Notifications' },
+        { to: '/settings', label: 'Settings', icon: Settings, pageKey: 'Settings' }
     ];
 
-    const filteredLinks = navLinks.filter(link => link.roles.includes(user?.role));
+    const filteredLinks = navLinks.filter(link => hasPageAccess(link.pageKey));
 
     const linkClass = (path, isMobile = false) =>
         `flex items-center space-x-${isMobile ? 3 : 1} px-${isMobile ? 3 : 2} py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${isActive(path)

@@ -72,24 +72,57 @@ const SettingsLayout = ({ children, myPermissions = [] }) => {
     };
   }, []);
 
+  // Helper to check if user has full access
+  const hasFullAccess = () => {
+    if (user?.customRole?.fullAccess === true) return true;
+    if (!user?.customRoleId && ['superadmin', 'admin'].includes(user?.role)) return true;
+    return false;
+  };
+
+  // Map section keys to Settings permission keys
+  const sectionToPermissionKey = {
+    'roles': 'Roles',
+    'mautic': 'Autovation Clients',
+    'notifs': 'Notifications',
+    'maintenance': 'System Maintenance Email',
+    'smtp': 'SMTP Credentials',
+    'sftp': 'Voicemail SFTP Credentials',
+    'vicidial': 'Vicidial Credentials',
+    'sitecustom': 'Site Customization'
+  };
+
   const canAccessSetting = (settingKey) => {
-    if (user?.role === 'superadmin') return true;
-    if (user?.role === 'admin') {
-      return myPermissions.includes(settingKey);
-    }
+    if (hasFullAccess()) return true;
+    
+    // Check customRole.permissions.Settings for the specific section
+    const permissionKey = sectionToPermissionKey[settingKey] || settingKey;
+    const settingsPerms = user?.customRole?.permissions?.Settings;
+    if (settingsPerms && settingsPerms[permissionKey] === true) return true;
+    
+    // Also check myPermissions for backward compatibility
+    if (myPermissions.includes(settingKey)) return true;
+    
     return false;
   };
 
   const visibleSections = SECTION_CONFIG.filter(({ key, superadminOnly }) => {
-    if (superadminOnly && user?.role !== 'superadmin') return false;
-    if (user?.role === 'superadmin') return true;
-    if (user?.role === 'admin') {
-      return myPermissions.includes(key);
-    }
-    return false;
+    // Roles section is superadmin-only by design
+    if (superadminOnly && !hasFullAccess()) return false;
+    
+    return canAccessSetting(key);
   });
 
-  if (user?.role !== 'superadmin' && user?.role !== 'admin') {
+  // Check if user has Settings page access
+  const hasSettingsPageAccess = () => {
+    if (hasFullAccess()) return true;
+    // Check customRole.permissions.Pages.Settings
+    if (user?.customRole?.permissions?.Pages?.Settings === true) return true;
+    // Legacy fallback
+    if (!user?.customRoleId && ['superadmin', 'admin'].includes(user?.role)) return true;
+    return false;
+  };
+
+  if (!hasSettingsPageAccess()) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-12 text-center">
         <Shield className="mx-auto h-12 w-12 text-gray-400 mb-4" />
