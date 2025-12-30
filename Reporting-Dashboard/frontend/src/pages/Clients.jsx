@@ -7,6 +7,7 @@ import MauticEmailsSection from "../components/mautic/MauticEmailsSection";
 import MauticCampaignsSection from "../components/mautic/MauticCampaignsSection";
 import useViewLevel from "../zustand/useViewLevel";
 import ClientServicesSection from "../components/ClientServicesSection";
+import { usePermissions } from "../utils/permissions";
 
 const Clients = () => {
     const {
@@ -19,43 +20,11 @@ const Clients = () => {
     } = useViewLevel();
 
     const { user } = useAuth();
+    const { hasFullAccess, hasPermission, isTeamManager } = usePermissions(user);
     const [clients, setClients] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    // Permission helpers - use customRole permissions instead of hardcoded role names
-    const hasFullAccess = () => {
-        if (user?.customRole?.fullAccess === true) return true;
-        // Backward compatibility for legacy users
-        if (!user?.customRoleId && (user?.role === 'superadmin' || user?.role === 'admin')) return true;
-        return false;
-    };
-
-    const hasPermission = (module, permission) => {
-        if (hasFullAccess()) return true;
-        const modulePerms = user?.customRole?.permissions?.[module];
-        // Handle both array format ["Create"] and object format {"Create": true}
-        if (Array.isArray(modulePerms)) {
-            if (modulePerms.includes(permission)) return true;
-        } else if (modulePerms && typeof modulePerms === 'object') {
-            if (modulePerms[permission] === true) return true;
-        }
-        // Backward compatibility for legacy manager
-        if (!user?.customRoleId && user?.role === 'manager') {
-            if (module === 'Users' && ['Create', 'Read'].includes(permission)) return true;
-            if (module === 'Clients' && ['Create', 'Read', 'Update', 'Delete'].includes(permission)) return true;
-        }
-        return false;
-    };
-
-    // Check if user can manage teams (is a "manager" in assignment context)
-    // Uses isTeamManager flag from customRole, or fullAccess
-    const canManageTeam = () => {
-        if (hasFullAccess()) return true;
-        if (user?.customRole?.isTeamManager === true) return true;
-        // Backward compatibility for legacy manager role
-        if (!user?.customRoleId && user?.role === 'manager') return true;
-        return false;
-    };
+    const canManageTeam = isTeamManager;
     const [showAssignModal, setShowAssignModal] = useState(false);
     const [selectedClientForAssign, setSelectedClientForAssign] = useState(null);
     // users list replaced by managers/employees endpoints
@@ -88,7 +57,6 @@ const Clients = () => {
 
 
             const allClients = clientsRes.data || [];
-            console.log(allClients);
 
             // Extract dropcowboy clients (existing logic)
             const dropCowboyClients = allClients
@@ -208,7 +176,6 @@ const Clients = () => {
                 (c.services || []).includes('mautic') || c.hasMautic
             );
 
-            console.log("Combined clients:", combinedClients);
             setClients(combinedClients);
         } catch (error) {
             console.error("Error fetching clients:", error);
@@ -270,7 +237,6 @@ const Clients = () => {
     const openServiceSelection = (client) => {
         setSelectedClient(client);
         setView("services");
-        console.log(client);
     };
 
     const openMauticCampaigns = async () => {

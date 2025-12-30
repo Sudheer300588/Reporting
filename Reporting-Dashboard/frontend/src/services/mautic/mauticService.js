@@ -100,7 +100,6 @@ class MauticService {
    */
   async deleteClient(clientId) {
     try {
-      console.log('[mauticService] deleteClient called with id:', clientId);
       const response = await apiDeleteClient(clientId);
       return {
         success: true,
@@ -123,7 +122,6 @@ class MauticService {
    */
   async hardDeleteClient(clientId) {
     try {
-      console.log('[mauticService] hardDeleteClient called with id:', clientId);
       const response = await apiHardDeleteClient(clientId);
       return {
         success: true,

@@ -11,10 +11,12 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, PieChart, Pie, Cell
 } from 'recharts'
+import { usePermissions } from '../utils/permissions'
 
 const Dashboard = () => {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const { hasFullAccess, hasPermission, canViewClients, canViewUsers, isTeamManager } = usePermissions(user)
   
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
@@ -27,24 +29,6 @@ const Dashboard = () => {
   const [voicemailMetrics, setVoicemailMetrics] = useState(null)
   const [syncStatus, setSyncStatus] = useState({ mautic: null, dropCowboy: null })
   const [insights, setInsights] = useState([])
-
-  const hasFullAccess = () => {
-    if (user?.customRole?.fullAccess === true) return true
-    if (!user?.customRoleId && ['superadmin', 'admin'].includes(user?.role)) return true
-    return false
-  }
-
-  const hasPermission = (module, action) => {
-    if (hasFullAccess()) return true
-    const modulePerms = user?.customRole?.permissions?.[module]
-    if (Array.isArray(modulePerms)) return modulePerms.includes(action)
-    if (modulePerms && typeof modulePerms === 'object') return modulePerms[action] === true
-    return false
-  }
-
-  const canViewClients = () => hasFullAccess() || hasPermission('Clients', 'Read')
-  const canViewUsers = () => hasFullAccess() || hasPermission('Users', 'Read')
-  const isTeamManager = () => hasFullAccess() || user?.customRole?.isTeamManager === true
 
   useEffect(() => {
     fetchAllData()

@@ -3,9 +3,11 @@ import { useAuth } from '../contexts/AuthContext.jsx'
 import axios from 'axios'
 import { toast } from 'react-toastify'
 import { UserPlus, Edit, Trash2, X, EyeOff, Eye, ToggleLeft, ToggleRight, Shield } from 'lucide-react'
+import { usePermissions } from '../utils/permissions'
 
 const Employees = () => {
   const { user } = useAuth()
+  const { hasFullAccess, hasPermission } = usePermissions(user)
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -14,7 +16,7 @@ const Employees = () => {
     name: '',
     email: '',
     password: '',
-    roleId: '' // This will be the role ID from Settings
+    roleId: ''
   });
   const [showPassword, setShowPassword] = useState(false);
   const [availableRoles, setAvailableRoles] = useState([]);
@@ -24,42 +26,6 @@ const Employees = () => {
     fetchEmployees()
     fetchRoles()
   }, [user]);
-
-  // Helper to check if user has full access
-  // Supports both customRole and legacy base role for backward compatibility
-  const hasFullAccess = () => {
-    // Check custom role first
-    if (user?.customRole?.fullAccess === true) return true;
-    // Backward compatibility: legacy users without customRole
-    if (!user?.customRoleId && (user?.role === 'superadmin' || user?.role === 'admin')) return true;
-    return false;
-  };
-
-  // Helper to check if user has a permission from their customRole
-  // Includes backward compatibility for legacy users
-  const hasPermission = (module, permission) => {
-    // Full access grants all permissions
-    if (hasFullAccess()) return true;
-    
-    // Check custom role permissions
-    if (user?.customRole) {
-      const modulePerms = user.customRole.permissions?.[module];
-      // Handle both array format ["Create"] and object format {"Create": true}
-      if (Array.isArray(modulePerms)) {
-        if (modulePerms.includes(permission)) return true;
-      } else if (modulePerms && typeof modulePerms === 'object') {
-        if (modulePerms[permission] === true) return true;
-      }
-    }
-    
-    // Backward compatibility: legacy manager
-    if (!user?.customRoleId && user?.role === 'manager') {
-      if (module === 'Users' && ['Create', 'Read', 'Update'].includes(permission)) return true;
-      if (module === 'Clients' && ['Create', 'Read', 'Update', 'Delete'].includes(permission)) return true;
-    }
-    
-    return false;
-  };
 
   const fetchRoles = async () => {
     try {
@@ -168,8 +134,6 @@ const Employees = () => {
   }
 
   const handleDelete = async (employeeId) => {
-    console.log(employeeId);
-
     if (window.confirm('Are you sure you want to delete this employee?')) {
       try {
         await axios.delete(`/api/users/${employeeId}`)

@@ -94,10 +94,7 @@ const ClientsTable = () => {
         : records;
 
       setAllRecords(filtered);
-      console.log(selectedClient);
-
       setTotalRecords(filtered.length);
-      console.log(campaigns);
 
     }
   }, [campaigns]);

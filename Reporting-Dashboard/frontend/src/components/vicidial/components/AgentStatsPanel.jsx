@@ -56,8 +56,6 @@ export default function AgentStatsPanel({ agentUser, agentName, onBack }){
         const res = await api.get(`/agents/stats/single?agent_user=${encodeURIComponent(agentUser)}&start=${encodeURIComponent(fmt(start))}&end=${encodeURIComponent(fmt(end))}`);
         if (!mounted) return;
         const payload = res?.data?.data;
-        console.log("payload:", payload);
-        
         if (Array.isArray(payload)) {
           setData(payload[0] || null);
         } else {

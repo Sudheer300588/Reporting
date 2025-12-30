@@ -13,9 +13,11 @@ import {
     User,
     Settings
 } from 'lucide-react';
+import { usePermissions } from '../utils/permissions';
 
 const Activities = () => {
     const { user } = useAuth();
+    const { hasFullAccess, canViewActivities } = usePermissions(user);
     const [activities, setActivities] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState({
@@ -28,24 +30,6 @@ const Activities = () => {
         pages: 1,
         total: 0
     });
-
-    // Permission helpers - use customRole permissions
-    const hasFullAccess = () => {
-        if (user?.customRole?.fullAccess === true) return true;
-        if (!user?.customRoleId && (user?.role === 'superadmin' || user?.role === 'admin')) return true;
-        return false;
-    };
-
-    const hasPermission = (module, permission) => {
-        if (hasFullAccess()) return true;
-        if (user?.customRole?.permissions?.[module]?.includes(permission)) return true;
-        if (!user?.customRoleId && user?.role === 'manager') {
-            if (module === 'Activities' && permission === 'Read') return true;
-        }
-        return false;
-    };
-
-    const canViewActivities = hasFullAccess() || hasPermission('Activities', 'Read');
 
     useEffect(() => {
         fetchActivities();

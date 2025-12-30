@@ -53,9 +53,6 @@ export default function VicidialDashboard(){
       const activeCount = stats.totalActive !== undefined ? stats.totalActive : mapped.filter(a => a.isActive).length;
       const totalAgents = pagination.total;
       
-      console.log('Stats from backend:', stats);
-      console.log('Active count:', activeCount, 'Total agents:', totalAgents);
-      
       // fetch total campaigns sum separately (existing endpoint)
       let totalCampaigns = 0;
       try {
@@ -88,7 +85,6 @@ export default function VicidialDashboard(){
       const res = await api.get('/agents/stats/logged-in');
       const count = res?.data?.data?.count || 0;
       setLiveAgentsCount(count);
-      console.log('🟢 Live agents count:', count);
     } catch (err) {
       console.warn('Failed to fetch live agents count:', err);
       setLiveAgentsCount(0);
@@ -101,7 +97,6 @@ export default function VicidialDashboard(){
     const toastId = toast.loading('Syncing campaigns for all agents...');
     try {
       const res = await api.get('/agents/campaigns/sync-all');
-      console.log('Sync result:', res.data);
       // Reload data after sync
       await loadAgentsData(page);
       await fetchLiveAgentsCount(); // Also refresh live agents count

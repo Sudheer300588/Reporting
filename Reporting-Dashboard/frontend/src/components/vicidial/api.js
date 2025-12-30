@@ -2,8 +2,7 @@ import axios from 'axios';
 
 
 
-const URL = import.meta.env.VITE_API_URL 
-console.log("API URL:", URL);
+const URL = import.meta.env.VITE_API_URL;
 const api = axios.create({
   baseURL: `${URL}/api`,
   timeout: 120000, // 2 minutes for long-running sync operations

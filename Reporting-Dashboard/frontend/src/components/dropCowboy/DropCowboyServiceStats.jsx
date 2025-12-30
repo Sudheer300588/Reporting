@@ -20,11 +20,9 @@ const DropCowboyServiceStats = ({ selectedClient }) => {
     const { campaigns, savedMetrics } = dropcowboy;
     const [allRecords, setAllRecords] = useState([]);
 
-    // Extract unique clients when metrics change
     useEffect(() => {
         setDCCampaigns(metrics?.campaigns);
         setDCMetrics(metrics);
-        console.log(metrics?.campaigns);
     }, [metrics]);
 
     // Handle manual SFTP fetch
