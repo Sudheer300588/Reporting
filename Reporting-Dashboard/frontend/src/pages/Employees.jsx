@@ -43,9 +43,12 @@ const Employees = () => {
     
     // Check custom role permissions
     if (user?.customRole) {
-      const modulePermissions = user.customRole.permissions?.[module] || [];
-      if (Array.isArray(modulePermissions) && modulePermissions.includes(permission)) {
-        return true;
+      const modulePerms = user.customRole.permissions?.[module];
+      // Handle both array format ["Create"] and object format {"Create": true}
+      if (Array.isArray(modulePerms)) {
+        if (modulePerms.includes(permission)) return true;
+      } else if (modulePerms && typeof modulePerms === 'object') {
+        if (modulePerms[permission] === true) return true;
       }
     }
     
