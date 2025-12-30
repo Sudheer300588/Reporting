@@ -14,7 +14,7 @@ const router = express.Router();
 // @access  Private (SuperAdmin, Admin, Manager)
 router.post('/', authenticate, authorize('superadmin', 'admin', 'manager'), validate(createUserSchema), async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, customRoleId } = req.body;
     const currentUser = req.user;
 
     // Role validation based on current user
@@ -95,6 +95,43 @@ router.post('/', authenticate, authorize('superadmin', 'admin', 'manager'), vali
       }
     }
 
+    // Validate customRoleId if provided (superadmin only)
+    let validatedCustomRoleId = null;
+    if (customRoleId && currentUser.role === 'superadmin') {
+      const parsedRoleId = parseInt(customRoleId);
+      if (isNaN(parsedRoleId)) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVALID_ROLE_ID',
+            message: 'Invalid custom role ID format'
+          }
+        });
+      }
+      const customRole = await prisma.role.findUnique({
+        where: { id: parsedRoleId }
+      });
+      if (!customRole) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'ROLE_NOT_FOUND',
+            message: 'Custom role not found'
+          }
+        });
+      }
+      if (!customRole.isActive) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'ROLE_INACTIVE',
+            message: 'Cannot assign inactive custom role'
+          }
+        });
+      }
+      validatedCustomRoleId = parsedRoleId;
+    }
+
     const hashedPassword = await hashPassword(password);
 
     const userData = {
@@ -102,7 +139,8 @@ router.post('/', authenticate, authorize('superadmin', 'admin', 'manager'), vali
       email,
       password: hashedPassword,
       role,
-      createdById: currentUser.id
+      createdById: currentUser.id,
+      ...(validatedCustomRoleId ? { customRoleId: validatedCustomRoleId } : {})
     };
 
     // For manager role, set superAdmin if created by superadmin or admin
@@ -126,6 +164,10 @@ router.post('/', authenticate, authorize('superadmin', 'admin', 'manager'), vali
         role: true,
         isActive: true,
         createdAt: true,
+        customRoleId: true,
+        customRole: {
+          select: { id: true, name: true, fullAccess: true }
+        },
         createdBy: {
           select: { id: true, name: true, email: true }
         },
@@ -365,7 +407,7 @@ router.get('/:id', authenticate, canManageUser, async (req, res) => {
 // @access  Private
 router.put('/:id', authenticate, canManageUser, async (req, res) => {
   try {
-    const { name, email, role, isActive } = req.body;
+    const { name, email, role, isActive, customRoleId } = req.body;
     const currentUser = req.user;
     const userId = parseInt(req.params.id);
 
@@ -392,6 +434,32 @@ router.put('/:id', authenticate, canManageUser, async (req, res) => {
     if (email) updateData.email = email;
     if (role && (currentUser.role === 'superadmin' || currentUser.role === 'admin')) updateData.role = role;
     if (typeof isActive === 'boolean') updateData.isActive = isActive;
+    
+    // Handle customRoleId (superadmin only)
+    if (currentUser.role === 'superadmin') {
+      if (customRoleId !== undefined) {
+        // If customRoleId is null or empty string, remove the custom role
+        if (customRoleId === null || customRoleId === '') {
+          updateData.customRoleId = null;
+        } else {
+          const parsedRoleId = parseInt(customRoleId);
+          if (isNaN(parsedRoleId)) {
+            return res.status(400).json({ message: 'Invalid custom role ID format' });
+          }
+          // Verify the role exists and is active
+          const customRole = await prisma.role.findUnique({
+            where: { id: parsedRoleId }
+          });
+          if (!customRole) {
+            return res.status(400).json({ message: 'Custom role not found' });
+          }
+          if (!customRole.isActive) {
+            return res.status(400).json({ message: 'Cannot assign inactive custom role' });
+          }
+          updateData.customRoleId = parsedRoleId;
+        }
+      }
+    }
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
@@ -404,6 +472,10 @@ router.put('/:id', authenticate, canManageUser, async (req, res) => {
         isActive: true,
         createdAt: true,
         updatedAt: true,
+        customRoleId: true,
+        customRole: {
+          select: { id: true, name: true, fullAccess: true }
+        },
         createdBy: {
           select: { id: true, name: true, email: true }
         },

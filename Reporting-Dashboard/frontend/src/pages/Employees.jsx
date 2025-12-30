@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import axios from 'axios'
 import { toast } from 'react-toastify'
-import { UserPlus, Edit, Trash2, X, EyeOff, Eye, ToggleLeft, ToggleRight } from 'lucide-react'
+import { UserPlus, Edit, Trash2, X, EyeOff, Eye, ToggleLeft, ToggleRight, Shield } from 'lucide-react'
 
 const Employees = () => {
   const { user } = useAuth()
@@ -14,13 +14,27 @@ const Employees = () => {
     name: '',
     email: '',
     password: '',
-    role: 'employee'
+    role: 'employee',
+    customRoleId: ''
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [customRoles, setCustomRoles] = useState([]);
 
   useEffect(() => {
     fetchEmployees()
-  }, []);
+    if (user?.role === 'superadmin') {
+      fetchCustomRoles()
+    }
+  }, [user]);
+
+  const fetchCustomRoles = async () => {
+    try {
+      const response = await axios.get('/api/roles')
+      setCustomRoles(response.data.data?.filter(r => r.isActive) || [])
+    } catch (error) {
+      // Silently fail - roles are optional
+    }
+  };
 
   const togglePasswordVisibility = () => {
     setShowPassword(prev => !prev);
@@ -61,15 +75,28 @@ const Employees = () => {
     try {
       if (editingUser) {
         // Update employee
-        await axios.put(`/api/users/${editingUser.id}`, {
+        const updateData = {
           name: formData.name,
           email: formData.email,
           role: formData.role
-        })
+        };
+        // Include customRoleId if set (superadmin only)
+        if (user?.role === 'superadmin' && formData.customRoleId) {
+          updateData.customRoleId = parseInt(formData.customRoleId);
+        } else if (user?.role === 'superadmin' && formData.customRoleId === '') {
+          updateData.customRoleId = null; // Remove custom role
+        }
+        await axios.put(`/api/users/${editingUser.id}`, updateData)
         toast.success('Employee updated successfully')
       } else {
-        // Create employee
-        await axios.post('/api/users', formData)
+        // Create employee - include customRoleId if set
+        const createData = { ...formData };
+        if (user?.role === 'superadmin' && formData.customRoleId) {
+          createData.customRoleId = parseInt(formData.customRoleId);
+        } else {
+          delete createData.customRoleId;
+        }
+        await axios.post('/api/users', createData)
         toast.success('Employee created successfully')
       }
 
@@ -87,7 +114,8 @@ const Employees = () => {
       name: employeeToEdit.name,
       email: employeeToEdit.email,
       password: '',
-      role: employeeToEdit.role
+      role: employeeToEdit.role,
+      customRoleId: employeeToEdit.customRoleId?.toString() || ''
     })
     setShowModal(true)
   }
@@ -136,7 +164,8 @@ const Employees = () => {
       name: '',
       email: '',
       password: '',
-      role: 'employee'
+      role: 'employee',
+      customRoleId: ''
     })
   }
 
@@ -361,6 +390,30 @@ const Employees = () => {
                   ))}
                 </select>
               </div>
+
+              {user?.role === 'superadmin' && customRoles.length > 0 && (
+                <div>
+                  <label className="form-label flex items-center gap-2">
+                    <Shield size={14} className="text-blue-600" />
+                    Custom Role (Optional)
+                  </label>
+                  <select
+                    value={formData.customRoleId}
+                    onChange={(e) => setFormData({ ...formData, customRoleId: e.target.value })}
+                    className="form-select"
+                  >
+                    <option value="">No custom role - use base role permissions</option>
+                    {customRoles.map((role) => (
+                      <option key={role.id} value={role.id}>
+                        {role.name} {role.fullAccess ? '(Full Access)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Custom roles override base role permissions for granular access control
+                  </p>
+                </div>
+              )}
 
               <div className="flex justify-end space-x-3 pt-4">
                 <button

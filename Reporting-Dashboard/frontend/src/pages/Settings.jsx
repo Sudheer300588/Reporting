@@ -8,7 +8,9 @@ import {
     Save,
     RefreshCw,
     Shield,
-    CheckCircle
+    CheckCircle,
+    Eye,
+    EyeOff
 } from 'lucide-react';
 import packageJson from '../../../backend/package.json';
 import { useManualFetch, useMetrics, useSyncLogs } from '../hooks/dropCowboy';
@@ -144,8 +146,6 @@ const SAMPLE_MAP = {
     quota_used: '9,500'
 };
 
-console.log('SAMPLE_MAP loaded:', Object.keys(SAMPLE_MAP).length, 'variables');
-
 const Settings = () => {
      const { user } = useAuth();
         const isInteractingRef = useRef(false);
@@ -223,6 +223,15 @@ const Settings = () => {
 
     const [vicidial, setVicidial] = useState(vicidialDefault);
     const [vicidialLoading, setVicidialLoading] = useState(false);
+
+    // Password visibility toggles
+    const [showSftpPassword, setShowSftpPassword] = useState(false);
+    const [showVicidialPassword, setShowVicidialPassword] = useState(false);
+    const [showSmtpPassword, setShowSmtpPassword] = useState(false);
+
+    // Connection test states
+    const [sftpTesting, setSftpTesting] = useState(false);
+    const [vicidialTesting, setVicidialTesting] = useState(false);
 
     // Notifications settings
     const [notifications, setNotifications] = useState([]);
@@ -473,6 +482,92 @@ const Settings = () => {
         }
     };
 
+    const handleVicidialTest = async () => {
+        if (!vicidial.url || !vicidial.username || !vicidial.password) {
+            toast.error('Please fill in all Vicidial fields before testing');
+            return;
+        }
+
+        setVicidialTesting(true);
+        const toastId = toast.loading('Testing Vicidial connection...');
+        try {
+            const res = await axios.post('/api/superadmin/vicidial-credentials/test', {
+                url: vicidial.url.trim(),
+                username: vicidial.username.trim(),
+                password: vicidial.password.trim()
+            });
+            
+            if (res.data?.success) {
+                toast.update(toastId, { 
+                    render: 'Vicidial connection successful!', 
+                    type: 'success', 
+                    isLoading: false, 
+                    autoClose: 5000 
+                });
+            } else {
+                toast.update(toastId, { 
+                    render: res.data?.message || 'Vicidial connection failed', 
+                    type: 'error', 
+                    isLoading: false, 
+                    autoClose: 5000 
+                });
+            }
+        } catch (err) {
+            toast.update(toastId, { 
+                render: err.response?.data?.message || 'Failed to test Vicidial connection', 
+                type: 'error', 
+                isLoading: false, 
+                autoClose: 5000 
+            });
+        } finally {
+            setVicidialTesting(false);
+        }
+    };
+
+    const handleSftpTest = async () => {
+        if (!sftp.host || !sftp.username || !sftp.password) {
+            toast.error('Please fill in all SFTP fields before testing');
+            return;
+        }
+
+        setSftpTesting(true);
+        const toastId = toast.loading('Testing SFTP connection...');
+        try {
+            const res = await axios.post('/api/superadmin/sftp-credentials/test', {
+                host: sftp.host.trim(),
+                port: sftp.port,
+                username: sftp.username.trim(),
+                password: sftp.password.trim(),
+                remotePath: sftp.remotePath.trim()
+            });
+            
+            if (res.data?.success) {
+                toast.update(toastId, { 
+                    render: 'SFTP connection successful!', 
+                    type: 'success', 
+                    isLoading: false, 
+                    autoClose: 5000 
+                });
+            } else {
+                toast.update(toastId, { 
+                    render: res.data?.message || 'SFTP connection failed', 
+                    type: 'error', 
+                    isLoading: false, 
+                    autoClose: 5000 
+                });
+            }
+        } catch (err) {
+            toast.update(toastId, { 
+                render: err.response?.data?.message || 'Failed to test SFTP connection', 
+                type: 'error', 
+                isLoading: false, 
+                autoClose: 5000 
+            });
+        } finally {
+            setSftpTesting(false);
+        }
+    };
+
     const fetchMyPermissions = async () => {
         try {
             const res = await axios.get('/api/settings/my-permissions');
@@ -579,17 +674,13 @@ const Settings = () => {
 
     const fetchSettings = async () => {
         try {
-            console.log('📊 Fetching settings...');
             const response = await axios.get('/api/settings');
             const fetchedSettings = response.data.settings || settings;
-            console.log('📊 Fetched settings:', fetchedSettings);
-            console.log('🔔 notifActivityEmails value:', fetchedSettings.notifActivityEmails);
             setSettings(fetchedSettings);
             setEmailEnabled(fetchedSettings.notifEmailNotifications !== false);
             setActivityEmailEnabled(fetchedSettings.notifActivityEmails !== false);
-            console.log('✅ Activity email enabled state set to:', fetchedSettings.notifActivityEmails !== false);
         } catch (error) {
-            console.error('❌ Error fetching settings:', error);
+            // Settings fetch failed - use defaults
         }
     };
 
@@ -2024,14 +2115,23 @@ const Settings = () => {
                                 <label className="block text-sm font-medium text-gray-700">
                                     Password (SMTP Credentials) <span className="text-red-500">*</span>
                                 </label>
-                                <input 
-                                    type="password" 
-                                    name="password" 
-                                    value={smtp.password} 
-                                    onChange={handleSmtpChange} 
-                                    placeholder="••••••••••••••••••••"
-                                    className="form-input mt-1 block w-full" 
-                                />
+                                <div className="relative">
+                                    <input 
+                                        type={showSmtpPassword ? "text" : "password"} 
+                                        name="password" 
+                                        value={smtp.password} 
+                                        onChange={handleSmtpChange} 
+                                        placeholder="••••••••••••••••••••"
+                                        className="form-input mt-1 block w-full pr-10" 
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowSmtpPassword(!showSmtpPassword)}
+                                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700"
+                                    >
+                                        {showSmtpPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    </button>
+                                </div>
                                 <div className="text-xs text-gray-500 mt-1">AWS SMTP password (from SES Console)</div>
                             </div>
                             <div className="md:col-span-2">
@@ -2125,14 +2225,41 @@ const Settings = () => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Password</label>
-                                <input type="password" name="password" value={sftp.password} onChange={handleSftpChange} className="form-input mt-1 block w-full" />
+                                <div className="relative">
+                                    <input 
+                                        type={showSftpPassword ? "text" : "password"} 
+                                        name="password" 
+                                        value={sftp.password} 
+                                        onChange={handleSftpChange} 
+                                        className="form-input mt-1 block w-full pr-10" 
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowSftpPassword(!showSftpPassword)}
+                                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700"
+                                    >
+                                        {showSftpPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    </button>
+                                </div>
                             </div>
                             <div className="md:col-span-2">
                                 <label className="block text-sm font-medium text-gray-700">Remote Path</label>
                                 <input type="text" name="remotePath" value={sftp.remotePath} onChange={handleSftpChange} className="form-input mt-1 block w-full" />
                             </div>
                         </div>
-                        <div className="flex justify-end mt-4">
+                        <div className="flex justify-between items-center mt-4">
+                            <button
+                                onClick={handleSftpTest}
+                                disabled={sftpTesting || !sftp.host || !sftp.username}
+                                className="btn btn-secondary flex items-center"
+                            >
+                                {sftpTesting ? (
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
+                                ) : (
+                                    <RefreshCw size={16} />
+                                )}
+                                {sftpTesting ? 'Testing...' : 'Test Connection'}
+                            </button>
                             <div className="flex items-center gap-3">
                                 <button
                                     onClick={handleFetchNow}
@@ -2201,16 +2328,37 @@ const Settings = () => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Password</label>
-                                <input 
-                                    type="password" 
-                                    name="password" 
-                                    value={vicidial.password} 
-                                    onChange={handleVicidialChange} 
-                                    className="form-input mt-1 block w-full" 
-                                />
+                                <div className="relative">
+                                    <input 
+                                        type={showVicidialPassword ? "text" : "password"} 
+                                        name="password" 
+                                        value={vicidial.password} 
+                                        onChange={handleVicidialChange} 
+                                        className="form-input mt-1 block w-full pr-10" 
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowVicidialPassword(!showVicidialPassword)}
+                                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700"
+                                    >
+                                        {showVicidialPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                        <div className="flex justify-end mt-4">
+                        <div className="flex justify-between items-center mt-4">
+                            <button
+                                onClick={handleVicidialTest}
+                                disabled={vicidialTesting || !vicidial.url || !vicidial.username}
+                                className="btn btn-secondary flex items-center"
+                            >
+                                {vicidialTesting ? (
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
+                                ) : (
+                                    <RefreshCw size={16} />
+                                )}
+                                {vicidialTesting ? 'Testing...' : 'Test Connection'}
+                            </button>
                             <button
                                 onClick={handleVicidialSave}
                                 disabled={vicidialLoading}

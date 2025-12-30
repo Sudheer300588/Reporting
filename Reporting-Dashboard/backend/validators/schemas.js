@@ -93,7 +93,8 @@ export const createUserSchema = z.object({
   email,
   password,
   role,
-  managerId: z.number().int().positive().optional()
+  managerId: z.number().int().positive().optional(),
+  customRoleId: z.union([z.number().int().positive(), z.string()]).optional()
 });
 
 export const updateUserSchema = z.object({
@@ -101,7 +102,8 @@ export const updateUserSchema = z.object({
   email: email.optional(),
   role: role.optional(),
   isActive: z.boolean().optional(),
-  managerId: z.number().int().positive().optional().nullable()
+  managerId: z.number().int().positive().optional().nullable(),
+  customRoleId: z.union([z.number().int().positive(), z.string(), z.null()]).optional()
 });
 
 // Client Schemas

@@ -154,6 +154,65 @@ router.post('/sftp-credentials', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/superadmin/sftp-credentials/test
+ * Test SFTP connection with provided credentials
+ * Body: { host, port, username, password, remotePath }
+ */
+router.post('/sftp-credentials/test', async (req, res) => {
+  try {
+    let { host, port, username, password, remotePath } = req.body;
+    
+    if (!host || !port || !username || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Host, port, username, and password are required for testing' 
+      });
+    }
+
+    // Import ssh2-sftp-client dynamically
+    const SftpClient = (await import('ssh2-sftp-client')).default;
+    const sftp = new SftpClient();
+
+    // Try to connect
+    await sftp.connect({
+      host: host.trim(),
+      port: Number(port),
+      username: username.trim(),
+      password: password.trim(),
+      readyTimeout: 10000,
+      retries: 1
+    });
+
+    // Try to list directory to verify access
+    let dirList = [];
+    try {
+      dirList = await sftp.list(remotePath?.trim() || '/');
+    } catch (listErr) {
+      // Directory might not exist or no permission - still a valid connection
+      logger.warn('SFTP test: Could not list directory:', listErr.message);
+    }
+
+    await sftp.end();
+
+    res.json({ 
+      success: true, 
+      message: 'SFTP connection successful!',
+      details: {
+        filesFound: dirList.length,
+        remotePath: remotePath || '/'
+      }
+    });
+  } catch (error) {
+    logger.error('SFTP test error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Failed to connect to SFTP server',
+      error: error.message 
+    });
+  }
+});
+
 // ============================================
 // SMTP CREDENTIALS
 // ============================================
@@ -332,6 +391,66 @@ router.post('/vicidial-credentials', async (req, res) => {
 });
 
 /**
+ * POST /api/superadmin/vicidial-credentials/test
+ * Test Vicidial connection with provided credentials
+ * Body: { url, username, password }
+ */
+router.post('/vicidial-credentials/test', async (req, res) => {
+  try {
+    let { url, username, password } = req.body;
+    
+    if (!url || !username || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'URL, username, and password are required for testing' 
+      });
+    }
+
+    // Build the API test URL (using function=version as a simple test)
+    const testUrl = new URL(url.trim());
+    testUrl.searchParams.set('user', username.trim());
+    testUrl.searchParams.set('pass', password.trim());
+    testUrl.searchParams.set('function', 'version');
+    testUrl.searchParams.set('source', 'test');
+
+    // Make a request to the Vicidial API
+    const response = await fetch(testUrl.toString(), {
+      method: 'GET',
+      headers: {
+        'Accept': 'text/plain'
+      },
+      signal: AbortSignal.timeout(10000) // 10 second timeout
+    });
+
+    const text = await response.text();
+
+    // Check if the response indicates success
+    // Vicidial API returns ERROR: for failures
+    if (text.includes('ERROR:')) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Vicidial API error: ${text.trim()}`
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Vicidial connection successful!',
+      details: {
+        response: text.substring(0, 200) // First 200 chars of response
+      }
+    });
+  } catch (error) {
+    logger.error('Vicidial test error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Failed to connect to Vicidial server',
+      error: error.message 
+    });
+  }
+});
+
+/**
  * GET /api/superadmin/users
  * Get all users with their relationships
  */
@@ -397,7 +516,7 @@ router.get('/users', async (req, res) => {
  */
 router.post('/users', async (req, res) => {
   try {
-    const { name, email, password, role, managerId, employeeIds } = req.body;
+    const { name, email, password, role, managerId, employeeIds, customRoleId } = req.body;
 
     // Validation
     if (!name || !email || !password || !role) {
@@ -457,6 +576,34 @@ router.post('/users', async (req, res) => {
       }
     }
 
+    // Validate customRoleId if provided (superadmin only)
+    let validatedCustomRoleId = null;
+    if (customRoleId && req.user.role === 'superadmin') {
+      const parsedRoleId = parseInt(customRoleId);
+      if (isNaN(parsedRoleId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid custom role ID format'
+        });
+      }
+      const customRole = await prisma.role.findUnique({
+        where: { id: parsedRoleId }
+      });
+      if (!customRole) {
+        return res.status(400).json({
+          success: false,
+          message: 'Custom role not found'
+        });
+      }
+      if (!customRole.isActive) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot assign inactive custom role'
+        });
+      }
+      validatedCustomRoleId = parsedRoleId;
+    }
+
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -469,6 +616,10 @@ router.post('/users', async (req, res) => {
         role,
         createdById: req.user.id,
         isActive: true,
+        // Connect to custom role if validated
+        ...(validatedCustomRoleId ? {
+          customRoleId: validatedCustomRoleId
+        } : {}),
         // Connect to manager if provided (for employees)
         ...(managerId && role === 'employee' ? {
           managers: {
@@ -488,7 +639,11 @@ router.post('/users', async (req, res) => {
         email: true,
         role: true,
         isActive: true,
-        createdAt: true
+        createdAt: true,
+        customRoleId: true,
+        customRole: {
+          select: { id: true, name: true, fullAccess: true }
+        }
       }
     });
 

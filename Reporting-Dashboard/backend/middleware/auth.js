@@ -104,7 +104,17 @@ export const authenticate = async (req, res, next) => {
         createdById: true,
         superAdminId: true,
         createdAt: true,
-        updatedAt: true
+        updatedAt: true,
+        customRoleId: true,
+        customRole: {
+          select: {
+            id: true,
+            name: true,
+            fullAccess: true,
+            permissions: true,
+            isActive: true
+          }
+        }
       }
     });
 
@@ -229,6 +239,180 @@ export const requireManager = authorize('superadmin', 'admin', 'manager');
  * Convenience middleware - Require any authenticated user
  */
 export const requireEmployee = authorize('superadmin', 'admin', 'manager', 'employee', 'telecaller');
+
+/**
+ * Check if user has a specific permission from their custom role
+ * Uses granular permissions from the Role model
+ * 
+ * @param {string} module - The module name (e.g., 'Users', 'Clients', 'Pages', 'Settings')
+ * @param {string} permission - The specific permission (e.g., 'Create', 'Read', 'Update', 'Delete')
+ */
+export const requirePermission = (module, permission) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'AUTH_REQUIRED',
+          message: 'Authentication required'
+        }
+      });
+    }
+
+    // Superadmin always has full access
+    if (req.user.role === 'superadmin') {
+      return next();
+    }
+
+    // Check if user has a custom role with full access
+    if (req.user.customRole?.fullAccess && req.user.customRole?.isActive) {
+      return next();
+    }
+
+    // Check specific permission in custom role
+    if (req.user.customRole?.isActive && req.user.customRole?.permissions) {
+      const permissions = req.user.customRole.permissions;
+      const modulePermissions = permissions[module];
+      
+      if (Array.isArray(modulePermissions) && modulePermissions.includes(permission)) {
+        return next();
+      }
+    }
+
+    // Fallback to role-based defaults for backwards compatibility
+    // Admin has access to most things except superadmin-only features
+    if (req.user.role === 'admin') {
+      // Admin can read/update most things, but not delete users or manage roles
+      if (module === 'Users' && permission === 'Delete') {
+        // Check if they have explicit permission via custom role
+      } else if (module !== 'Roles') {
+        return next();
+      }
+    }
+
+    // Manager can manage clients and their team
+    if (req.user.role === 'manager') {
+      if (module === 'Clients' || (module === 'Users' && ['Read', 'Update'].includes(permission))) {
+        return next();
+      }
+    }
+
+    logger.warn('Permission denied', {
+      userId: req.user.id,
+      userRole: req.user.role,
+      customRole: req.user.customRole?.name,
+      requiredModule: module,
+      requiredPermission: permission,
+      path: req.path,
+      method: req.method,
+      ip: req.ip
+    });
+
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: 'AUTH_INSUFFICIENT_PERMISSIONS',
+        message: `You do not have permission to ${permission.toLowerCase()} ${module.toLowerCase()}`
+      }
+    });
+  };
+};
+
+/**
+ * Check if user has access to a specific page
+ * Uses the 'Pages' permission module from custom role
+ * 
+ * @param {string} pageName - The page name (e.g., 'Dashboard', 'Clients', 'Users', 'Settings')
+ */
+export const requirePageAccess = (pageName) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'AUTH_REQUIRED',
+          message: 'Authentication required'
+        }
+      });
+    }
+
+    // Superadmin always has full access
+    if (req.user.role === 'superadmin') {
+      return next();
+    }
+
+    // Check if user has a custom role with full access
+    if (req.user.customRole?.fullAccess && req.user.customRole?.isActive) {
+      return next();
+    }
+
+    // Check if user has access to this page via custom role
+    if (req.user.customRole?.isActive && req.user.customRole?.permissions) {
+      const pagesAccess = req.user.customRole.permissions.Pages || [];
+      if (pagesAccess.includes(pageName)) {
+        return next();
+      }
+    }
+
+    // Fallback to role-based defaults
+    const roleDefaults = {
+      admin: ['Dashboard', 'Clients', 'Users', 'Services', 'Activities', 'Settings'],
+      manager: ['Dashboard', 'Clients', 'Users', 'Activities'],
+      employee: ['Dashboard', 'Clients'],
+      telecaller: ['Dashboard', 'Clients']
+    };
+
+    if (roleDefaults[req.user.role]?.includes(pageName)) {
+      return next();
+    }
+
+    logger.warn('Page access denied', {
+      userId: req.user.id,
+      userRole: req.user.role,
+      customRole: req.user.customRole?.name,
+      requiredPage: pageName,
+      path: req.path,
+      ip: req.ip
+    });
+
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: 'AUTH_PAGE_ACCESS_DENIED',
+        message: `You do not have access to the ${pageName} page`
+      }
+    });
+  };
+};
+
+/**
+ * Helper function to check permission programmatically (non-middleware)
+ * Returns boolean indicating if user has the permission
+ */
+export const hasPermission = (user, module, permission) => {
+  if (!user) return false;
+  
+  // Superadmin always has full access
+  if (user.role === 'superadmin') return true;
+  
+  // Check custom role
+  if (user.customRole?.fullAccess && user.customRole?.isActive) return true;
+  
+  if (user.customRole?.isActive && user.customRole?.permissions) {
+    const modulePermissions = user.customRole.permissions[module];
+    if (Array.isArray(modulePermissions) && modulePermissions.includes(permission)) {
+      return true;
+    }
+  }
+  
+  // Fallback to basic role defaults
+  if (user.role === 'admin') {
+    if (module === 'Roles') return false;
+    return true;
+  }
+  
+  return false;
+};
 
 /**
  * Check if user can manage another user (hierarchy check)
