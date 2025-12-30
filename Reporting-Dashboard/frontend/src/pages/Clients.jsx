@@ -32,7 +32,13 @@ const Clients = () => {
 
     const hasPermission = (module, permission) => {
         if (hasFullAccess()) return true;
-        if (user?.customRole?.permissions?.[module]?.includes(permission)) return true;
+        const modulePerms = user?.customRole?.permissions?.[module];
+        // Handle both array format ["Create"] and object format {"Create": true}
+        if (Array.isArray(modulePerms)) {
+            if (modulePerms.includes(permission)) return true;
+        } else if (modulePerms && typeof modulePerms === 'object') {
+            if (modulePerms[permission] === true) return true;
+        }
         // Backward compatibility for legacy manager
         if (!user?.customRoleId && user?.role === 'manager') {
             if (module === 'Users' && ['Create', 'Read'].includes(permission)) return true;
@@ -42,8 +48,14 @@ const Clients = () => {
     };
 
     // Check if user can manage teams (is a "manager" in assignment context)
-    // Only Users.Create grants team management - Users.Read is not sufficient
-    const canManageTeam = () => hasFullAccess() || hasPermission('Users', 'Create');
+    // Uses isTeamManager flag from customRole, or fullAccess
+    const canManageTeam = () => {
+        if (hasFullAccess()) return true;
+        if (user?.customRole?.isTeamManager === true) return true;
+        // Backward compatibility for legacy manager role
+        if (!user?.customRoleId && user?.role === 'manager') return true;
+        return false;
+    };
     const [showAssignModal, setShowAssignModal] = useState(false);
     const [selectedClientForAssign, setSelectedClientForAssign] = useState(null);
     // users list replaced by managers/employees endpoints

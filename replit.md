@@ -14,6 +14,11 @@ All authorization is driven by custom roles defined in Settings. The system uses
 - `Settings` - System settings (Read, Update)
 - `Activities` - Activity logs (Read)
 
+**Role Fields:**
+- `fullAccess` - Boolean, grants access to all modules and actions
+- `isTeamManager` - Boolean, determines if users with this role appear in manager dropdown for client assignments
+- `permissions` - JSON object storing module-specific permissions
+
 **Authorization Helpers (backend/middleware/auth.js):**
 - `hasFullAccess(user)` - Checks if user has full access via customRole.fullAccess
 - `userHasPermission(user, module, action)` - Checks specific permission in customRole
@@ -21,18 +26,18 @@ All authorization is driven by custom roles defined in Settings. The system uses
 - `requireFullAccess` - Route middleware requiring full access
 
 ### Client Assignment Logic
-Client assignment now uses dynamic permissions instead of hardcoded role names:
+Client assignment uses an explicit `isTeamManager` field to classify users:
 
 **"Manager" for Assignment Purposes:**
 - User with `customRole.fullAccess = true`, OR
-- User with `Users.Create` permission (not Users.Read - that's too permissive)
+- User with `customRole.isTeamManager = true`
 - Legacy users: superadmin/admin/manager role without customRole assigned
 
 **"Employee" for Assignment:**
-- User without team management permissions (no fullAccess, no Users.Create)
+- User without fullAccess and without isTeamManager flag
 
 **Assignment Endpoints (clients.js):**
-- `/assignment/managers` - Returns users who can manage teams (based on permissions)
+- `/assignment/managers` - Returns users who have isTeamManager or fullAccess roles
 - `/assignment/managers/:id/employees` - Returns team members under a manager
 - `POST /:id/assign` - Permission-based assignment validation
 - `DELETE /:id/assign/:userId` - Permission-based unassignment
@@ -43,16 +48,22 @@ Each component includes local permission helpers for consistency:
 const hasFullAccess = () => user?.customRole?.fullAccess === true || 
   (!user?.customRoleId && ['superadmin', 'admin'].includes(user?.role));
 
-const hasPermission = (module, action) => hasFullAccess() || 
-  user?.customRole?.permissions?.[module]?.includes(action);
+const hasPermission = (module, action) => {
+  if (hasFullAccess()) return true;
+  const modulePerms = user?.customRole?.permissions?.[module];
+  // Handle both array and object permission formats
+  if (Array.isArray(modulePerms)) return modulePerms.includes(action);
+  if (modulePerms && typeof modulePerms === 'object') return modulePerms[action] === true;
+  return false;
+};
 
-const canManageTeam = () => hasFullAccess() || hasPermission('Users', 'Create');
+const canManageTeam = () => hasFullAccess() || user?.customRole?.isTeamManager === true;
 ```
 
 ### Backward Compatibility
 Legacy users without a customRole assigned receive temporary fallback permissions:
 - Legacy `superadmin`/`admin` role → Full access until customRole assigned
-- Legacy `manager` role → Users/Clients management until customRole assigned
+- Legacy `manager` role → Team manager status until customRole assigned
 
 **To Complete Migration:** Assign customRoles to all legacy users via Settings page.
 
@@ -61,16 +72,17 @@ Legacy users without a customRole assigned receive temporary fallback permission
 ### Backend
 - `backend/middleware/auth.js` - Authentication and authorization middleware
 - `backend/routes/employees.js` - User management with permission checks
-- `backend/routes/clients.js` - Client CRUD with permission-based assignment logic
+- `backend/routes/clients.js` - Client CRUD with isTeamManager-based assignment logic
 - `backend/routes/settings.js` - Settings with full access requirements
 - `backend/routes/activities.js` - Activity logs with permission filtering
-- `backend/prisma/schema.prisma` - Database schema with Role model
+- `backend/prisma/schema.prisma` - Database schema with Role model (includes isTeamManager field)
 
 ### Frontend
-- `frontend/src/pages/Clients.jsx` - Client management with permission-based assignment
+- `frontend/src/pages/Clients.jsx` - Client management with isTeamManager-based assignment
 - `frontend/src/pages/Employees.jsx` - User management UI with permission checks
 - `frontend/src/pages/Activities.jsx` - Activity logs with permission checks
 - `frontend/src/pages/Settings.jsx` - Role management UI
+- `frontend/src/components/Settings/RolesAndPermissions.jsx` - Role creation/edit with Team Manager checkbox
 - `frontend/src/contexts/AuthContext.jsx` - Auth context
 
 ## Integrations
@@ -79,10 +91,10 @@ Legacy users without a customRole assigned receive temporary fallback permission
 - Vicidial (call center management)
 
 ## Recent Changes (December 2024)
+- **Added `isTeamManager` field to Role model** - Explicit designation for team managers in client assignment
+- Updated Settings UI with "Team Manager" checkbox in role creation/edit dialog
+- Updated client assignment endpoints to use isTeamManager instead of inferring from permissions
+- Fixed permission format handling (supports both array and object formats)
 - Migrated all authorization from hardcoded role names to dynamic permissions
 - Replaced `authorize()` middleware with `requirePermission()` in all routes
-- Updated role-based conditionals to use `hasFullAccess()` and `userHasPermission()`
-- **Client assignment endpoints now use permission-based user classification**
-- Frontend components (Clients.jsx, Activities.jsx, Settings.jsx) updated with permission helpers
-- Settings admin-permissions routes now use customRole permissions
-- `canViewClients` middleware allows all authenticated users (route handlers filter)
+- Frontend components updated with permission helpers that handle both permission formats
