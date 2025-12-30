@@ -94,7 +94,9 @@ Legacy users without a customRole assigned receive temporary fallback permission
 - **Added `isTeamManager` field to Role model** - Explicit designation for team managers in client assignment
 - Updated Settings UI with "Team Manager" checkbox in role creation/edit dialog
 - Updated client assignment endpoints to use isTeamManager instead of inferring from permissions
-- Fixed permission format handling (supports both array and object formats)
+- **CRITICAL FIX: `userHasPermission` now handles object format permissions** - Backend middleware now correctly checks `{"Create": true}` object format in addition to `["Create"]` array format
+- Fixed Roles API access - Users with Users.Create/Update permissions can now fetch roles list
+- Fixed Settings page access - Users with any Settings subsection permissions can now access the Settings page
 - Migrated all authorization from hardcoded role names to dynamic permissions
 - Replaced `authorize()` middleware with `requirePermission()` in all routes
 - Frontend components updated with permission helpers that handle both permission formats

@@ -220,8 +220,15 @@ export const userHasPermission = (user, module, permission) => {
   // Check specific permission in custom role
   if (user.customRole?.isActive !== false && user.customRole?.permissions) {
     const modulePermissions = user.customRole.permissions[module];
+    // Handle array format: ["Create", "Read", "Update", "Delete"]
     if (Array.isArray(modulePermissions) && modulePermissions.includes(permission)) {
       return true;
+    }
+    // Handle object format: {"Create": true, "Read": true, ...}
+    if (modulePermissions && typeof modulePermissions === 'object' && !Array.isArray(modulePermissions)) {
+      if (modulePermissions[permission] === true) {
+        return true;
+      }
     }
   }
   
