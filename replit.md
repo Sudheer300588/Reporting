@@ -100,12 +100,56 @@ All Settings page sections are self-contained components in `frontend/src/compon
 
 Each component uses `useSettings()` hook for `canAccessSetting()` permission checks and self-manages its state/API calls.
 
+## AI Assistant Integration
+
+### Overview
+Conversational AI allowing users to query client statistics, campaign data, and business metrics through natural language. Respects dynamic role-based permissions.
+
+### Database Model (AISettings)
+- `llmProvider` - "openai" or "anthropic"
+- `llmApiKey` - Encrypted API key
+- `llmModel` - Selected model (gpt-4o-mini, claude-3-5-sonnet, etc.)
+- `voiceProvider` - Currently "elevenlabs"
+- `voiceApiKey` - Encrypted ElevenLabs API key
+- `voiceId` - Selected voice ID
+- `assistantName` - Custom name (default: "Bevy")
+- `isEnabled` - Boolean toggle
+
+### API Routes (backend/routes/ai.js)
+- `GET /api/ai/settings` - Get AI configuration (fullAccess only)
+- `POST /api/ai/settings` - Update AI configuration (fullAccess only)
+- `GET /api/ai/voices` - Fetch available ElevenLabs voices
+- `GET /api/ai/status` - Check if AI is enabled/configured (all users)
+- `POST /api/ai/chat` - Send message, get AI response with client context
+- `POST /api/ai/speak` - Convert text to speech via ElevenLabs
+
+### Permission-Aware Data Access
+The AI chat endpoint uses the same permission logic as the Clients page:
+- `fullAccess` users see all clients
+- Users with `Clients.Read` or `Clients.Create` see clients they created or are assigned to
+- Other users only see clients they're directly assigned to
+
+### Frontend Components
+- `AISettings.jsx` - Settings page component for configuration
+- `AIChatWidget.jsx` - Floating chat widget in ProtectedLayout
+
+### Voice Features
+- **Input**: Web Speech API (browser-based speech recognition)
+- **Output**: ElevenLabs Text-to-Speech API
+- Wake word support: "Hey Bevy" (client-side detection)
+
+### Security
+- API keys encrypted using existing `encryptionService` from `modules/mautic/services/encryption.js`
+- Settings management restricted to fullAccess users
+- Chat responses filtered by user permissions
+
 ## Integrations
 - Mautic (marketing automation)
 - DropCowboy (ringless voicemail via SFTP)
 - Vicidial (call center management)
 
 ## Recent Changes (December 2024)
+- **AI ASSISTANT INTEGRATION (Dec 30, 2024):** Added conversational AI with LLM (OpenAI/Anthropic) and voice (ElevenLabs) support. Uses encrypted API key storage, permission-aware data access, floating chat widget with wake word detection
 - **Added `isTeamManager` field to Role model** - Explicit designation for team managers in client assignment
 - Updated Settings UI with "Team Manager" checkbox in role creation/edit dialog
 - Updated client assignment endpoints to use isTeamManager instead of inferring from permissions
