@@ -81,9 +81,24 @@ Legacy users without a customRole assigned receive temporary fallback permission
 - `frontend/src/pages/Clients.jsx` - Client management with isTeamManager-based assignment
 - `frontend/src/pages/Employees.jsx` - User management UI with permission checks
 - `frontend/src/pages/Activities.jsx` - Activity logs with permission checks
-- `frontend/src/pages/Settings.jsx` - Role management UI
-- `frontend/src/components/Settings/RolesAndPermissions.jsx` - Role creation/edit with Team Manager checkbox
+- `frontend/src/pages/Settings.jsx` - Thin wrapper (~30 lines) using SettingsLayout
 - `frontend/src/contexts/AuthContext.jsx` - Auth context
+
+### Settings Components (Modular Architecture)
+All Settings page sections are self-contained components in `frontend/src/components/Settings/`:
+- `SettingsLayout.jsx` - Provides sidebar navigation, scroll management, and SettingsContext
+- `SettingsHeader.jsx` - Page header with email setup banner
+- `RolesAndPermissions.jsx` - Role CRUD with Team Manager checkbox
+- `MauticSettings.jsx` - Autovation/Mautic client management
+- `NotificationsSettings.jsx` - Email notification templates, toggles, and logs
+- `MaintenanceEmail.jsx` - System maintenance email templates
+- `SmtpCredentials.jsx` - SMTP server configuration
+- `SftpCredentials.jsx` - DropCowboy SFTP configuration
+- `VicidialCredentials.jsx` - Vicidial integration settings
+- `SiteBranding.jsx` - Site customization (logo, favicon, colors)
+- `index.js` - Central exports for all Settings components
+
+Each component uses `useSettings()` hook for `canAccessSetting()` permission checks and self-manages its state/API calls.
 
 ## Integrations
 - Mautic (marketing automation)
