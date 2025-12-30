@@ -201,7 +201,7 @@ router.get('/', authenticate, async (req, res) => {
           OR: [
             { createdById: currentUser.id },
             {
-              clientAssignments: {
+              userAssignments: {
                 some: {
                   clientId: { in: managerClientIds }
                 }
