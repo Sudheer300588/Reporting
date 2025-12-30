@@ -34,17 +34,40 @@ router.use(requireAdmin);
  */
 router.get('/dashboard', async (req, res) => {
   try {
+    // Fetch all active users to calculate manager/employee counts based on customRole
+    const allActiveUsers = await prisma.user.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        role: true,
+        customRoleId: true,
+        customRole: {
+          select: { fullAccess: true, isTeamManager: true }
+        }
+      }
+    });
+
+    // Count managers: users with fullAccess, isTeamManager, or legacy manager/admin/superadmin role
+    const totalManagers = allActiveUsers.filter(u => {
+      if (!u.customRoleId) {
+        return ['superadmin', 'admin', 'manager'].includes(u.role);
+      }
+      return u.customRole?.fullAccess || u.customRole?.isTeamManager;
+    }).length;
+
+    // Count employees: users who are NOT managers
+    const totalEmployees = allActiveUsers.filter(u => {
+      if (!u.customRoleId) {
+        return !['superadmin', 'admin', 'manager'].includes(u.role);
+      }
+      return !u.customRole?.fullAccess && !u.customRole?.isTeamManager;
+    }).length;
+
     const [
-      totalManagers,
-      totalEmployees,
       activeClients,
       totalClients,
-      recentActivities,
-      activeManagers,
-      activeEmployees
+      recentActivities
     ] = await Promise.all([
-      prisma.user.count({ where: { role: 'manager' } }),
-      prisma.user.count({ where: { role: 'employee' } }),
       prisma.client.count({ where: { isActive: true } }),
       prisma.client.count(),
       prisma.activityLog.findMany({
@@ -55,9 +78,7 @@ router.get('/dashboard', async (req, res) => {
             select: { name: true, email: true, role: true }
           }
         }
-      }),
-      prisma.user.count({ where: { role: 'manager', isActive: true } }),
-      prisma.user.count({ where: { role: 'employee', isActive: true } })
+      })
     ]);
 
     res.json({
@@ -67,8 +88,8 @@ router.get('/dashboard', async (req, res) => {
           totalManagers,
           totalEmployees,
           totalUsers: totalManagers + totalEmployees,
-          activeManagers,
-          activeEmployees,
+          activeManagers: totalManagers,
+          activeEmployees: totalEmployees,
           activeClients,
           totalClients,
           inactiveClients: totalClients - activeClients

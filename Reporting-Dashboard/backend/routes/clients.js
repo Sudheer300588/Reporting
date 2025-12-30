@@ -77,7 +77,15 @@ router.get("/", authenticate, canViewClients, async (req, res) => {
           assignments: {
             include: {
               user: {
-                select: { id: true, name: true, email: true, role: true },
+                select: { 
+                  id: true, 
+                  name: true, 
+                  email: true, 
+                  role: true,
+                  customRole: {
+                    select: { fullAccess: true, isTeamManager: true }
+                  }
+                },
               },
               assignedBy: {
                 select: { id: true, name: true, email: true },

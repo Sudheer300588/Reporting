@@ -580,28 +580,26 @@ const Clients = () => {
                                                     {client.assignments
                                                         .slice()
                                                         .sort((x, y) => {
-                                                            const rx = (x.user?.role || "").toLowerCase();
-                                                            const ry = (y.user?.role || "").toLowerCase();
-                                                            // managers first, then employees, then others
-                                                            const score = (r) => (r === "manager" ? 0 : r === "employee" ? 1 : 2);
-                                                            return score(rx) - score(ry);
+                                                            // Sort by isTeamManager: managers first, then employees
+                                                            const isManagerX = x.user?.customRole?.fullAccess || x.user?.customRole?.isTeamManager || ['superadmin', 'admin', 'manager'].includes(x.user?.role);
+                                                            const isManagerY = y.user?.customRole?.fullAccess || y.user?.customRole?.isTeamManager || ['superadmin', 'admin', 'manager'].includes(y.user?.role);
+                                                            return (isManagerX === isManagerY) ? 0 : isManagerX ? -1 : 1;
                                                         })
                                                         .map((a) => {
-                                                            const role = (a.user?.role || "").toLowerCase();
-                                                            const badgeClass =
-                                                                role === 'manager'
-                                                                    ? 'bg-gray-800 text-white'
-                                                                    : role === 'employee'
-                                                                        ? 'bg-green-100 text-green-800'
-                                                                        : 'bg-gray-200 text-gray-700';
+                                                            // Check if user is a team manager using customRole.isTeamManager or fullAccess
+                                                            const isManager = a.user?.customRole?.fullAccess || a.user?.customRole?.isTeamManager || ['superadmin', 'admin', 'manager'].includes(a.user?.role);
+                                                            const badgeClass = isManager
+                                                                ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                                                : 'bg-green-100 text-green-800 border border-green-200';
+                                                            const roleLabel = isManager ? 'Manager' : 'Employee';
                                                             return (
                                                                 <div key={a.id || a.user?.id} className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                                                     <span className={`inline-flex items-center gap-2 px-2 py-1 rounded-md text-sm ${badgeClass}`}>
                                                                         <span className="font-medium">
                                                                             {a.user?.name || a.userName || "Unknown"}
                                                                         </span>
-                                                                        <span className="text-xs px-1 rounded">
-                                                                            {a.user?.role ? a.user.role.charAt(0).toUpperCase() + a.user.role.slice(1) : ""}
+                                                                        <span className="text-xs px-1.5 py-0.5 rounded bg-opacity-50">
+                                                                            {roleLabel}
                                                                         </span>
                                                                     </span>
                                                                     {canAssignClients && !(user?.role === 'manager' && (a.user?.id || a.userId) === user.id) && (
