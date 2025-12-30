@@ -92,9 +92,9 @@ export const createUserSchema = z.object({
   name,
   email,
   password,
-  role,
+  role: role.optional(), // Deprecated: base role is now derived from customRole
   managerId: z.number().int().positive().optional(),
-  customRoleId: z.union([z.number().int().positive(), z.string()]).optional()
+  customRoleId: z.union([z.number().int().positive(), z.string()]) // Required: dynamic role from Settings
 });
 
 export const updateUserSchema = z.object({

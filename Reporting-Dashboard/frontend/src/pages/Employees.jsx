@@ -99,33 +99,22 @@ const Employees = () => {
       return;
     }
 
-    // Find selected role to derive base role
-    const selectedRole = availableRoles.find(r => r.id === parseInt(formData.roleId));
-    if (!selectedRole) {
-      toast.error('Invalid role selected');
-      return;
-    }
-
-    const baseRole = deriveBaseRole(selectedRole.name);
-
     try {
       if (editingUser) {
-        // Update employee
+        // Update employee - only send customRoleId, backend derives base role
         const updateData = {
           name: formData.name,
           email: formData.email,
-          role: baseRole,
           customRoleId: parseInt(formData.roleId)
         };
         await axios.put(`/api/users/${editingUser.id}`, updateData)
         toast.success('Employee updated successfully')
       } else {
-        // Create employee
+        // Create employee - only send customRoleId, backend derives base role
         const createData = {
           name: formData.name,
           email: formData.email,
           password: formData.password,
-          role: baseRole,
           customRoleId: parseInt(formData.roleId)
         };
         await axios.post('/api/users', createData)
@@ -199,14 +188,17 @@ const Employees = () => {
     })
   }
 
-  // Derive base role from role name for backwards compatibility
-  const deriveBaseRole = (roleName) => {
-    const name = roleName?.toLowerCase() || '';
-    if (name.includes('super')) return 'superadmin';
-    if (name.includes('admin')) return 'admin';
-    if (name.includes('manager')) return 'manager';
-    if (name.includes('telecaller')) return 'telecaller';
-    return 'employee'; // Default base role
+  // Get display badge class for role - used for styling only
+  const getRoleBadgeClass = (employee) => {
+    // Use customRole name if available, otherwise fall back to base role
+    if (employee.customRole?.name) {
+      const name = employee.customRole.name.toLowerCase();
+      if (name.includes('super')) return 'badge-superadmin';
+      if (name.includes('admin')) return 'badge-admin';
+      if (name.includes('manager')) return 'badge-manager';
+      if (name.includes('telecaller')) return 'badge-telecaller';
+    }
+    return roleClassMap[employee.role] || 'badge-employee';
   };
 
   const roleClassMap = {

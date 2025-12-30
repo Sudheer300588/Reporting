@@ -10,43 +10,12 @@ import logger from '../utils/logger.js';
 const router = express.Router();
 
 // @route   POST /api/users
-// @desc    Create new employee (SuperAdmin/Admin creates manager/employee/telecaller, Manager creates employee/telecaller)
+// @desc    Create new employee with dynamic role from Settings
 // @access  Private (SuperAdmin, Admin, Manager)
 router.post('/', authenticate, authorize('superadmin', 'admin', 'manager'), validate(createUserSchema), async (req, res) => {
   try {
-    const { name, email, password, role, customRoleId } = req.body;
+    const { name, email, password, customRoleId } = req.body;
     const currentUser = req.user;
-
-    // Role validation based on current user
-    if (currentUser.role === 'superadmin' && !['admin', 'manager', 'employee', 'telecaller'].includes(role)) {
-      return res.status(403).json({ 
-        success: false,
-        error: {
-          code: 'FORBIDDEN',
-          message: 'Superadmins can only create admins, managers, employees or telecallers'
-        }
-      });
-    }
-
-    if (currentUser.role === 'admin' && !['manager', 'employee', 'telecaller'].includes(role)) {
-      return res.status(403).json({ 
-        success: false,
-        error: {
-          code: 'FORBIDDEN',
-          message: 'Admins can only create managers, employees or telecallers'
-        }
-      });
-    }
-
-    if (currentUser.role === 'manager' && !['employee', 'telecaller'].includes(role)) {
-      return res.status(403).json({ 
-        success: false,
-        error: {
-          code: 'FORBIDDEN',
-          message: 'Managers can only create employees or telecallers'
-        }
-      });
-    }
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
@@ -63,73 +32,81 @@ router.post('/', authenticate, authorize('superadmin', 'admin', 'manager'), vali
       });
     }
 
-    // Enforce max 1 superadmin
-    if (role === 'superadmin') {
-      const superAdminCount = await prisma.user.count({
-        where: { role: 'superadmin' }
+    // Validate customRoleId - this is now required for all user creation
+    if (!customRoleId) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'ROLE_REQUIRED',
+          message: 'Please select a role for the user'
+        }
       });
-      if (superAdminCount >= 1) {
-        return res.status(403).json({
-          success: false,
-          error: {
-            code: 'MAX_SUPERADMINS_REACHED',
-            message: 'Cannot create more than 1 superadmin'
-          }
-        });
-      }
     }
 
-    // Enforce max 3 admins
-    if (role === 'admin') {
-      const adminCount = await prisma.user.count({
-        where: { role: 'admin' }
+    const parsedRoleId = parseInt(customRoleId);
+    if (isNaN(parsedRoleId)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_ROLE_ID',
+          message: 'Invalid role ID format'
+        }
       });
-      if (adminCount >= 3) {
-        return res.status(403).json({
-          success: false,
-          error: {
-            code: 'MAX_ADMINS_REACHED',
-            message: 'Cannot create more than 3 admins'
-          }
-        });
-      }
     }
 
-    // Validate customRoleId if provided (superadmin only)
-    let validatedCustomRoleId = null;
-    if (customRoleId && currentUser.role === 'superadmin') {
-      const parsedRoleId = parseInt(customRoleId);
-      if (isNaN(parsedRoleId)) {
-        return res.status(400).json({
-          success: false,
-          error: {
-            code: 'INVALID_ROLE_ID',
-            message: 'Invalid custom role ID format'
-          }
-        });
-      }
-      const customRole = await prisma.role.findUnique({
-        where: { id: parsedRoleId }
+    const customRole = await prisma.role.findUnique({
+      where: { id: parsedRoleId }
+    });
+
+    if (!customRole) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'ROLE_NOT_FOUND',
+          message: 'Selected role not found'
+        }
       });
-      if (!customRole) {
-        return res.status(400).json({
+    }
+
+    if (!customRole.isActive) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'ROLE_INACTIVE',
+          message: 'Cannot assign inactive role'
+        }
+      });
+    }
+
+    // Derive base role from custom role for backwards compatibility
+    // This determines the base access level stored in the User.role enum
+    // Priority: explicit name patterns > fullAccess flag > default
+    const deriveBaseRoleFromCustomRole = (role) => {
+      const roleName = role.name?.toLowerCase() || '';
+      // Check name patterns first - these are explicit role indicators
+      if (roleName.includes('super') && roleName.includes('admin')) return 'superadmin';
+      if (roleName.includes('admin')) return 'admin';
+      if (roleName.includes('manager')) return 'manager';
+      if (roleName.includes('telecaller')) return 'telecaller';
+      // If no explicit pattern, check fullAccess flag
+      if (role.fullAccess) return 'admin';
+      return 'employee'; // Default base role
+    };
+
+    const derivedBaseRole = deriveBaseRoleFromCustomRole(customRole);
+
+    // Check permissions based on current user's effective role
+    // Managers can only create employee/telecaller level roles
+    if (currentUser.role === 'manager') {
+      if (!['employee', 'telecaller'].includes(derivedBaseRole)) {
+        return res.status(403).json({ 
           success: false,
           error: {
-            code: 'ROLE_NOT_FOUND',
-            message: 'Custom role not found'
+            code: 'FORBIDDEN',
+            message: 'Managers can only assign employee or telecaller level roles'
           }
         });
       }
-      if (!customRole.isActive) {
-        return res.status(400).json({
-          success: false,
-          error: {
-            code: 'ROLE_INACTIVE',
-            message: 'Cannot assign inactive custom role'
-          }
-        });
-      }
-      validatedCustomRoleId = parsedRoleId;
     }
 
     const hashedPassword = await hashPassword(password);
@@ -138,18 +115,18 @@ router.post('/', authenticate, authorize('superadmin', 'admin', 'manager'), vali
       name,
       email,
       password: hashedPassword,
-      role,
+      role: derivedBaseRole,
       createdById: currentUser.id,
-      ...(validatedCustomRoleId ? { customRoleId: validatedCustomRoleId } : {})
+      customRoleId: parsedRoleId
     };
 
     // For manager role, set superAdmin if created by superadmin or admin
-    if ((currentUser.role === 'superadmin' || currentUser.role === 'admin') && role === 'manager') {
+    if ((currentUser.role === 'superadmin' || currentUser.role === 'admin') && derivedBaseRole === 'manager') {
       userData.superAdminId = currentUser.id;
     }
 
     // Connect managers using M:N relation if creating employee/telecaller
-    if (['employee', 'telecaller'].includes(role) && currentUser.role === 'manager') {
+    if (['employee', 'telecaller'].includes(derivedBaseRole) && currentUser.role === 'manager') {
       userData.managers = {
         connect: { id: currentUser.id }
       };
@@ -415,7 +392,7 @@ router.get('/:id', authenticate, canManageUser, async (req, res) => {
 // @access  Private
 router.put('/:id', authenticate, canManageUser, async (req, res) => {
   try {
-    const { name, email, role, isActive, customRoleId } = req.body;
+    const { name, email, isActive, customRoleId } = req.body;
     const currentUser = req.user;
     const userId = parseInt(req.params.id);
 
@@ -427,45 +404,58 @@ router.put('/:id', authenticate, canManageUser, async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Role validation
-    if (role && currentUser.role === 'manager' && !['employee', 'telecaller'].includes(role)) {
-      return res.status(403).json({ message: 'Managers can only manage employees and telecallers' });
-    }
-
     // Track if isActive status is changing
     const isActiveChanged = typeof isActive === 'boolean' && user.isActive !== isActive;
-    const oldIsActive = user.isActive;
 
     // Build update data
     const updateData = {};
     if (name) updateData.name = name;
     if (email) updateData.email = email;
-    if (role && (currentUser.role === 'superadmin' || currentUser.role === 'admin')) updateData.role = role;
     if (typeof isActive === 'boolean') updateData.isActive = isActive;
     
-    // Handle customRoleId (superadmin only)
-    if (currentUser.role === 'superadmin') {
-      if (customRoleId !== undefined) {
-        // If customRoleId is null or empty string, remove the custom role
-        if (customRoleId === null || customRoleId === '') {
+    // Helper to derive base role from custom role
+    const deriveBaseRoleFromCustomRole = (role) => {
+      const roleName = role.name?.toLowerCase() || '';
+      if (roleName.includes('super') && roleName.includes('admin')) return 'superadmin';
+      if (roleName.includes('admin')) return 'admin';
+      if (roleName.includes('manager')) return 'manager';
+      if (roleName.includes('telecaller')) return 'telecaller';
+      if (role.fullAccess) return 'admin';
+      return 'employee';
+    };
+    
+    // Handle customRoleId - superadmin, admin, and manager can assign roles
+    if (customRoleId !== undefined) {
+      if (customRoleId === null || customRoleId === '') {
+        // Only superadmin/admin can remove custom role
+        if (currentUser.role === 'superadmin' || currentUser.role === 'admin') {
           updateData.customRoleId = null;
-        } else {
-          const parsedRoleId = parseInt(customRoleId);
-          if (isNaN(parsedRoleId)) {
-            return res.status(400).json({ message: 'Invalid custom role ID format' });
-          }
-          // Verify the role exists and is active
-          const customRole = await prisma.role.findUnique({
-            where: { id: parsedRoleId }
-          });
-          if (!customRole) {
-            return res.status(400).json({ message: 'Custom role not found' });
-          }
-          if (!customRole.isActive) {
-            return res.status(400).json({ message: 'Cannot assign inactive custom role' });
-          }
-          updateData.customRoleId = parsedRoleId;
         }
+      } else {
+        const parsedRoleId = parseInt(customRoleId);
+        if (isNaN(parsedRoleId)) {
+          return res.status(400).json({ message: 'Invalid custom role ID format' });
+        }
+        const customRole = await prisma.role.findUnique({
+          where: { id: parsedRoleId }
+        });
+        if (!customRole) {
+          return res.status(400).json({ message: 'Custom role not found' });
+        }
+        if (!customRole.isActive) {
+          return res.status(400).json({ message: 'Cannot assign inactive custom role' });
+        }
+        
+        // Derive base role from custom role
+        const derivedBaseRole = deriveBaseRoleFromCustomRole(customRole);
+        
+        // Managers can only assign employee/telecaller level roles
+        if (currentUser.role === 'manager' && !['employee', 'telecaller'].includes(derivedBaseRole)) {
+          return res.status(403).json({ message: 'Managers can only assign employee or telecaller level roles' });
+        }
+        
+        updateData.customRoleId = parsedRoleId;
+        updateData.role = derivedBaseRole;
       }
     }
 
