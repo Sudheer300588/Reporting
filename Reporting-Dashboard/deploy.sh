@@ -101,7 +101,10 @@ validate_db_connection() {
     
     # First generate prisma client
     print_step "Generating Prisma client for connection test..."
-    npx prisma generate --silent 2>/dev/null || true
+    if ! npx prisma generate 2>&1; then
+        print_error "Failed to generate Prisma client"
+        exit 1
+    fi
     
     # Test connection
     if ! test_db_connection; then
@@ -441,8 +444,8 @@ quick_deploy() {
         exit 1
     fi
     
-    # Determine DB provider from .env (check for mysql:// pattern anywhere in the URL)
-    DB_URL=$(grep "DATABASE_URL" "$BACKEND_DIR/.env" | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+    # Determine DB provider from .env (only match uncommented DATABASE_URL= lines)
+    DB_URL=$(grep "^DATABASE_URL=" "$BACKEND_DIR/.env" | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
     if echo "$DB_URL" | grep -qE "^mysql://"; then
         DB_PROVIDER="mysql"
     elif echo "$DB_URL" | grep -qE "^(postgres|postgresql)://"; then
@@ -453,12 +456,12 @@ quick_deploy() {
         exit 1
     fi
     
-    # Get PORT from .env if available
-    APP_PORT=$(grep "^PORT=" "$BACKEND_DIR/.env" | head -1 | cut -d'=' -f2)
+    # Get PORT from .env if available (only uncommented lines)
+    APP_PORT=$(grep "^PORT=" "$BACKEND_DIR/.env" | head -1 | cut -d'=' -f2 | tr -d ' ')
     APP_PORT=${APP_PORT:-3026}
     
-    # Get FRONTEND_URL from .env if available
-    SITE_URL=$(grep "^FRONTEND_URL=" "$BACKEND_DIR/.env" | head -1 | cut -d'=' -f2 | tr -d '"')
+    # Get FRONTEND_URL from .env if available (only uncommented lines)
+    SITE_URL=$(grep "^FRONTEND_URL=" "$BACKEND_DIR/.env" | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
     SITE_URL=${SITE_URL:-"http://localhost:$APP_PORT"}
     
     print_info "Using existing .env configuration"

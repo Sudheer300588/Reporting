@@ -8,7 +8,7 @@ require("dotenv").config({
 module.exports = {
   apps: [
     {
-      name: "simple-app",
+      name: "digitalbevy",
       script: "./server.js",
       cwd: __dirname,   // CRITICAL for Prisma + .env
 
