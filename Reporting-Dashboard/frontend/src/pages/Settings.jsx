@@ -8,7 +8,8 @@ import {
   SmtpCredentials,
   SftpCredentials,
   VicidialCredentials,
-  SiteBranding
+  SiteBranding,
+  AISettings
 } from '../components/Settings';
 
 const Settings = () => {
@@ -23,6 +24,7 @@ const Settings = () => {
       <SftpCredentials />
       <VicidialCredentials />
       <SiteBranding />
+      <AISettings />
     </SettingsLayout>
   );
 };

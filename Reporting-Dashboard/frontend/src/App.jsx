@@ -9,6 +9,7 @@ import Navbar from './components/Navbar.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { PageLoader } from './components/SkeletonLoader.jsx'
 import { useSiteBranding } from './hooks/useSiteBranding.js'
+import AIChatWidget from './components/AIChatWidget.jsx'
 
 // Eagerly load auth pages (needed immediately)
 import LoginPage from './pages/LoginPage.jsx'
@@ -32,6 +33,7 @@ const ProtectedLayout = ({ children }) => (
   <ProtectedRoute>
     <Navbar />
     {children}
+    <AIChatWidget />
   </ProtectedRoute>
 )
 

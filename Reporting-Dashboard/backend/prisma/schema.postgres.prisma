@@ -721,3 +721,22 @@ model AdminSettingsPermission {
   @@index([adminId])
   @@map("admin_settings_permission")
 }
+
+// ==========================================================
+// AI ASSISTANT SETTINGS
+// ==========================================================
+model AISettings {
+  id              Int      @id @default(autoincrement())
+  llmProvider     String   @default("openai") @db.VarChar(50) // openai, anthropic, etc.
+  llmApiKey       String?  @db.Text // encrypted API key
+  llmModel        String   @default("gpt-4o-mini") @db.VarChar(100)
+  voiceProvider   String?  @default("elevenlabs") @db.VarChar(50)
+  voiceApiKey     String?  @db.Text // encrypted API key
+  voiceId         String?  @db.VarChar(100) // ElevenLabs voice ID
+  assistantName   String   @default("Bevy") @db.VarChar(50)
+  isEnabled       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("ai_settings")
+}

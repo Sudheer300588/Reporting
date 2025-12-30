@@ -21,6 +21,7 @@ const SECTION_CONFIG = [
   { key: 'sftp', label: 'Voicemail SFTP Credentials' },
   { key: 'vicidial', label: 'Vicidial Credentials' },
   { key: 'sitecustom', label: 'Site Customization' },
+  { key: 'ai', label: 'AI Assistant', superadminOnly: true },
 ];
 
 const SettingsLayout = ({ children, myPermissions = [] }) => {
@@ -46,7 +47,7 @@ const SettingsLayout = ({ children, myPermissions = [] }) => {
     const handleScroll = () => {
       if (isInteractingRef.current) return;
 
-      const sections = ['roles', 'mautic', 'notifs', 'maintenance', 'smtp', 'sftp', 'vicidial', 'sitecustom'];
+      const sections = ['roles', 'mautic', 'notifs', 'maintenance', 'smtp', 'sftp', 'vicidial', 'sitecustom', 'ai'];
 
       for (const key of sections) {
         const el = sectionRefs.current[key];
@@ -88,7 +89,8 @@ const SettingsLayout = ({ children, myPermissions = [] }) => {
     'smtp': 'SMTP Credentials',
     'sftp': 'Voicemail SFTP Credentials',
     'vicidial': 'Vicidial Credentials',
-    'sitecustom': 'Site Customization'
+    'sitecustom': 'Site Customization',
+    'ai': 'AI Assistant'
   };
 
   const canAccessSetting = (settingKey) => {
