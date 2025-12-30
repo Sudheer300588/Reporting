@@ -1,217 +1,55 @@
 # DigitalBevy Development Platform
 
 ## Overview
-Business management system integrating CRM, campaign management, and user hierarchy with dynamic role-based access control.
+DigitalBevy is a comprehensive business management system designed to integrate CRM, campaign management, and a robust user hierarchy with dynamic role-based access control. The platform aims to streamline business operations, enhance marketing efforts through AI-powered insights, and provide a flexible, secure environment for managing clients and users. It targets businesses seeking an all-in-one solution for client engagement, team management, and data-driven decision-making.
 
-## Authorization System
+## User Preferences
+I prefer detailed explanations.
+I want iterative development.
+Ask before making major changes.
+Do not make changes to the folder `backend/prisma/migrations`.
+Do not make changes to the file `backend/prisma/schema.prisma`.
+I prefer clear and concise communication.
 
-### Dynamic Roles Architecture
-All authorization is driven by custom roles defined in Settings. The system uses permission-based access control with NO hardcoded role logic:
+## System Architecture
 
-**Permission Modules:**
-- `Users` - User management (Create, Read, Update, Delete)
-- `Clients` - Client management (Create, Read, Update, Delete)
-- `Settings` - System settings (Read, Update)
-- `Activities` - Activity logs (Read)
+### UI/UX Decisions
+The frontend utilizes React, structured with modular components. Settings sections are self-contained, leveraging a `SettingsLayout` for navigation and `SettingsContext` for shared state. The design prioritizes clear information hierarchy and intuitive workflows, especially for role and permission management.
 
-**Role Fields:**
-- `fullAccess` - Boolean, grants access to all modules and actions
-- `isTeamManager` - Boolean, determines if users with this role appear in manager dropdown for client assignments
-- `permissions` - JSON object storing module-specific permissions
+### Technical Implementations
 
-**Authorization Helpers (backend/middleware/auth.js):**
-- `hasFullAccess(user)` - Checks if user has full access via customRole.fullAccess
-- `userHasPermission(user, module, action)` - Checks specific permission in customRole
-- `requirePermission(module, action)` - Route middleware for permission checks
-- `requireFullAccess` - Route middleware requiring full access
+#### Dynamic Role-Based Access Control
+The system employs a permission-based access control model with no hardcoded role logic. Authorization is driven by custom roles defined in settings, featuring `fullAccess`, `isTeamManager`, and granular `permissions` objects.
+- **Permission Modules**: `Users`, `Clients`, `Settings`, `Activities`.
+- **Authorization Helpers**: Backend middleware (`hasFullAccess`, `userHasPermission`, `requirePermission`, `requireFullAccess`) and frontend helpers ensure consistent permission enforcement.
+- **Client Assignment**: Uses `isTeamManager` flag for explicit manager classification, influencing client assignment and visibility.
+- **Backward Compatibility**: Legacy users without custom roles receive temporary fallback permissions (e.g., `superadmin`/`admin` get full access, `manager` gets team manager status) until migrated.
 
-### Client Assignment Logic
-Client assignment uses an explicit `isTeamManager` field to classify users:
+#### AI Assistant Integration
+A conversational AI assistant allows users to query client statistics, campaign data, and business metrics using natural language.
+- **LLM & Voice Providers**: Supports OpenAI/Anthropic for LLM and ElevenLabs for Text-to-Speech.
+- **Security**: API keys are encrypted using an existing `encryptionService`. Access to AI settings is restricted to `fullAccess` users. Chat responses are filtered based on the user's permissions.
+- **Features**: Web Speech API for voice input, ElevenLabs for voice output, and wake word detection ("Hey Bevy").
 
-**"Manager" for Assignment Purposes:**
-- User with `customRole.fullAccess = true`, OR
-- User with `customRole.isTeamManager = true`
-- Legacy users: superadmin/admin/manager role without customRole assigned
+#### Modular Settings Components
+The `frontend/src/components/Settings/` directory houses self-contained components for various configurations, such as `RolesAndPermissions`, `MauticSettings`, `NotificationsSettings`, `SmtpCredentials`, `SftpCredentials`, `VicidialCredentials`, and `SiteBranding`. Each component manages its state and API calls, utilizing `useSettings()` for permission checks.
 
-**"Employee" for Assignment:**
-- User without fullAccess and without isTeamManager flag
+### System Design Choices
 
-**Assignment Endpoints (clients.js):**
-- `/assignment/managers` - Returns users who have isTeamManager or fullAccess roles
-- `/assignment/managers/:id/employees` - Returns team members under a manager
-- `POST /:id/assign` - Permission-based assignment validation
-- `DELETE /:id/assign/:userId` - Permission-based unassignment
+#### Database
+Supports both MySQL and PostgreSQL through Prisma, with a `switch-database.sh` script for easy configuration. The active schema (`backend/prisma/schema.prisma`) is dynamically updated from provider-specific templates.
 
-### Frontend Permission Helpers
-Each component includes local permission helpers for consistency:
-```javascript
-const hasFullAccess = () => user?.customRole?.fullAccess === true || 
-  (!user?.customRoleId && ['superadmin', 'admin'].includes(user?.role));
+#### Deployment
+An interactive `deploy.sh` script facilitates multi-site server deployments, handling database configuration, security key generation, frontend build, database migrations, and application startup via PM2.
 
-const hasPermission = (module, action) => {
-  if (hasFullAccess()) return true;
-  const modulePerms = user?.customRole?.permissions?.[module];
-  // Handle both array and object permission formats
-  if (Array.isArray(modulePerms)) return modulePerms.includes(action);
-  if (modulePerms && typeof modulePerms === 'object') return modulePerms[action] === true;
-  return false;
-};
+#### Environment Variables
+Key configurations like `PORT`, `DATABASE_URL`, `JWT_SECRET`, `ENCRYPTION_KEY`, and `FRONTEND_URL` are managed via environment variables.
 
-const canManageTeam = () => hasFullAccess() || user?.customRole?.isTeamManager === true;
-```
-
-### Backward Compatibility
-Legacy users without a customRole assigned receive temporary fallback permissions:
-- Legacy `superadmin`/`admin` role → Full access until customRole assigned
-- Legacy `manager` role → Team manager status until customRole assigned
-
-**To Complete Migration:** Assign customRoles to all legacy users via Settings page.
-
-## Key Files
-
-### Backend
-- `backend/middleware/auth.js` - Authentication and authorization middleware
-- `backend/routes/employees.js` - User management with permission checks
-- `backend/routes/clients.js` - Client CRUD with isTeamManager-based assignment logic
-- `backend/routes/settings.js` - Settings with full access requirements
-- `backend/routes/activities.js` - Activity logs with permission filtering
-- `backend/prisma/schema.prisma` - Database schema with Role model (includes isTeamManager field)
-
-### Frontend
-- `frontend/src/pages/Clients.jsx` - Client management with isTeamManager-based assignment
-- `frontend/src/pages/Employees.jsx` - User management UI with permission checks
-- `frontend/src/pages/Activities.jsx` - Activity logs with permission checks
-- `frontend/src/pages/Settings.jsx` - Thin wrapper (~30 lines) using SettingsLayout
-- `frontend/src/contexts/AuthContext.jsx` - Auth context
-
-### Settings Components (Modular Architecture)
-All Settings page sections are self-contained components in `frontend/src/components/Settings/`:
-- `SettingsLayout.jsx` - Provides sidebar navigation, scroll management, and SettingsContext
-- `SettingsHeader.jsx` - Page header with email setup banner
-- `RolesAndPermissions.jsx` - Role CRUD with Team Manager checkbox
-- `MauticSettings.jsx` - Autovation/Mautic client management
-- `NotificationsSettings.jsx` - Email notification templates, toggles, and logs
-- `MaintenanceEmail.jsx` - System maintenance email templates
-- `SmtpCredentials.jsx` - SMTP server configuration
-- `SftpCredentials.jsx` - DropCowboy SFTP configuration
-- `VicidialCredentials.jsx` - Vicidial integration settings
-- `SiteBranding.jsx` - Site customization (logo, favicon, colors)
-- `index.js` - Central exports for all Settings components
-
-Each component uses `useSettings()` hook for `canAccessSetting()` permission checks and self-manages its state/API calls.
-
-## AI Assistant Integration
-
-### Overview
-Conversational AI allowing users to query client statistics, campaign data, and business metrics through natural language. Respects dynamic role-based permissions.
-
-### Database Model (AISettings)
-- `llmProvider` - "openai" or "anthropic"
-- `llmApiKey` - Encrypted API key
-- `llmModel` - Selected model (gpt-4o-mini, claude-3-5-sonnet, etc.)
-- `voiceProvider` - Currently "elevenlabs"
-- `voiceApiKey` - Encrypted ElevenLabs API key
-- `voiceId` - Selected voice ID
-- `assistantName` - Custom name (default: "Bevy")
-- `isEnabled` - Boolean toggle
-
-### API Routes (backend/routes/ai.js)
-- `GET /api/ai/settings` - Get AI configuration (fullAccess only)
-- `POST /api/ai/settings` - Update AI configuration (fullAccess only)
-- `GET /api/ai/voices` - Fetch available ElevenLabs voices
-- `GET /api/ai/status` - Check if AI is enabled/configured (all users)
-- `POST /api/ai/chat` - Send message, get AI response with client context
-- `POST /api/ai/speak` - Convert text to speech via ElevenLabs
-
-### Permission-Aware Data Access
-The AI chat endpoint uses the same permission logic as the Clients page:
-- `fullAccess` users see all clients
-- Users with `Clients.Read` or `Clients.Create` see clients they created or are assigned to
-- Other users only see clients they're directly assigned to
-
-### Frontend Components
-- `AISettings.jsx` - Settings page component for configuration
-- `AIChatWidget.jsx` - Floating chat widget in ProtectedLayout
-
-### Voice Features
-- **Input**: Web Speech API (browser-based speech recognition)
-- **Output**: ElevenLabs Text-to-Speech API
-- Wake word support: "Hey Bevy" (client-side detection)
-
-### Security
-- API keys encrypted using existing `encryptionService` from `modules/mautic/services/encryption.js`
-- Settings management restricted to fullAccess users
-- Chat responses filtered by user permissions
-
-## Integrations
-- Mautic (marketing automation)
-- DropCowboy (ringless voicemail via SFTP)
-- Vicidial (call center management)
-
-## Recent Changes (December 2024)
-- **AI ASSISTANT INTEGRATION (Dec 30, 2024):** Added conversational AI with LLM (OpenAI/Anthropic) and voice (ElevenLabs) support. Uses encrypted API key storage, permission-aware data access, floating chat widget with wake word detection
-- **Added `isTeamManager` field to Role model** - Explicit designation for team managers in client assignment
-- Updated Settings UI with "Team Manager" checkbox in role creation/edit dialog
-- Updated client assignment endpoints to use isTeamManager instead of inferring from permissions
-- **CRITICAL FIX: `userHasPermission` now handles object format permissions** - Backend middleware now correctly checks `{"Create": true}` object format in addition to `["Create"]` array format
-- Fixed Roles API access - Users with Users.Create/Update permissions can now fetch roles list
-- Fixed Settings page access - Users with any Settings subsection permissions can now access the Settings page
-- Migrated all authorization from hardcoded role names to dynamic permissions
-- Replaced `authorize()` middleware with `requirePermission()` in all routes
-- Frontend components updated with permission helpers that handle both permission formats
-- **EMPLOYEES API FIX (Dec 30, 2024):** Team managers now see employees assigned to their clients via `ClientAssignment` table, not the legacy empty `_ManagerEmployee` table
-- **SETTINGS PAGE FIX (Dec 30, 2024):** Removed hardcoded `user?.role` checks. Now uses dynamic permission check via `hasSettingsAccess()` and `canAccessSetting()` functions that handle both object `{"Autovation Clients": true}` and array `["Autovation Clients"]` permission formats
-
-## Database & Deployment
-
-### Multi-Database Support
-The application supports both MySQL and PostgreSQL databases:
-
-**Schema Files:**
-- `backend/prisma/schema.prisma` - Active schema (copied from provider-specific file)
-- `backend/prisma/schema.mysql.prisma` - MySQL schema template
-- `backend/prisma/schema.postgres.prisma` - PostgreSQL schema template
-
-**Switching Databases:**
-```bash
-# Use the switch script
-./backend/scripts/switch-database.sh mysql    # For MySQL
-./backend/scripts/switch-database.sh postgres # For PostgreSQL
-```
-
-### Deployment Script (deploy.sh)
-Interactive deployment script supporting multi-site server deployments:
-
-**Features:**
-- Selects database provider (MySQL or PostgreSQL)
-- Configures database connection interactively
-- Sets website URL and application port
-- Generates security keys (JWT, encryption)
-- Builds frontend and syncs with backend
-- Runs database migrations and optional seeding
-- Starts application with PM2 process manager
-
-**Usage:**
-```bash
-# Interactive deployment
-./deploy.sh
-
-# Quick deployment (uses existing .env)
-./deploy.sh --quick
-
-# Help
-./deploy.sh --help
-```
-
-**Port Configuration:**
-- Default port: 3026
-- Configurable during deployment for multi-site setups
-- Backend reads `PORT` environment variable
-
-### Environment Variables
-Key environment variables (see `backend/.env.example`):
-- `PORT` - Application port (default: 3026)
-- `DATABASE_URL` - Database connection string (MySQL or PostgreSQL format)
-- `JWT_SECRET` - Token signing secret
-- `ENCRYPTION_KEY` - Data encryption key
-- `FRONTEND_URL` - Public URL for email links
+## External Dependencies
+- **Prisma**: ORM for database interaction (supports MySQL and PostgreSQL).
+- **OpenAI/Anthropic**: Large Language Model providers for the AI Assistant.
+- **ElevenLabs**: Text-to-Speech API for the AI Assistant's voice features.
+- **Mautic**: Marketing automation platform for email metrics and campaign data.
+- **DropCowboy**: Ringless voicemail service, integrated via SFTP.
+- **Vicidial**: Call center management system.
+- **PM2**: Production process manager for Node.js applications.
