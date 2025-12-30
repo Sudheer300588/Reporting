@@ -250,6 +250,10 @@ router.get('/', authenticate, async (req, res) => {
         isActive: true,
         createdAt: true,
         updatedAt: true,
+        customRoleId: true,
+        customRole: {
+          select: { id: true, name: true, fullAccess: true }
+        },
         createdBy: {
           select: { id: true, name: true, email: true }
         },
@@ -382,6 +386,10 @@ router.get('/:id', authenticate, canManageUser, async (req, res) => {
         isActive: true,
         createdAt: true,
         updatedAt: true,
+        customRoleId: true,
+        customRole: {
+          select: { id: true, name: true, fullAccess: true }
+        },
         createdBy: {
           select: { id: true, name: true, email: true }
         },

@@ -14,25 +14,46 @@ const Employees = () => {
     name: '',
     email: '',
     password: '',
-    role: 'employee',
-    customRoleId: ''
+    roleId: '' // This will be the role ID from Settings
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [customRoles, setCustomRoles] = useState([]);
+  const [availableRoles, setAvailableRoles] = useState([]);
+  const [rolesLoading, setRolesLoading] = useState(true);
 
   useEffect(() => {
     fetchEmployees()
-    if (user?.role === 'superadmin') {
-      fetchCustomRoles()
-    }
+    fetchRoles()
   }, [user]);
 
-  const fetchCustomRoles = async () => {
+  const fetchRoles = async () => {
     try {
+      setRolesLoading(true);
       const response = await axios.get('/api/roles')
-      setCustomRoles(response.data.data?.filter(r => r.isActive) || [])
+      const allRoles = response.data.data?.filter(r => r.isActive) || [];
+      
+      // Filter roles based on current user's permission level
+      let filteredRoles = allRoles;
+      if (user?.role === 'admin') {
+        // Admins cannot create superadmin or admin roles
+        filteredRoles = allRoles.filter(r => 
+          !r.name.toLowerCase().includes('super') && 
+          r.name.toLowerCase() !== 'admin'
+        );
+      } else if (user?.role === 'manager') {
+        // Managers can only create employee/telecaller level roles
+        filteredRoles = allRoles.filter(r => 
+          !r.name.toLowerCase().includes('super') && 
+          !r.name.toLowerCase().includes('admin') &&
+          !r.name.toLowerCase().includes('manager')
+        );
+      }
+      
+      setAvailableRoles(filteredRoles);
     } catch (error) {
-      // Silently fail - roles are optional
+      console.error('Error fetching roles:', error);
+      setAvailableRoles([]);
+    } finally {
+      setRolesLoading(false);
     }
   };
 
@@ -72,30 +93,41 @@ const Employees = () => {
         return;
       }
     }
+    // Validate role selection
+    if (!formData.roleId) {
+      toast.error('Please select a role');
+      return;
+    }
+
+    // Find selected role to derive base role
+    const selectedRole = availableRoles.find(r => r.id === parseInt(formData.roleId));
+    if (!selectedRole) {
+      toast.error('Invalid role selected');
+      return;
+    }
+
+    const baseRole = deriveBaseRole(selectedRole.name);
+
     try {
       if (editingUser) {
         // Update employee
         const updateData = {
           name: formData.name,
           email: formData.email,
-          role: formData.role
+          role: baseRole,
+          customRoleId: parseInt(formData.roleId)
         };
-        // Include customRoleId if set (superadmin only)
-        if (user?.role === 'superadmin' && formData.customRoleId) {
-          updateData.customRoleId = parseInt(formData.customRoleId);
-        } else if (user?.role === 'superadmin' && formData.customRoleId === '') {
-          updateData.customRoleId = null; // Remove custom role
-        }
         await axios.put(`/api/users/${editingUser.id}`, updateData)
         toast.success('Employee updated successfully')
       } else {
-        // Create employee - include customRoleId if set
-        const createData = { ...formData };
-        if (user?.role === 'superadmin' && formData.customRoleId) {
-          createData.customRoleId = parseInt(formData.customRoleId);
-        } else {
-          delete createData.customRoleId;
-        }
+        // Create employee
+        const createData = {
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          role: baseRole,
+          customRoleId: parseInt(formData.roleId)
+        };
         await axios.post('/api/users', createData)
         toast.success('Employee created successfully')
       }
@@ -114,8 +146,7 @@ const Employees = () => {
       name: employeeToEdit.name,
       email: employeeToEdit.email,
       password: '',
-      role: employeeToEdit.role,
-      customRoleId: employeeToEdit.customRoleId?.toString() || ''
+      roleId: employeeToEdit.customRoleId?.toString() || ''
     })
     setShowModal(true)
   }
@@ -164,10 +195,19 @@ const Employees = () => {
       name: '',
       email: '',
       password: '',
-      role: 'employee',
-      customRoleId: ''
+      roleId: ''
     })
   }
+
+  // Derive base role from role name for backwards compatibility
+  const deriveBaseRole = (roleName) => {
+    const name = roleName?.toLowerCase() || '';
+    if (name.includes('super')) return 'superadmin';
+    if (name.includes('admin')) return 'admin';
+    if (name.includes('manager')) return 'manager';
+    if (name.includes('telecaller')) return 'telecaller';
+    return 'employee'; // Default base role
+  };
 
   const roleClassMap = {
     superadmin: 'badge-superadmin',
@@ -178,14 +218,8 @@ const Employees = () => {
   };
 
   const canCreateEmployee = user?.role === 'superadmin' || user?.role === 'admin' || user?.role === 'manager';
-  
-  // Role hierarchy: superadmin can create any role below, admin can create manager/employee/telecaller, manager can create employee/telecaller
-  const availableRoles = 
-    user?.role === 'superadmin' ? ['admin', 'manager', 'employee', 'telecaller'] :
-    user?.role === 'admin' ? ['manager', 'employee', 'telecaller'] :
-    ['employee', 'telecaller'];
 
-  if (loading) {
+  if (loading || rolesLoading) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-center h-64">
@@ -260,7 +294,7 @@ const Employees = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`badge ${roleClassMap[userItem.role]}`}>
-                        {userItem.role.charAt(0).toUpperCase() + userItem.role.slice(1)}
+                        {userItem.customRole?.name || (userItem.role.charAt(0).toUpperCase() + userItem.role.slice(1))}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -376,44 +410,29 @@ const Employees = () => {
               )}
 
               <div>
-                <label className="form-label">Role</label>
+                <label className="form-label flex items-center gap-2">
+                  <Shield size={14} className="text-blue-600" />
+                  Role
+                </label>
                 <select
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  value={formData.roleId}
+                  onChange={(e) => setFormData({ ...formData, roleId: e.target.value })}
                   className="form-select"
                   required
                 >
-                  {availableRoles.map((role, index) => (
-                    <option key={index} value={role}>
-                      {role.charAt(0).toUpperCase() + role.slice(1)}
+                  <option value="">Select a role</option>
+                  {availableRoles.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.name} {role.fullAccess ? '(Full Access)' : ''}
                     </option>
                   ))}
                 </select>
-              </div>
-
-              {user?.role === 'superadmin' && customRoles.length > 0 && (
-                <div>
-                  <label className="form-label flex items-center gap-2">
-                    <Shield size={14} className="text-blue-600" />
-                    Custom Role (Optional)
-                  </label>
-                  <select
-                    value={formData.customRoleId}
-                    onChange={(e) => setFormData({ ...formData, customRoleId: e.target.value })}
-                    className="form-select"
-                  >
-                    <option value="">No custom role - use base role permissions</option>
-                    {customRoles.map((role) => (
-                      <option key={role.id} value={role.id}>
-                        {role.name} {role.fullAccess ? '(Full Access)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Custom roles override base role permissions for granular access control
+                {availableRoles.length === 0 && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    No roles available. Please create roles in Settings first.
                   </p>
-                </div>
-              )}
+                )}
+              </div>
 
               <div className="flex justify-end space-x-3 pt-4">
                 <button
