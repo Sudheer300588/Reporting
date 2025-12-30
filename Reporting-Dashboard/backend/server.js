@@ -5,7 +5,7 @@ import { initializeSchedulers } from './config/registerSchedulers.js';
 import { createDynamicIndexHandler } from './config/loadSiteSettings.js';
 import logger from './utils/logger.js';
 
-const PORT = process.env.PORT || 3026;
+const PORT = process.env.PORT || 3027;
 
 /**
  * Validate required environment variables
@@ -109,7 +109,7 @@ async function startServer() {
 
     // Start listening
     const server = app.listen(PORT, () => {
-      logger.info(`Server running at https://dev.hcddev.com:${PORT}`);
+      logger.info(`Server running at https://hcdteam.com:${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
       logger.info('Application ready');
     });
