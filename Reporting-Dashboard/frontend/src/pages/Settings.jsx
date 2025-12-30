@@ -284,22 +284,40 @@ const Settings = () => {
         });
     };
 
+    // Map section keys to Settings permission keys
+    const sectionToPermissionKey = {
+        'roles': 'Roles',
+        'mautic': 'Autovation Clients',
+        'notifs': 'Notifications',
+        'maintenance': 'System Maintenance Email',
+        'smtp': 'SMTP Credentials',
+        'sftp': 'Voicemail SFTP Credentials',
+        'vicidial': 'Vicidial Credentials',
+        'sitecustom': 'Site Customization'
+    };
+    
     const canAccessSetting = (settingKey) => {
         // Full access users (via customRole or legacy superadmin/admin) can access all settings
         if (user?.customRole?.fullAccess === true) return true;
         if (!user?.customRoleId && (user?.role === 'superadmin' || user?.role === 'admin')) return true;
         
-        // Users with Settings.Read permission can access permitted settings
-        if (user?.customRole?.permissions?.Settings?.includes('Read')) {
-            return myPermissions.includes(settingKey);
+        // Check customRole.permissions.Settings for the specific section
+        const permissionKey = sectionToPermissionKey[settingKey] || settingKey;
+        const settingsPerms = user?.customRole?.permissions?.Settings;
+        
+        // Handle object format permissions: {"Autovation Clients": true}
+        if (settingsPerms && typeof settingsPerms === 'object') {
+            if (settingsPerms[permissionKey] === true) return true;
         }
         
-        // Backward compatibility: legacy admin users
-        if (!user?.customRoleId && user?.role === 'admin') {
-            return myPermissions.includes(settingKey);
+        // Handle array format permissions: ["Autovation Clients"] (legacy)
+        if (Array.isArray(settingsPerms)) {
+            if (settingsPerms.includes(permissionKey)) return true;
         }
         
-        // Other users cannot access settings
+        // Also check myPermissions for backward compatibility
+        if (myPermissions.includes(settingKey) || myPermissions.includes(permissionKey)) return true;
+        
         return false;
     };
 
@@ -1350,7 +1368,23 @@ const Settings = () => {
         }
     };
 
-   if (user?.role !== 'superadmin' && user?.role !== 'admin') {
+   // Check if user has Settings page access using dynamic permissions
+   const hasSettingsAccess = () => {
+       // Full access via customRole
+       if (user?.customRole?.fullAccess === true) return true;
+       // Check Pages.Settings permission
+       if (user?.customRole?.permissions?.Pages?.Settings === true) return true;
+       // Check if user has any Settings subsection permissions
+       const settingsPerms = user?.customRole?.permissions?.Settings;
+       if (settingsPerms && typeof settingsPerms === 'object') {
+           if (Object.values(settingsPerms).some(v => v === true)) return true;
+       }
+       // Legacy fallback for superadmin/admin without customRole
+       if (!user?.customRoleId && (user?.role === 'superadmin' || user?.role === 'admin')) return true;
+       return false;
+   };
+
+   if (!hasSettingsAccess()) {
         return (
             <div className="max-w-7xl mx-auto px-4 py-12 text-center">
                 <Shield className="mx-auto h-12 w-12 text-gray-400 mb-4" />
@@ -1383,19 +1417,14 @@ const Settings = () => {
                         { key: 'vicidial', label: 'Vicidial Credentials', icon: SettingsIcon },
                         { key: 'sitecustom', label: 'Site Customization', icon: SettingsIcon },
                     ].filter(({ key, superadminOnly }) => {
-                        // Show Roles only to superadmin
-                        if (superadminOnly && user?.role !== 'superadmin') return false;
-                        
-                        // For superadmin, show all settings
-                        if (user?.role === 'superadmin') return true;
-                        
-                        // For admin, show only permitted settings
-                        if (user?.role === 'admin') {
-                            return myPermissions.includes(key);
+                        // Roles section requires full access
+                        if (superadminOnly) {
+                            return user?.customRole?.fullAccess === true || 
+                                   (!user?.customRoleId && user?.role === 'superadmin');
                         }
                         
-                        // For other roles, hide settings
-                        return false;
+                        // Use dynamic permission check for all other sections
+                        return canAccessSetting(key);
                     }).map(({ key, label, icon: Icon }) => (
                         <li key={key}>
                             <button

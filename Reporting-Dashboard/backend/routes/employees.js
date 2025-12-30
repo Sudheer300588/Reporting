@@ -184,13 +184,38 @@ router.get('/', authenticate, async (req, res) => {
     if (hasFullAccess(currentUser)) {
       // No filter - see all users
     } else if (userHasPermission(currentUser, 'Users', 'Read')) {
-      // Users with Users.Read see users they created or are assigned to them
-      where = {
-        OR: [
-          { createdById: currentUser.id },
-          { managers: { some: { id: currentUser.id } } }
-        ]
-      };
+      // Check if user is a team manager
+      const isTeamManager = currentUser.customRole?.isTeamManager === true;
+      
+      if (isTeamManager) {
+        // Team managers see employees assigned to their clients
+        // First, get all clients assigned to this manager
+        const managerClientAssignments = await prisma.clientAssignment.findMany({
+          where: { userId: currentUser.id },
+          select: { clientId: true }
+        });
+        const managerClientIds = managerClientAssignments.map(a => a.clientId);
+        
+        // Find all users assigned to those clients (excluding the manager themselves)
+        where = {
+          OR: [
+            { createdById: currentUser.id },
+            {
+              clientAssignments: {
+                some: {
+                  clientId: { in: managerClientIds }
+                }
+              }
+            }
+          ],
+          id: { not: currentUser.id } // Exclude self
+        };
+      } else {
+        // Non-manager users with Users.Read see users they created
+        where = {
+          createdById: currentUser.id
+        };
+      }
     } else {
       // Users without Users.Read can only see themselves
       where = { id: currentUser.id };
