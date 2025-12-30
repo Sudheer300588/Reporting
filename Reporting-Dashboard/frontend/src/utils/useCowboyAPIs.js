@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://dev.hcddev.com:3001/api';
+// Use environment variable or default to relative URL for same-origin requests
+const API_BASE_URL = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
 
 const api = axios.create({
     baseURL: API_BASE_URL,

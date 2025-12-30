@@ -18,18 +18,21 @@ const MauticCampaignsContainer = ({ clientId }) => {
   const [expandedCampaignId, setExpandedCampaignId] = useState(null);
   const [showDetails, setShowDetails] = useState({});
 
+  // Use environment variable or default to relative URL for same-origin requests
+  const baseUrl = import.meta.env.VITE_API_URL || '';
+
   useEffect(() => {
     const fetchCampaigns = async () => {
       try {
         const [campaignsRes, segmentsRes, emailsRes] = await Promise.all([
           axios.get(
-            `https://dev.hcddev.com/api/mautic/clients/${clientId}/campaigns`
+            `${baseUrl}/api/mautic/clients/${clientId}/campaigns`
           ),
           axios.get(
-            `https://dev.hcddev.com/api/mautic/clients/${clientId}/segments`
+            `${baseUrl}/api/mautic/clients/${clientId}/segments`
           ),
           axios.get(
-            `https://dev.hcddev.com/api/mautic/clients/${clientId}/emails`
+            `${baseUrl}/api/mautic/clients/${clientId}/emails`
           ),
         ]);
 
