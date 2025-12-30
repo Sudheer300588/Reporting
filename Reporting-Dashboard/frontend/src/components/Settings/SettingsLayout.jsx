@@ -117,6 +117,12 @@ const SettingsLayout = ({ children, myPermissions = [] }) => {
     if (hasFullAccess()) return true;
     // Check customRole.permissions.Pages.Settings
     if (user?.customRole?.permissions?.Pages?.Settings === true) return true;
+    // Also check if user has any Settings subsection permissions
+    const settingsPerms = user?.customRole?.permissions?.Settings;
+    if (settingsPerms && typeof settingsPerms === 'object') {
+      // If user has any Settings subsection permission, allow access
+      if (Object.values(settingsPerms).some(v => v === true)) return true;
+    }
     // Legacy fallback
     if (!user?.customRoleId && ['superadmin', 'admin'].includes(user?.role)) return true;
     return false;

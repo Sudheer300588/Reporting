@@ -1,6 +1,6 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { authenticate, requireAdmin, hasFullAccess, userHasPermission } from '../middleware/auth.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -21,7 +21,19 @@ const PERMISSIONS_SCHEMA = {
   Clients: ["Create", "Read", "Update", "Delete"],
 };
 
-router.get('/', authenticate, requireAdmin, async (req, res) => {
+// Middleware to allow users with Users.Create permission to fetch roles (for user creation)
+const canAccessRoles = (req, res, next) => {
+  if (hasFullAccess(req.user)) return next();
+  if (userHasPermission(req.user, 'Users', 'Create')) return next();
+  if (userHasPermission(req.user, 'Users', 'Update')) return next();
+  
+  return res.status(403).json({
+    success: false,
+    message: 'Access denied. You need Users.Create or Users.Update permission to access roles.'
+  });
+};
+
+router.get('/', authenticate, canAccessRoles, async (req, res) => {
   try {
     const roles = await prisma.role.findMany({
       orderBy: [
