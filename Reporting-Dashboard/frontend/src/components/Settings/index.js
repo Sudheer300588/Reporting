@@ -8,3 +8,5 @@ export { default as MauticSettings } from './MauticSettings';
 export { default as SiteBranding } from './SiteBranding';
 export { default as RolesAndPermissions } from './RolesAndPermissions';
 export { default as Permissions } from './Permissions';
+export { default as NotificationsSettings } from './NotificationsSettings';
+export { default as MaintenanceEmail } from './MaintenanceEmail';
