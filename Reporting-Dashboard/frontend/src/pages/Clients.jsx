@@ -21,6 +21,29 @@ const Clients = () => {
     const { user } = useAuth();
     const [clients, setClients] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    // Permission helpers - use customRole permissions instead of hardcoded role names
+    const hasFullAccess = () => {
+        if (user?.customRole?.fullAccess === true) return true;
+        // Backward compatibility for legacy users
+        if (!user?.customRoleId && (user?.role === 'superadmin' || user?.role === 'admin')) return true;
+        return false;
+    };
+
+    const hasPermission = (module, permission) => {
+        if (hasFullAccess()) return true;
+        if (user?.customRole?.permissions?.[module]?.includes(permission)) return true;
+        // Backward compatibility for legacy manager
+        if (!user?.customRoleId && user?.role === 'manager') {
+            if (module === 'Users' && ['Create', 'Read'].includes(permission)) return true;
+            if (module === 'Clients' && ['Create', 'Read', 'Update', 'Delete'].includes(permission)) return true;
+        }
+        return false;
+    };
+
+    // Check if user can manage teams (is a "manager" in assignment context)
+    // Only Users.Create grants team management - Users.Read is not sufficient
+    const canManageTeam = () => hasFullAccess() || hasPermission('Users', 'Create');
     const [showAssignModal, setShowAssignModal] = useState(false);
     const [selectedClientForAssign, setSelectedClientForAssign] = useState(null);
     // users list replaced by managers/employees endpoints
@@ -153,16 +176,17 @@ const Clients = () => {
             // 5️⃣ Final combined list
             let combinedClients = Array.from(mergedMap.values());
 
-            // For non-admins, restrict visibility to assigned/created clients only
-            if (user && (user.role !== 'superadmin' && user.role !== 'admin')) {
-                if (user.role === 'manager') {
+            // For non-full-access users, restrict visibility based on permissions
+            if (!hasFullAccess()) {
+                if (canManageTeam()) {
+                    // Team managers can see clients they created or are assigned to
                     combinedClients = combinedClients.filter((c) => {
-                        const createdByThisManager = c.createdBy?.id === user.id;
-                        const assignedToManager = (c.assignments || []).some(a => (a.user?.id || a.userId) === user.id);
-                        return createdByThisManager || assignedToManager;
+                        const createdByThisUser = c.createdBy?.id === user.id;
+                        const assignedToUser = (c.assignments || []).some(a => (a.user?.id || a.userId) === user.id);
+                        return createdByThisUser || assignedToUser;
                     });
                 } else {
-                    // Employee/telecaller - only assigned clients
+                    // Regular users - only assigned clients
                     combinedClients = combinedClients.filter((c) => (c.assignments || []).some(a => (a.user?.id || a.userId) === user.id));
                 }
             }
@@ -183,7 +207,8 @@ const Clients = () => {
 
     useEffect(() => {
         fetchClients();
-        if (["superadmin", "admin", "manager"].includes(user?.role)) {
+        // Fetch managers if user can manage clients
+        if (canManageTeam()) {
             fetchManagers();
         }
     }, [user]);
@@ -352,7 +377,8 @@ const Clients = () => {
     const openAssignModal = (client) => {
         setSelectedClientForAssign(client);
         const initialData = { managerId: "", userIds: [] };
-        if (user?.role === "manager") {
+        // If user is a team manager but not full access, pre-select themselves
+        if (canManageTeam() && !hasFullAccess()) {
             initialData.managerId = user.id.toString();
         }
         setAssignData(initialData);
@@ -366,7 +392,8 @@ const Clients = () => {
     const getManagers = () => {
         const assignedUserIds =
             selectedClientForAssign?.assignments?.map((a) => a.userId) || [];
-        if (user?.role === "manager") {
+        // Non-full access team managers only see themselves
+        if (canManageTeam() && !hasFullAccess()) {
             return managers.filter((m) => m.id === user.id && !assignedUserIds.includes(m.id));
         }
         return managers.filter((m) => !assignedUserIds.includes(m.id));
@@ -415,7 +442,8 @@ const Clients = () => {
     const endIndex = startIndex + itemsPerPage;
     const currentClients = filteredClients.slice(startIndex, endIndex);
 
-    const canAssignClients = ["superadmin", "admin", "manager"].includes(user?.role);
+    // Users who can assign clients are those with Clients.Update permission or team management
+    const canAssignClients = hasPermission('Clients', 'Update') || canManageTeam();
 
     if (loading) {
         return (

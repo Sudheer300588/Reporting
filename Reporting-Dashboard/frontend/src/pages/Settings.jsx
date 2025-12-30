@@ -285,15 +285,21 @@ const Settings = () => {
     };
 
     const canAccessSetting = (settingKey) => {
-        // Superadmin can access everything
-        if (user?.role === 'superadmin') return true;
+        // Full access users (via customRole or legacy superadmin/admin) can access all settings
+        if (user?.customRole?.fullAccess === true) return true;
+        if (!user?.customRoleId && (user?.role === 'superadmin' || user?.role === 'admin')) return true;
         
-        // Admin can access only their permitted settings
-        if (user?.role === 'admin') {
+        // Users with Settings.Read permission can access permitted settings
+        if (user?.customRole?.permissions?.Settings?.includes('Read')) {
             return myPermissions.includes(settingKey);
         }
         
-        // Other roles cannot access settings
+        // Backward compatibility: legacy admin users
+        if (!user?.customRoleId && user?.role === 'admin') {
+            return myPermissions.includes(settingKey);
+        }
+        
+        // Other users cannot access settings
         return false;
     };
 

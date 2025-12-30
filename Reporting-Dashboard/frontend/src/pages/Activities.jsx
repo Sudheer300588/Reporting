@@ -29,6 +29,24 @@ const Activities = () => {
         total: 0
     });
 
+    // Permission helpers - use customRole permissions
+    const hasFullAccess = () => {
+        if (user?.customRole?.fullAccess === true) return true;
+        if (!user?.customRoleId && (user?.role === 'superadmin' || user?.role === 'admin')) return true;
+        return false;
+    };
+
+    const hasPermission = (module, permission) => {
+        if (hasFullAccess()) return true;
+        if (user?.customRole?.permissions?.[module]?.includes(permission)) return true;
+        if (!user?.customRoleId && user?.role === 'manager') {
+            if (module === 'Activities' && permission === 'Read') return true;
+        }
+        return false;
+    };
+
+    const canViewActivities = hasFullAccess() || hasPermission('Activities', 'Read');
+
     useEffect(() => {
         fetchActivities();
     }, [filters, pagination.current]);
@@ -96,13 +114,14 @@ const Activities = () => {
         return str.charAt(0).toUpperCase() + str.slice(1);
     };
 
-    if (user.role === 'employee' || user.role === 'telecaller') {
+    // Check permission instead of hardcoded role
+    if (!canViewActivities) {
         return (
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="text-center py-12">
                     <Activity className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
-                    <p className="text-gray-500">Activity logs are only available to Admins and Managers.</p>
+                    <p className="text-gray-500">You don't have permission to view activity logs.</p>
                 </div>
             </div>
         );

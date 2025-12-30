@@ -6,7 +6,7 @@ Business management system integrating CRM, campaign management, and user hierar
 ## Authorization System
 
 ### Dynamic Roles Architecture
-All authorization is driven by custom roles defined in Settings. The system uses permission-based access control:
+All authorization is driven by custom roles defined in Settings. The system uses permission-based access control with NO hardcoded role logic:
 
 **Permission Modules:**
 - `Users` - User management (Create, Read, Update, Delete)
@@ -20,6 +20,35 @@ All authorization is driven by custom roles defined in Settings. The system uses
 - `requirePermission(module, action)` - Route middleware for permission checks
 - `requireFullAccess` - Route middleware requiring full access
 
+### Client Assignment Logic
+Client assignment now uses dynamic permissions instead of hardcoded role names:
+
+**"Manager" for Assignment Purposes:**
+- User with `customRole.fullAccess = true`, OR
+- User with `Users.Create` permission (not Users.Read - that's too permissive)
+- Legacy users: superadmin/admin/manager role without customRole assigned
+
+**"Employee" for Assignment:**
+- User without team management permissions (no fullAccess, no Users.Create)
+
+**Assignment Endpoints (clients.js):**
+- `/assignment/managers` - Returns users who can manage teams (based on permissions)
+- `/assignment/managers/:id/employees` - Returns team members under a manager
+- `POST /:id/assign` - Permission-based assignment validation
+- `DELETE /:id/assign/:userId` - Permission-based unassignment
+
+### Frontend Permission Helpers
+Each component includes local permission helpers for consistency:
+```javascript
+const hasFullAccess = () => user?.customRole?.fullAccess === true || 
+  (!user?.customRoleId && ['superadmin', 'admin'].includes(user?.role));
+
+const hasPermission = (module, action) => hasFullAccess() || 
+  user?.customRole?.permissions?.[module]?.includes(action);
+
+const canManageTeam = () => hasFullAccess() || hasPermission('Users', 'Create');
+```
+
 ### Backward Compatibility
 Legacy users without a customRole assigned receive temporary fallback permissions:
 - Legacy `superadmin`/`admin` role → Full access until customRole assigned
@@ -32,15 +61,17 @@ Legacy users without a customRole assigned receive temporary fallback permission
 ### Backend
 - `backend/middleware/auth.js` - Authentication and authorization middleware
 - `backend/routes/employees.js` - User management with permission checks
-- `backend/routes/clients.js` - Client CRUD with permission-based filtering
+- `backend/routes/clients.js` - Client CRUD with permission-based assignment logic
 - `backend/routes/settings.js` - Settings with full access requirements
 - `backend/routes/activities.js` - Activity logs with permission filtering
 - `backend/prisma/schema.prisma` - Database schema with Role model
 
 ### Frontend
+- `frontend/src/pages/Clients.jsx` - Client management with permission-based assignment
 - `frontend/src/pages/Employees.jsx` - User management UI with permission checks
+- `frontend/src/pages/Activities.jsx` - Activity logs with permission checks
 - `frontend/src/pages/Settings.jsx` - Role management UI
-- `frontend/src/contexts/AuthContext.jsx` - Auth context with permission helpers
+- `frontend/src/contexts/AuthContext.jsx` - Auth context
 
 ## Integrations
 - Mautic (marketing automation)
@@ -51,5 +82,7 @@ Legacy users without a customRole assigned receive temporary fallback permission
 - Migrated all authorization from hardcoded role names to dynamic permissions
 - Replaced `authorize()` middleware with `requirePermission()` in all routes
 - Updated role-based conditionals to use `hasFullAccess()` and `userHasPermission()`
+- **Client assignment endpoints now use permission-based user classification**
+- Frontend components (Clients.jsx, Activities.jsx, Settings.jsx) updated with permission helpers
 - Settings admin-permissions routes now use customRole permissions
 - `canViewClients` middleware allows all authenticated users (route handlers filter)

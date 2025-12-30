@@ -412,6 +412,9 @@ router.delete(
 
 // ============================================
 // GET MANAGERS FOR ASSIGNMENT DROPDOWN
+// A "manager" for assignment purposes is a user with:
+// - Full access, OR
+// - Users.Create permission (can create/manage team members)
 // ============================================
 router.get(
   "/assignment/managers",
@@ -419,40 +422,61 @@ router.get(
   canManageClients,
   async (req, res) => {
     try {
-      const { role: userRole, id: userId } = req.user;
+      const currentUser = req.user;
 
       let managers;
 
-      if (userRole === "superadmin" || userRole === "admin") {
-        // SuperAdmin and Admin see all active managers
-        managers = await prisma.user.findMany({
-          where: {
-            role: "manager",
-            isActive: true,
-          },
+      if (hasFullAccess(currentUser)) {
+        // Full access users see all users who can manage teams
+        // Include both: (1) users with customRole that grants team perms, (2) legacy managers
+        const allActiveUsers = await prisma.user.findMany({
+          where: { isActive: true },
           select: {
             id: true,
             name: true,
             email: true,
             role: true,
+            customRoleId: true,
+            customRole: {
+              select: { name: true, fullAccess: true, permissions: true, isActive: true }
+            }
           },
           orderBy: { name: "asc" },
         });
-      } else if (userRole === "manager") {
-        // Manager only sees themselves
-        managers = await prisma.user.findMany({
-          where: {
-            id: userId,
-            role: "manager",
-            isActive: true,
-          },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true,
-          },
-        });
+        
+        // Filter to users who can manage teams (create users)
+        managers = allActiveUsers.filter(u => {
+          // Legacy users without customRole - check legacy role
+          if (!u.customRoleId) {
+            return ['superadmin', 'admin', 'manager'].includes(u.role);
+          }
+          // Skip users with inactive customRole
+          if (!u.customRole?.isActive) return false;
+          // Full access users can manage teams
+          if (u.customRole?.fullAccess) return true;
+          // Users with Users.Create permission can manage teams
+          let perms = u.customRole?.permissions;
+          if (typeof perms === 'string') {
+            try { perms = JSON.parse(perms); } catch { perms = {}; }
+          }
+          const usersPerms = Array.isArray(perms?.Users) ? perms.Users : [];
+          return usersPerms.includes('Create');
+        }).map(u => ({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          customRoleName: u.customRole?.name
+        }));
+      } else if (userHasPermission(currentUser, 'Users', 'Create')) {
+        // Users with team management permission only see themselves
+        managers = [{
+          id: currentUser.id,
+          name: currentUser.name,
+          email: currentUser.email,
+          role: currentUser.role,
+          customRoleName: currentUser.customRole?.name
+        }];
       } else {
         return res.status(403).json({ message: "Access denied" });
       }
@@ -470,6 +494,7 @@ router.get(
 
 // ============================================
 // GET EMPLOYEES UNDER A SPECIFIC MANAGER
+// An "employee" for assignment is a user who doesn't have team management permissions
 // ============================================
 router.get(
   "/assignment/managers/:managerId/employees",
@@ -478,42 +503,57 @@ router.get(
   async (req, res) => {
     try {
       const managerId = parseInt(req.params.managerId);
-      const { role: userRole, id: userId } = req.user;
+      const currentUser = req.user;
 
-      // Verify the manager exists
+      // Verify the manager exists and has team management permissions
       const manager = await prisma.user.findUnique({
         where: { id: managerId },
+        include: {
+          customRole: {
+            select: { name: true, fullAccess: true, permissions: true }
+          }
+        }
       });
 
-      if (!manager || manager.role !== "manager") {
+      if (!manager) {
         return res.status(404).json({ message: "Manager not found" });
       }
 
-      // SuperAdmin can see employees under any manager
-      // Manager can only see employees under themselves
-      if (userRole === "manager" && managerId !== userId) {
+      // Verify they have team management permissions (fullAccess or Users.Create)
+      // Handle legacy users without customRole
+      let managerHasTeamPerms = false;
+      if (!manager.customRoleId) {
+        // Legacy user - check role string
+        managerHasTeamPerms = ['superadmin', 'admin', 'manager'].includes(manager.role);
+      } else {
+        let managerPerms = manager.customRole?.permissions;
+        if (typeof managerPerms === 'string') {
+          try { managerPerms = JSON.parse(managerPerms); } catch { managerPerms = {}; }
+        }
+        const managerUsersPerms = Array.isArray(managerPerms?.Users) ? managerPerms.Users : [];
+        managerHasTeamPerms = manager.customRole?.fullAccess || managerUsersPerms.includes('Create');
+      }
+      
+      if (!managerHasTeamPerms) {
+        return res.status(404).json({ message: "User is not a team manager" });
+      }
+
+      // Full access users can see employees under any manager
+      // Non-full access users can only see employees under themselves
+      if (!hasFullAccess(currentUser) && managerId !== currentUser.id) {
         return res
           .status(403)
           .json({ message: "You can only view employees under yourself" });
       }
 
-      // Get employees and telecallers created by or assigned to this manager
-      const employees = await prisma.user.findMany({
+      // Get employees: users created by or assigned to this manager who don't have team management permissions
+      const allTeamMembers = await prisma.user.findMany({
         where: {
+          isActive: true,
           OR: [
-            {
-              // Users created by this manager
-              createdById: managerId,
-              role: { in: ["employee", "telecaller"] },
-              isActive: true,
-            },
-            {
-              // Users who have this manager assigned
-              managers: { some: { id: managerId } },
-              role: { in: ["employee", "telecaller"] },
-              isActive: true,
-            },
-          ],
+            { createdById: managerId },
+            { managers: { some: { id: managerId } } }
+          ]
         },
         select: {
           id: true,
@@ -521,9 +561,41 @@ router.get(
           email: true,
           role: true,
           createdAt: true,
+          customRoleId: true,
+          customRole: {
+            select: { name: true, fullAccess: true, permissions: true }
+          }
         },
         orderBy: { name: "asc" },
       });
+
+      // Filter to only employees (users without team management permissions)
+      // Uses same logic as manager filter but inverted
+      const employees = allTeamMembers.filter(u => {
+        // Legacy users without customRole - check legacy role
+        if (!u.customRoleId) {
+          // Legacy manager/admin/superadmin are NOT employees
+          return !['superadmin', 'admin', 'manager'].includes(u.role);
+        }
+        // Full access users are managers, not employees
+        if (u.customRole?.fullAccess) return false;
+        // Handle permissions that may be stored as string or object
+        let perms = u.customRole?.permissions;
+        if (typeof perms === 'string') {
+          try { perms = JSON.parse(perms); } catch { perms = {}; }
+        }
+        const usersPerms = Array.isArray(perms?.Users) ? perms.Users : [];
+        // Users with Users.Create are managers, not employees
+        if (usersPerms.includes('Create')) return false;
+        return true;
+      }).map(u => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        createdAt: u.createdAt,
+        customRoleName: u.customRole?.name
+      }));
 
       res.json({ employees, manager: { id: manager.id, name: manager.name } });
     } catch (error) {
@@ -538,13 +610,15 @@ router.get(
 );
 
 // ============================================
-// ASSIGN CLIENT TO USER (SuperAdmin and Manager)
+// ASSIGN CLIENT TO USER
+// Uses permission-based checks instead of hardcoded roles
 // ============================================
 router.post("/:id/assign", authenticate, canManageClients, async (req, res) => {
   try {
     const clientId = parseInt(req.params.id);
     const { userId } = req.body;
-    const { id: assignedById, role: assignerRole } = req.user;
+    const currentUser = req.user;
+    const assignedById = currentUser.id;
 
     if (!userId) {
       return res.status(400).json({ message: "User ID is required" });
@@ -560,38 +634,48 @@ router.post("/:id/assign", authenticate, canManageClients, async (req, res) => {
 
     const targetUser = await prisma.user.findUnique({
       where: { id: userId },
+      include: {
+        customRole: { select: { name: true, fullAccess: true, permissions: true } }
+      }
     });
 
     if (!targetUser) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // SuperAdmin and Admin can assign to anyone (Manager, Employee, Telecaller)
-    if (assignerRole === "superadmin" || assignerRole === "admin") {
-      if (!["manager", "employee", "telecaller"].includes(targetUser.role)) {
+    // Full access users can assign to anyone with a customRole
+    if (hasFullAccess(currentUser)) {
+      if (!targetUser.customRoleId) {
         return res.status(400).json({
-          message:
-            "SuperAdmin/Admin can only assign clients to Managers, Employees, or Telecallers",
+          message: "Cannot assign clients to users without a role assigned",
         });
       }
     }
-    // Manager can only assign to Employee or Telecaller
-    else if (assignerRole === "manager") {
-      if (!["employee", "telecaller"].includes(targetUser.role)) {
-        return res.status(400).json({
-          message:
-            "Managers can only assign clients to Employees or Telecallers",
-        });
-      }
-      // Manager can only assign clients they have access to
-      const hasAccess =
+    // Non-full access users (team managers) can only assign to their team members
+    else {
+      // Team managers can only assign clients they have access to
+      const hasClientAccess =
         client.createdById === assignedById ||
         (await prisma.clientAssignment.findFirst({
           where: { clientId, userId: assignedById },
         }));
-      if (!hasAccess) {
+      if (!hasClientAccess) {
         return res.status(403).json({
           message: "You can only assign clients that are assigned to you",
+        });
+      }
+      
+      // Team managers can only assign to users they created or manage
+      const isTeamMember = targetUser.createdById === assignedById ||
+        (await prisma.user.findFirst({
+          where: {
+            id: userId,
+            managers: { some: { id: assignedById } }
+          }
+        }));
+      if (!isTeamMember) {
+        return res.status(403).json({
+          message: "You can only assign clients to your team members",
         });
       }
     }
@@ -667,7 +751,8 @@ router.post("/:id/assign", authenticate, canManageClients, async (req, res) => {
 });
 
 // ============================================
-// UNASSIGN CLIENT FROM USER (SuperAdmin and Manager)
+// UNASSIGN CLIENT FROM USER
+// Uses permission-based checks instead of hardcoded roles
 // ============================================
 router.delete(
   "/:id/assign/:userId",
@@ -677,7 +762,8 @@ router.delete(
     try {
       const clientId = parseInt(req.params.id);
       const userId = parseInt(req.params.userId);
-      const { id: requesterId, role: requesterRole } = req.user;
+      const currentUser = req.user;
+      const requesterId = currentUser.id;
 
       const assignment = await prisma.clientAssignment.findUnique({
         where: {
@@ -695,20 +781,21 @@ router.delete(
         return res.status(404).json({ message: "Assignment not found" });
       }
 
-      // Manager can only unassign from clients they have access to
-      if (requesterRole === "manager") {
-        // Managers cannot unassign themselves
+      // Non-full access users have restrictions
+      if (!hasFullAccess(currentUser)) {
+        // Cannot unassign themselves
         if (requesterId === userId) {
           return res
             .status(403)
             .json({ message: "You cannot unassign yourself from a client" });
         }
-        const hasAccess =
+        // Can only unassign from clients they have access to
+        const hasClientAccess =
           assignment.client.createdById === requesterId ||
           (await prisma.clientAssignment.findFirst({
             where: { clientId, userId: requesterId },
           }));
-        if (!hasAccess) {
+        if (!hasClientAccess) {
           return res.status(403).json({
             message: "You can only unassign clients that are assigned to you",
           });
