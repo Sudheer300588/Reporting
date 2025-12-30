@@ -276,3 +276,60 @@ api.interceptors.request.use((config) => {
 
 ### Testing Credentials
 - **Superadmin**: `admin@digitalbevy.com` / `Admin@123`
+
+---
+
+## Known Issues & Improvement Plan (December 30, 2025)
+
+### Current Issues
+
+| Issue | Severity | Location | Description |
+|-------|----------|----------|-------------|
+| Large Settings file | Medium | `frontend/src/pages/Settings.jsx` | 2,398 lines managing 8 sections - hard to maintain |
+| Debug console.logs | Low | `frontend/src/pages/Settings.jsx` | Lines 147, 582-590 have debug statements |
+| No password toggle | Low | Settings: SFTP, Vicidial | Password fields don't have show/hide button |
+| No connection tests | Medium | Settings: SFTP, Vicidial | No way to verify credentials work before saving |
+| Dynamic roles not enforced | High | `backend/middleware/auth.js` | Custom roles stored but not checked in auth |
+| No role assignment UI | Medium | User management | Users cannot be assigned custom roles |
+| Two role systems | Medium | Settings page | Old AdminSettingsPermission overlaps with new Role model |
+
+### Implementation Plan
+
+**Phase 1: Quick Fixes (Low Risk)**
+1. Remove console.log debug statements
+2. Add password visibility toggle to SFTP/Vicidial forms
+3. Add form validation for credential fields
+
+**Phase 2: Feature Additions (Medium Risk)**
+4. Add SFTP connection test endpoint and button
+5. Add Vicidial connection test endpoint and button
+6. Add role assignment dropdown in User create/edit forms
+
+**Phase 3: Auth Integration (Higher Risk)**
+7. Update auth middleware to check customRole permissions
+8. Update JWT token to include role permissions
+9. Update frontend permission checks
+
+**Phase 4: Code Organization (Refactor)**
+10. Split Settings.jsx into separate component files:
+    - `SettingsRoles.jsx`
+    - `SettingsMautic.jsx`
+    - `SettingsNotifications.jsx`
+    - `SettingsMaintenance.jsx`
+    - `SettingsSMTP.jsx`
+    - `SettingsSFTP.jsx`
+    - `SettingsVicidial.jsx`
+    - `SettingsSiteCustomization.jsx`
+
+### Settings Sections Overview
+
+| Section | Purpose | Access Level |
+|---------|---------|--------------|
+| Roles & Permissions | Create/edit custom roles | Superadmin only |
+| Autovation Clients | Manage Mautic connections | Superadmin, permitted Admins |
+| Notifications | Email template configuration | Superadmin, permitted Admins |
+| System Maintenance Email | Send mass emails | Superadmin, permitted Admins |
+| SMTP Credentials | Email server configuration | Superadmin, permitted Admins |
+| Voicemail SFTP Credentials | DropCowboy sync settings | Superadmin, permitted Admins |
+| Vicidial Credentials | Call center API config | Superadmin, permitted Admins |
+| Site Customization | Branding (logo, colors) | Superadmin, permitted Admins |
