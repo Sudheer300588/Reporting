@@ -249,10 +249,49 @@ router.get("/my-permissions", authenticate, async (req, res) => {
     // For users with Settings permissions, check their customRole
     if (req.user.customRole?.permissions?.Settings) {
       const settingsPerms = req.user.customRole.permissions.Settings;
-      // Map Settings permissions to specific setting areas
-      // Users with Settings.Read get read-only access, Settings.Update gets full access
-      if (settingsPerms.includes('Update') || settingsPerms.includes('Read')) {
-        // Return configured permissions or all if they have full Settings access
+      
+      // Check if user has any Settings subsection permissions
+      // Handle both array format ["Read", "Update"] and object format {"Autovation Clients": true}
+      let hasSettingsAccess = false;
+      if (Array.isArray(settingsPerms)) {
+        hasSettingsAccess = settingsPerms.includes('Update') || settingsPerms.includes('Read');
+      } else if (typeof settingsPerms === 'object') {
+        // Object format - check if any setting is enabled
+        hasSettingsAccess = Object.values(settingsPerms).some(v => v === true);
+      }
+      
+      if (hasSettingsAccess) {
+        // For object format, map enabled settings to permission keys
+        let mappedPermissions = [];
+        if (typeof settingsPerms === 'object' && !Array.isArray(settingsPerms)) {
+          // Map Settings subsections to permission keys
+          const settingsKeyMap = {
+            "Autovation Clients": "mautic",
+            "SMTP Credentials": "smtp",
+            "Voicemail SFTP Credentials": "sftp",
+            "Vicidial Credentials": "vicidial",
+            "Site Customization": "sitecustom",
+            "Notifications": "notifs",
+            "System Maintenance Email": "maintenance",
+            "Roles": "roles"
+          };
+          
+          for (const [key, value] of Object.entries(settingsPerms)) {
+            if (value === true && settingsKeyMap[key]) {
+              mappedPermissions.push(settingsKeyMap[key]);
+            }
+          }
+        }
+        
+        // If we have mapped permissions, use them; otherwise fall back to legacy behavior
+        if (mappedPermissions.length > 0) {
+          return res.json({
+            success: true,
+            permissions: mappedPermissions,
+          });
+        }
+        
+        // Legacy fallback: check adminSettingsPermission table
         const permissions = await prisma.adminSettingsPermission.findMany({
           where: { adminId: req.user.id },
           select: { setting: true },
