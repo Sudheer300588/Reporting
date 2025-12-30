@@ -54,6 +54,67 @@ load_node() {
     nvm use 22 >/dev/null 2>&1 || nvm use node >/dev/null 2>&1 || true
 }
 
+# Test database connectivity
+test_db_connection() {
+    print_step "Testing database connection..."
+    
+    cd "$BACKEND_DIR"
+    
+    # Create a temporary test script
+    cat > /tmp/test_db_connection.js << 'TESTEOF'
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+
+async function main() {
+    try {
+        await prisma.$connect();
+        console.log('SUCCESS');
+        await prisma.$disconnect();
+        process.exit(0);
+    } catch (error) {
+        console.error('FAILED:', error.message);
+        process.exit(1);
+    }
+}
+
+main();
+TESTEOF
+
+    # Run the test (requires prisma client to be generated first)
+    if node /tmp/test_db_connection.js 2>&1 | grep -q "SUCCESS"; then
+        print_success "Database connection successful"
+        rm -f /tmp/test_db_connection.js
+        return 0
+    else
+        print_error "Database connection failed"
+        print_info "Please check your database credentials and ensure the server is running"
+        rm -f /tmp/test_db_connection.js
+        return 1
+    fi
+}
+
+# Validate database connection before proceeding
+validate_db_connection() {
+    print_header "Validating Database Connection"
+    
+    cd "$BACKEND_DIR"
+    
+    # First generate prisma client
+    print_step "Generating Prisma client for connection test..."
+    npx prisma generate --silent 2>/dev/null || true
+    
+    # Test connection
+    if ! test_db_connection; then
+        echo ""
+        read -p "Continue anyway? [y/N]: " continue_anyway
+        if [ "$continue_anyway" != "y" ] && [ "$continue_anyway" != "Y" ]; then
+            print_error "Deployment aborted. Please fix database connection and try again."
+            exit 1
+        fi
+        print_warning "Continuing with unverified database connection..."
+    fi
+}
+
 # Check prerequisites
 check_prerequisites() {
     print_header "Checking Prerequisites"
@@ -380,26 +441,42 @@ quick_deploy() {
         exit 1
     fi
     
-    # Determine DB provider from .env
-    if grep -q "mysql://" "$BACKEND_DIR/.env"; then
+    # Determine DB provider from .env (check for mysql:// pattern anywhere in the URL)
+    DB_URL=$(grep "DATABASE_URL" "$BACKEND_DIR/.env" | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+    if echo "$DB_URL" | grep -qE "^mysql://"; then
         DB_PROVIDER="mysql"
-    else
+    elif echo "$DB_URL" | grep -qE "^(postgres|postgresql)://"; then
         DB_PROVIDER="postgres"
+    else
+        print_error "Could not determine database provider from DATABASE_URL"
+        print_info "Expected format: mysql://... or postgresql://..."
+        exit 1
     fi
+    
+    # Get PORT from .env if available
+    APP_PORT=$(grep "^PORT=" "$BACKEND_DIR/.env" | head -1 | cut -d'=' -f2)
+    APP_PORT=${APP_PORT:-3026}
+    
+    # Get FRONTEND_URL from .env if available
+    SITE_URL=$(grep "^FRONTEND_URL=" "$BACKEND_DIR/.env" | head -1 | cut -d'=' -f2 | tr -d '"')
+    SITE_URL=${SITE_URL:-"http://localhost:$APP_PORT"}
     
     print_info "Using existing .env configuration"
     print_info "Database provider: $DB_PROVIDER"
+    print_info "Port: $APP_PORT"
     
     load_node
     check_prerequisites
     switch_database
     install_dependencies
+    validate_db_connection
     build_frontend
     setup_database
     start_application
     
     echo ""
     print_success "Quick deployment complete!"
+    print_summary
 }
 
 # Main deployment flow
@@ -429,6 +506,7 @@ main() {
     create_env_file
     switch_database
     install_dependencies
+    validate_db_connection
     build_frontend
     setup_database
     start_application

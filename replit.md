@@ -102,3 +102,57 @@ Legacy users without a customRole assigned receive temporary fallback permission
 - Frontend components updated with permission helpers that handle both permission formats
 - **EMPLOYEES API FIX (Dec 30, 2024):** Team managers now see employees assigned to their clients via `ClientAssignment` table, not the legacy empty `_ManagerEmployee` table
 - **SETTINGS PAGE FIX (Dec 30, 2024):** Removed hardcoded `user?.role` checks. Now uses dynamic permission check via `hasSettingsAccess()` and `canAccessSetting()` functions that handle both object `{"Autovation Clients": true}` and array `["Autovation Clients"]` permission formats
+
+## Database & Deployment
+
+### Multi-Database Support
+The application supports both MySQL and PostgreSQL databases:
+
+**Schema Files:**
+- `backend/prisma/schema.prisma` - Active schema (copied from provider-specific file)
+- `backend/prisma/schema.mysql.prisma` - MySQL schema template
+- `backend/prisma/schema.postgres.prisma` - PostgreSQL schema template
+
+**Switching Databases:**
+```bash
+# Use the switch script
+./backend/scripts/switch-database.sh mysql    # For MySQL
+./backend/scripts/switch-database.sh postgres # For PostgreSQL
+```
+
+### Deployment Script (deploy.sh)
+Interactive deployment script supporting multi-site server deployments:
+
+**Features:**
+- Selects database provider (MySQL or PostgreSQL)
+- Configures database connection interactively
+- Sets website URL and application port
+- Generates security keys (JWT, encryption)
+- Builds frontend and syncs with backend
+- Runs database migrations and optional seeding
+- Starts application with PM2 process manager
+
+**Usage:**
+```bash
+# Interactive deployment
+./deploy.sh
+
+# Quick deployment (uses existing .env)
+./deploy.sh --quick
+
+# Help
+./deploy.sh --help
+```
+
+**Port Configuration:**
+- Default port: 3026
+- Configurable during deployment for multi-site setups
+- Backend reads `PORT` environment variable
+
+### Environment Variables
+Key environment variables (see `backend/.env.example`):
+- `PORT` - Application port (default: 3026)
+- `DATABASE_URL` - Database connection string (MySQL or PostgreSQL format)
+- `JWT_SECRET` - Token signing secret
+- `ENCRYPTION_KEY` - Data encryption key
+- `FRONTEND_URL` - Public URL for email links
