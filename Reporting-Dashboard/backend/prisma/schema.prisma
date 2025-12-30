@@ -94,15 +94,16 @@ enum OTPStatus {
 // ROLE & PERMISSIONS MANAGEMENT
 // ==========================================================
 model Role {
-  id          Int      @id @default(autoincrement())
-  name        String   @unique
-  description String?  @db.Text
-  fullAccess  Boolean  @default(false)
-  permissions Json     @default("{}")
-  isSystem    Boolean  @default(false)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  name          String   @unique
+  description   String?  @db.Text
+  fullAccess    Boolean  @default(false)
+  isTeamManager Boolean  @default(false) // If true, users with this role appear in manager dropdown for client assignment
+  permissions   Json     @default("{}")
+  isSystem      Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   users User[]
 
