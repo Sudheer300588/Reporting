@@ -1376,9 +1376,12 @@ const Settings = () => {
        if (user?.customRole?.permissions?.Pages?.Settings === true) return true;
        // Check if user has any Settings subsection permissions
        const settingsPerms = user?.customRole?.permissions?.Settings;
-       if (settingsPerms && typeof settingsPerms === 'object') {
+       // Handle object format: {"Autovation Clients": true}
+       if (settingsPerms && typeof settingsPerms === 'object' && !Array.isArray(settingsPerms)) {
            if (Object.values(settingsPerms).some(v => v === true)) return true;
        }
+       // Handle array format: ["Autovation Clients"] (legacy)
+       if (Array.isArray(settingsPerms) && settingsPerms.length > 0) return true;
        // Legacy fallback for superadmin/admin without customRole
        if (!user?.customRoleId && (user?.role === 'superadmin' || user?.role === 'admin')) return true;
        return false;

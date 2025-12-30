@@ -100,3 +100,5 @@ Legacy users without a customRole assigned receive temporary fallback permission
 - Migrated all authorization from hardcoded role names to dynamic permissions
 - Replaced `authorize()` middleware with `requirePermission()` in all routes
 - Frontend components updated with permission helpers that handle both permission formats
+- **EMPLOYEES API FIX (Dec 30, 2024):** Team managers now see employees assigned to their clients via `ClientAssignment` table, not the legacy empty `_ManagerEmployee` table
+- **SETTINGS PAGE FIX (Dec 30, 2024):** Removed hardcoded `user?.role` checks. Now uses dynamic permission check via `hasSettingsAccess()` and `canAccessSetting()` functions that handle both object `{"Autovation Clients": true}` and array `["Autovation Clients"]` permission formats

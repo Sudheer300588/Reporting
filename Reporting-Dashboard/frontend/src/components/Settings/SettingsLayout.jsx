@@ -97,10 +97,19 @@ const SettingsLayout = ({ children, myPermissions = [] }) => {
     // Check customRole.permissions.Settings for the specific section
     const permissionKey = sectionToPermissionKey[settingKey] || settingKey;
     const settingsPerms = user?.customRole?.permissions?.Settings;
-    if (settingsPerms && settingsPerms[permissionKey] === true) return true;
+    
+    // Handle object format: {"Autovation Clients": true}
+    if (settingsPerms && typeof settingsPerms === 'object' && !Array.isArray(settingsPerms)) {
+      if (settingsPerms[permissionKey] === true) return true;
+    }
+    
+    // Handle array format: ["Autovation Clients"] (legacy)
+    if (Array.isArray(settingsPerms)) {
+      if (settingsPerms.includes(permissionKey)) return true;
+    }
     
     // Also check myPermissions for backward compatibility
-    if (myPermissions.includes(settingKey)) return true;
+    if (myPermissions.includes(settingKey) || myPermissions.includes(permissionKey)) return true;
     
     return false;
   };
@@ -119,10 +128,12 @@ const SettingsLayout = ({ children, myPermissions = [] }) => {
     if (user?.customRole?.permissions?.Pages?.Settings === true) return true;
     // Also check if user has any Settings subsection permissions
     const settingsPerms = user?.customRole?.permissions?.Settings;
-    if (settingsPerms && typeof settingsPerms === 'object') {
-      // If user has any Settings subsection permission, allow access
+    // Handle object format: {"Autovation Clients": true}
+    if (settingsPerms && typeof settingsPerms === 'object' && !Array.isArray(settingsPerms)) {
       if (Object.values(settingsPerms).some(v => v === true)) return true;
     }
+    // Handle array format: ["Autovation Clients"] (legacy)
+    if (Array.isArray(settingsPerms) && settingsPerms.length > 0) return true;
     // Legacy fallback
     if (!user?.customRoleId && ['superadmin', 'admin'].includes(user?.role)) return true;
     return false;
