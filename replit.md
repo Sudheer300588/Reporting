@@ -31,6 +31,17 @@ A conversational AI assistant allows users to query client statistics, campaign 
 - **Security**: API keys are encrypted using an existing `encryptionService`. Access to AI settings is restricted to `fullAccess` users. Chat responses are filtered based on the user's permissions.
 - **Features**: Web Speech API for voice input, ElevenLabs for voice output, and wake word detection ("Hey Bevy").
 
+#### Enhanced Dashboard (Updated Dec 2024)
+The dashboard provides a comprehensive overview of business metrics with role-aware data display:
+- **Email Metrics**: Sent/opened/clicked/bounced counts, open/click/unsubscribe rates from Mautic
+- **Voicemail Metrics**: Sent/delivered/failed counts, success rate, total cost from DropCowboy
+- **Visualizations**: Recharts-based bar charts for email performance, pie charts for voicemail delivery
+- **Insight Cards**: Automatically generated alerts for low open rates (<20%), high bounces (>100), delivery issues (<70% success)
+- **Sync Status Indicators**: Show last sync time for Mautic and DropCowboy integrations
+- **Quick Actions**: Sync all data, manage clients/users, view activity (admin-only)
+- **Permission Helpers**: `hasFullAccess()`, `hasPermission(module, action)`, `canViewClients()`, `canViewUsers()` for consistent access control
+- **No Hardcoded Roles**: All access control uses dynamic permission helpers, not legacy role checks
+
 #### Modular Settings Components
 The `frontend/src/components/Settings/` directory houses self-contained components for various configurations, such as `RolesAndPermissions`, `MauticSettings`, `NotificationsSettings`, `SmtpCredentials`, `SftpCredentials`, `VicidialCredentials`, and `SiteBranding`. Each component manages its state and API calls, utilizing `useSettings()` for permission checks.
 
