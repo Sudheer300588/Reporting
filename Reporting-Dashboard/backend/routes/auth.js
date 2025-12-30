@@ -184,7 +184,7 @@ router.post('/login', authLimiter, validate(loginSchema), async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Fetch user
+    // Fetch user with customRole for permissions
     const user = await prisma.user.findUnique({
       where: { email },
       select: {
@@ -194,7 +194,17 @@ router.post('/login', authLimiter, validate(loginSchema), async (req, res) => {
         password: true,
         role: true,
         isActive: true,
-        tokenVersion: true
+        tokenVersion: true,
+        customRoleId: true,
+        customRole: {
+          select: {
+            id: true,
+            name: true,
+            fullAccess: true,
+            isTeamManager: true,
+            permissions: true
+          }
+        }
       }
     });
 
@@ -237,7 +247,9 @@ router.post('/login', authLimiter, validate(loginSchema), async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: user.role,
+        customRoleId: user.customRoleId,
+        customRole: user.customRole
       }
     });
   } catch (error) {
@@ -301,13 +313,36 @@ router.post('/logout', authenticate, async (req, res) => {
  */
 router.get('/me', authenticate, async (req, res) => {
   try {
+    // Fetch fresh user data with customRole for permissions
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        customRoleId: true,
+        customRole: {
+          select: {
+            id: true,
+            name: true,
+            fullAccess: true,
+            isTeamManager: true,
+            permissions: true
+          }
+        }
+      }
+    });
+
     res.json({
       success: true,
       user: {
-        id: req.user.id,
-        name: req.user.name,
-        email: req.user.email,
-        role: req.user.role
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        customRoleId: user.customRoleId,
+        customRole: user.customRole
       }
     });
   } catch (error) {
