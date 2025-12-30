@@ -28,9 +28,13 @@ export const createClient = (clientData) =>
 export const updateClient = (clientId, clientData) =>
   mauticAPI.put(`/clients/${clientId}`, clientData);
 
-// Note: deletion of mautic clients is now a soft-delete (toggle active state).
+// Soft-delete: toggle active state
 export const deleteClient = (clientId) =>
   mauticAPI.patch(`/clients/${clientId}/toggle`);
+
+// Hard-delete: permanently remove client and all associated data
+export const hardDeleteClient = (clientId) =>
+  mauticAPI.delete(`/clients/${clientId}/permanent`);
 
 export const testConnection = (credentials) =>
   mauticAPI.post("/clients/test-connection", credentials);

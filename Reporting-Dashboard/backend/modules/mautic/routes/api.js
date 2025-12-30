@@ -892,6 +892,90 @@ router.delete("/clients/:id", async (req, res) => {
 });
 
 /**
+ * DELETE /api/mautic/clients/:id/permanent
+ * Permanently delete a Mautic client and all associated records
+ */
+router.delete("/clients/:id/permanent", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const clientId = parseInt(id);
+
+    console.log(`[mautic-api] Received PERMANENT DELETE /clients/${id}/permanent request`);
+
+    const existing = await prisma.mauticClient.findUnique({
+      where: { id: clientId },
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Client not found",
+      });
+    }
+
+    const clientName = existing.name;
+    const linkedClientId = existing.clientId;
+
+    await prisma.$transaction(async (tx) => {
+      const deletedEmails = await tx.mauticEmail.deleteMany({ where: { clientId: clientId } });
+      const deletedReports = await tx.mauticEmailReport.deleteMany({ where: { clientId: clientId } });
+      const deletedCampaigns = await tx.mauticCampaign.deleteMany({ where: { clientId: clientId } });
+      const deletedSegments = await tx.mauticSegment.deleteMany({ where: { clientId: clientId } });
+      const deletedSyncLogs = await tx.mauticSyncLog.deleteMany({ where: { mauticClientId: clientId } });
+      const deletedMonths = await tx.mauticFetchedMonth.deleteMany({ where: { clientId: clientId } });
+      
+      console.log(`Deleted ${deletedEmails.count} emails, ${deletedReports.count} reports, ${deletedCampaigns.count} campaigns, ${deletedSegments.count} segments, ${deletedSyncLogs.count} sync logs, ${deletedMonths.count} fetched months`);
+      
+      await tx.mauticClient.delete({ where: { id: clientId } });
+
+      if (linkedClientId) {
+        const otherMauticLinks = await tx.mauticClient.count({
+          where: { clientId: linkedClientId },
+        });
+        if (otherMauticLinks === 0) {
+          await tx.dropCowboyCampaign.updateMany({
+            where: { clientId: linkedClientId },
+            data: { clientId: null },
+          });
+          await tx.client.delete({ where: { id: linkedClientId } });
+          console.log(`Deleted linked main client (ID: ${linkedClientId})`);
+        }
+      }
+    });
+
+    try {
+      if (typeof logActivity === "function") {
+        await logActivity(
+          req.user || null,
+          "mautic_client_deleted",
+          "mautic_client",
+          clientId,
+          `Permanently deleted mautic client: ${clientName}`,
+          { clientId, clientName },
+          req
+        );
+      }
+    } catch (e) {
+      // ignore logging errors
+    }
+
+    console.log(`✓ Permanently deleted mautic client: ${clientName} (ID: ${clientId})`);
+
+    res.json({
+      success: true,
+      message: `Client "${clientName}" and all associated data permanently deleted`,
+    });
+  } catch (error) {
+    console.error("Error permanently deleting mautic client:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to permanently delete client",
+      error: error.message,
+    });
+  }
+});
+
+/**
  * PATCH /api/mautic/clients/:id/toggle
  * Toggle active status of a Mautic client
  */

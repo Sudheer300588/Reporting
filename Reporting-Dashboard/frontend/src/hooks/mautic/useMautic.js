@@ -112,6 +112,16 @@ export function useClientManagement() {
         return result;
     }, []);
 
+    const hardDeleteClient = useCallback(async (clientId) => {
+        setIsDeleting(true);
+        setError(null);
+
+        const result = await mauticService.hardDeleteClient(clientId);
+
+        setIsDeleting(false);
+        return result;
+    }, []);
+
     const testConnection = useCallback(async (credentials) => {
         setIsTesting(true);
         setError(null);
@@ -126,6 +136,7 @@ export function useClientManagement() {
         createClient,
         updateClient,
         deleteClient,
+        hardDeleteClient,
         testConnection,
         isCreating,
         isUpdating,

@@ -10,6 +10,7 @@ import mauticAPI, {
   createClient as apiCreateClient,
   updateClient as apiUpdateClient,
   deleteClient as apiDeleteClient,
+  hardDeleteClient as apiHardDeleteClient,
   testConnection as apiTestConnection,
   fetchDashboardMetrics as apiFetchDashboardMetrics,
   fetchContacts as apiFetchContacts,
@@ -111,6 +112,29 @@ class MauticService {
       return {
         success: false,
         error: error.response?.data?.message || error.message || 'Failed to delete client'
+      };
+    }
+  }
+
+  /**
+   * Permanently delete a client and all associated data
+   * @param {number} clientId - Client ID
+   * @returns {Promise<Object>} Result
+   */
+  async hardDeleteClient(clientId) {
+    try {
+      console.log('[mauticService] hardDeleteClient called with id:', clientId);
+      const response = await apiHardDeleteClient(clientId);
+      return {
+        success: true,
+        message: response.data.message,
+        error: null
+      };
+    } catch (error) {
+      console.error('Error permanently deleting client:', error);
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message || 'Failed to permanently delete client'
       };
     }
   }

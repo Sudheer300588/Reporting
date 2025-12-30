@@ -4,12 +4,12 @@
  * Displays all Autovation Clients with management actions
  */
 
-import { Edit, ToggleLeft, ToggleRight, CheckCircle, XCircle, EyeOff, EyeIcon } from 'lucide-react';
+import { Edit, ToggleLeft, ToggleRight, CheckCircle, XCircle, EyeOff, EyeIcon, Trash2 } from 'lucide-react';
 import { useClientManagement } from '../../hooks/mautic';
 import { useState } from 'react';
 
 const ClientsTable = ({ clients, onEdit, onRefresh }) => {
-  const { deleteClient, isDeleting } = useClientManagement();
+  const { deleteClient, hardDeleteClient, isDeleting } = useClientManagement();
   const [visibleUsers, setVisibleUsers] = useState({});
 
   const toggleUser = (id) => {
@@ -33,6 +33,28 @@ const ClientsTable = ({ clients, onEdit, onRefresh }) => {
       onRefresh();
     } else {
       alert(`Failed to ${action} client: ` + result.error);
+    }
+  };
+
+  const handlePermanentDelete = async (client) => {
+    const confirmMessage = `Are you sure you want to PERMANENTLY DELETE "${client.name}"?\n\nThis will remove:\n- All synced emails\n- All campaigns\n- All segments\n- All sync logs\n\nThis action cannot be undone!`;
+    
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    const doubleConfirm = window.confirm(`Final confirmation: Delete "${client.name}" and ALL associated data permanently?`);
+    if (!doubleConfirm) {
+      return;
+    }
+
+    const result = await hardDeleteClient(client.id);
+
+    if (result.success) {
+      alert(result.message || 'Client permanently deleted!');
+      onRefresh();
+    } else {
+      alert('Failed to delete client: ' + result.error);
     }
   };
 
@@ -149,6 +171,15 @@ const ClientsTable = ({ clients, onEdit, onRefresh }) => {
                       aria-label={client.isActive ? 'Deactivate client' : 'Activate client'}
                     >
                       {client.isActive ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+                    </button>
+                    <button
+                      onClick={() => handlePermanentDelete(client)}
+                      disabled={isDeleting}
+                      className="text-red-600 hover:text-red-900 p-1.5 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                      title="Permanently delete client"
+                      aria-label="Permanently delete client"
+                    >
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 </td>
