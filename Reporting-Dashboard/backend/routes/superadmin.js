@@ -1196,12 +1196,13 @@ router.delete('/clients/:id/unassign', async (req, res) => {
 /**
  * GET /api/superadmin/employees
  * Get detailed employee list with manager info
+ * Excludes users with fullAccess or isTeamManager roles (they are managers, not employees)
  */
 router.get('/employees', async (req, res) => {
   try {
-    const employees = await prisma.user.findMany({
+    const allUsers = await prisma.user.findMany({
       where: {
-        role: { in: ['employee', 'telecaller', 'manager'] }
+        isActive: true
       },
       orderBy: [
         { role: 'asc' },
@@ -1214,6 +1215,14 @@ router.get('/employees', async (req, res) => {
         role: true,
         isActive: true,
         createdAt: true,
+        customRoleId: true,
+        customRole: {
+          select: {
+            name: true,
+            fullAccess: true,
+            isTeamManager: true
+          }
+        },
         managers: {
           select: {
             id: true,
@@ -1227,6 +1236,20 @@ router.get('/employees', async (req, res) => {
           }
         }
       }
+    });
+
+    // Filter to only employees (users who are NOT team managers)
+    const employees = allUsers.filter(u => {
+      // Legacy users without customRole - check legacy role
+      if (!u.customRoleId) {
+        // Legacy superadmin/admin/manager are NOT employees
+        return !['superadmin', 'admin', 'manager'].includes(u.role);
+      }
+      // Full access users are managers, not employees
+      if (u.customRole?.fullAccess) return false;
+      // Check isTeamManager flag
+      if (u.customRole?.isTeamManager === true) return false;
+      return true;
     });
 
     res.json({
