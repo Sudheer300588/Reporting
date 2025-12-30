@@ -215,8 +215,8 @@ collect_config() {
     echo ""
     
     # Application port
-    read -p "Application port [3026]: " APP_PORT
-    APP_PORT=${APP_PORT:-3026}
+    read -p "Application port [3027]: " APP_PORT
+    APP_PORT=${APP_PORT:-3027}
     print_success "Application port: $APP_PORT"
     echo ""
     
@@ -458,7 +458,7 @@ quick_deploy() {
     
     # Get PORT from .env if available (only uncommented lines)
     APP_PORT=$(grep "^PORT=" "$BACKEND_DIR/.env" | head -1 | cut -d'=' -f2 | tr -d ' ')
-    APP_PORT=${APP_PORT:-3026}
+    APP_PORT=${APP_PORT:-3027}
     
     # Get FRONTEND_URL from .env if available (only uncommented lines)
     SITE_URL=$(grep "^FRONTEND_URL=" "$BACKEND_DIR/.env" | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
