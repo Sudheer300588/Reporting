@@ -773,22 +773,40 @@ const Clients = () => {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">
                                         Manager
                                     </label>
-                                    <select
-                                        value={assignData.managerId}
-                                        onChange={(e) => {
-                                            const mid = e.target.value;
-                                            setAssignData({ ...assignData, managerId: mid });
-                                            if (mid) fetchEmployeesForManager(parseInt(mid));
-                                        }}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    >
-                                        <option value="">(Optional) Select Manager</option>
-                                        {getManagers().map((manager) => (
-                                            <option key={manager.id} value={manager.id}>
-                                                {manager.name} ({manager.email})
-                                            </option>
-                                        ))}
-                                    </select>
+                                    {assignData.managerId ? (
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="inline-flex items-center gap-2 bg-purple-100 text-purple-800 px-3 py-2 rounded-lg border border-purple-200">
+                                                <span className="text-xs font-semibold bg-purple-600 text-white px-1.5 py-0.5 rounded">Manager</span>
+                                                <span className="font-medium">
+                                                    {managers.find(m => m.id === parseInt(assignData.managerId))?.name || 'Selected'}
+                                                </span>
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => setAssignData({ ...assignData, managerId: "" })} 
+                                                    className="text-purple-600 hover:text-purple-800 ml-1"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </span>
+                                        </div>
+                                    ) : (
+                                        <select
+                                            value={assignData.managerId}
+                                            onChange={(e) => {
+                                                const mid = e.target.value;
+                                                setAssignData({ ...assignData, managerId: mid });
+                                                if (mid) fetchEmployeesForManager(parseInt(mid));
+                                            }}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        >
+                                            <option value="">(Optional) Select Manager</option>
+                                            {getManagers().map((manager) => (
+                                                <option key={manager.id} value={manager.id}>
+                                                    {manager.name} ({manager.email})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
                                 </div>
                             )}
 
@@ -805,9 +823,10 @@ const Clients = () => {
                                                 : employeesForManager['all'] || []);
                                             const emp = allCandidates.find((e) => e.id === uid) || { id: uid, name: `User ${uid}` };
                                             return (
-                                                <span key={uid} className="inline-flex items-center gap-2 bg-gray-100 px-2 py-1 rounded">
-                                                    <span className="text-sm font-medium">{emp.name}</span>
-                                                    <button type="button" onClick={() => setAssignData({ ...assignData, userIds: assignData.userIds.filter(i => i !== uid) })} className="text-xs text-gray-600">✕</button>
+                                                <span key={uid} className="inline-flex items-center gap-2 bg-blue-50 text-blue-800 px-3 py-2 rounded-lg border border-blue-200">
+                                                    <span className="text-xs font-semibold bg-blue-600 text-white px-1.5 py-0.5 rounded">Employee</span>
+                                                    <span className="font-medium">{emp.name}</span>
+                                                    <button type="button" onClick={() => setAssignData({ ...assignData, userIds: assignData.userIds.filter(i => i !== uid) })} className="text-blue-600 hover:text-blue-800 ml-1">✕</button>
                                                 </span>
                                             );
                                         })}
