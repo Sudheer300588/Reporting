@@ -37,6 +37,26 @@ The platform follows a client-server architecture with a React-based frontend an
     - **Site Customization**: Dynamic branding capabilities (logo, colors).
     - **Activity Logging**: Tracks user actions via middleware.
 
+### Settings Page Architecture (Modular Components)
+The Settings page has been refactored into modular components located in `frontend/src/components/Settings/`:
+
+- **SettingsLayout.jsx**: Main layout with sidebar navigation and scroll-synced sections. Provides `useSettings` context for shared state.
+- **SettingsSection.jsx**: Wrapper component that auto-registers sections with the layout for scroll tracking.
+- **SettingsHeader.jsx**: Header component with email notification status banner.
+- **SmtpCredentials.jsx**: SMTP email server configuration with password visibility toggle and test email functionality.
+- **SftpCredentials.jsx**: DropCowboy SFTP credentials with connection test and manual sync buttons.
+- **VicidialCredentials.jsx**: Vicidial API configuration with connection testing.
+- **MauticSettings.jsx**: Autovation (Mautic) client management with add/edit modals and sync functionality.
+- **SiteBranding.jsx**: Site customization for logo, favicon, and login background (image/color/gradient).
+- **RolesAndPermissions.jsx**: Dynamic role management with create/edit/delete functionality.
+- **Permissions.jsx**: Granular permission matrix UI for role configuration.
+- **index.js**: Barrel export file for all Settings components.
+
+**File Size Limits for Uploads:**
+- Favicon: 200KB max (PNG, JPG, SVG, WEBP)
+- Logo: 2MB max (PNG, JPG, SVG, WEBP)
+- Login Background: 5MB max (PNG, JPG, SVG, WEBP)
+
 ### System Design Choices
 - **Data Flow**:
     - **Mautic**: Each client has a dedicated Mautic instance (1:1 relationship).
