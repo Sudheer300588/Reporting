@@ -33,11 +33,13 @@ const __dirname = path.dirname(__filename);
 export function createApp() {
   const app = express();
 
+  // Trust proxy for proper client IP detection behind reverse proxies
+  app.set('trust proxy', 1);
+
   // ============================================
   // SECURITY MIDDLEWARE
   // ============================================
   
-  // Security headers
   // Security headers
   app.use(helmet({
     contentSecurityPolicy: false, // Handled separately for SPAs

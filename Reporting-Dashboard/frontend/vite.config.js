@@ -21,11 +21,11 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3026',
+        target: 'http://localhost:3000',
         changeOrigin: true
       },
       '/assets': {
-        target: 'http://localhost:3026',
+        target: 'http://localhost:3000',
         changeOrigin: true
       }
     }
