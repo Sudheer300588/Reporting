@@ -1,0 +1,699 @@
+// ==========================================================
+// GENERATOR & DATASOURCE
+// ==========================================================
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================================
+// ENUMS
+// ==========================================================
+enum UserRole {
+  superadmin
+  admin
+  manager
+  employee
+  telecaller
+}
+
+enum ActivityAction {
+  user_created
+  user_updated
+  user_deleted
+  client_created
+  client_updated
+  client_deleted
+  client_assigned
+  client_unassigned
+  login
+  logout
+}
+
+enum ClientType {
+  mautic
+  dropcowboy
+  vicidial
+  general
+}
+
+enum CampaignType {
+  email
+  voicemail
+  call
+}
+
+enum CampaignStatus {
+  active
+  paused
+  completed
+  failed
+}
+
+enum SyncType {
+  manual
+  scheduled
+}
+
+enum SyncStatus {
+  success
+  failed
+  partial
+}
+
+enum MauticSyncStatus {
+  success
+  failed
+  partial
+}
+
+enum LoginBgType {
+  image
+  color
+  gradient
+}
+
+enum OTPPurpose {
+  login
+  password_reset
+  account_verification
+}
+
+enum OTPStatus {
+  pending
+  verified
+  expired
+  failed
+}
+
+// ==========================================================
+// USER MANAGEMENT + ACTIVITY LOG
+// ==========================================================
+model User {
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String   @unique
+  password     String
+  role         UserRole @default(employee)
+  isActive     Boolean  @default(true)
+  tokenVersion Int      @default(0) // For token revocation
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // 🔹 Self-Relations
+  createdById  Int?
+  createdBy    User?  @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers User[] @relation("UserCreatedBy")
+
+  superAdminId Int?
+  superAdmin   User?  @relation("SuperAdminManagers", fields: [superAdminId], references: [id], onDelete: SetNull)
+  managedUsers User[] @relation("SuperAdminManagers")
+
+  // 🔹 Manager ↔ Employees (M:N)
+  employees User[] @relation("ManagerEmployee")
+  managers  User[] @relation("ManagerEmployee")
+
+  // 🔹 Relations
+  activities              ActivityLog[]
+  createdClients          Client[]                   @relation("ClientCreatedBy")
+  userAssignments         ClientAssignment[]         @relation("UserClientAssignments")
+  assignedClients         ClientAssignment[]         @relation("ClientAssignmentAssignedBy")
+  campaigns               Campaign[]
+  sftpcredentials         SFTPCredential[]
+  smtpcredentials         SMTPCredential[]
+  vicidialcredentials     VicidialCredential[]
+  siteSettings            SiteSettings[]
+  otps                    OTP[] // OTP codes for this user
+  adminSettingsPermissions AdminSettingsPermission[] @relation("AdminSettingsPermissions")
+
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+  @@index([role, isActive])
+  @@index([createdById])
+  @@index([email, isActive])
+}
+
+model ActivityLog {
+  id          Int            @id @default(autoincrement())
+  userId      Int
+  action      ActivityAction
+  description String?
+  entityType  String?
+  entityId    Int?
+  createdAt   DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+}
+
+// ==========================================================
+// CLIENT MANAGEMENT
+// ==========================================================
+model Client {
+  id          Int        @id @default(autoincrement())
+  name        String     @db.VarChar(255)
+  clientType  ClientType @default(general)
+  email       String?    @db.VarChar(255)
+  phone       String?    @db.VarChar(50)
+  company     String?    @db.VarChar(255)
+  address     String?    @db.Text
+  website     String?    @db.VarChar(500)
+  description String?    @db.Text
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  createdById         Int
+  createdBy           User                 @relation("ClientCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  assignments         ClientAssignment[]
+  campaigns           Campaign[]
+  mauticClient        MauticClient?
+  dropCowboyCampaigns DropCowboyCampaign[]
+
+  @@index([name])
+  @@index([clientType])
+  @@index([createdById])
+  @@index([isActive])
+  @@index([clientType, isActive])
+}
+
+model ClientAssignment {
+  id           Int      @id @default(autoincrement())
+  assignedAt   DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  clientId     Int
+  userId       Int
+  assignedById Int
+
+  client     Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user       User   @relation("UserClientAssignments", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy User   @relation("ClientAssignmentAssignedBy", fields: [assignedById], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, userId])
+  @@index([clientId])
+  @@index([userId])
+  @@index([assignedById])
+  @@index([userId, assignedAt])
+}
+
+// ==========================================================
+// CAMPAIGNS (Unified)
+// ==========================================================
+model Campaign {
+  id          Int            @id @default(autoincrement())
+  name        String
+  type        CampaignType
+  status      CampaignStatus @default(active)
+  description String?
+  startDate   DateTime?
+  endDate     DateTime?
+  totalSent   Int            @default(0)
+  totalRead   Int            @default(0)
+  totalFailed Int            @default(0)
+  metadata    Json?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  clientId    Int
+  createdById Int
+  client      Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([status])
+  @@index([createdById])
+  @@index([type, status])
+  @@index([createdAt])
+}
+
+// ==========================================================
+// DROP COWBOY INTEGRATION
+// ==========================================================
+model DropCowboyCampaign {
+  id           Int      @id @default(autoincrement())
+  clientId     Int?
+  campaignName String   @db.VarChar(255)
+  campaignId   String   @unique @db.VarChar(100)
+  isValid      Boolean  @default(true)
+  recordCount  Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  client  Client?                    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  records DropCowboyCampaignRecord[]
+
+  @@index([campaignName])
+  @@index([clientId])
+  @@index([isValid])
+}
+
+model DropCowboyCampaignRecord {
+  id            Int       @id @default(autoincrement())
+  campaignId    String    @db.VarChar(100)
+  campaignName  String    @default("") @db.VarChar(255)
+  phoneNumber   String    @db.VarChar(20)
+  carrier       String    @default("") @db.VarChar(100)
+  lineType      String    @default("") @db.VarChar(50)
+  status        String    @default("unknown") @db.VarChar(50)
+  statusCode    Int       @default(0)
+  statusReason  String?   @db.Text
+  date          DateTime?
+  callbacks     Int       @default(0)
+  smsCount      Int       @default(0)
+  cost          Decimal   @default(0.0) @db.Decimal(14, 6)
+  complianceFee Decimal   @default(0.0) @db.Decimal(14, 6)
+  ttsFee        Decimal   @default(0.0) @db.Decimal(14, 6)
+  firstName     String    @default("") @db.VarChar(100)
+  lastName      String    @default("") @db.VarChar(100)
+  company       String    @default("") @db.VarChar(255)
+  email         String    @default("") @db.VarChar(255)
+  recordId      String?   @db.VarChar(100)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  importedFileId Int?
+  campaign       DropCowboyCampaign @relation(fields: [campaignId], references: [campaignId], onDelete: Cascade)
+  importedFile   ImportedFile?      @relation(fields: [importedFileId], references: [id], onDelete: SetNull)
+
+  @@unique([campaignId, phoneNumber, date])
+  @@index([campaignId])
+  @@index([campaignName])
+  @@index([status])
+  @@index([date])
+  @@index([phoneNumber])
+  @@index([campaignId, date])
+  @@index([campaignName, date])
+}
+
+model ImportedFile {
+  id         Int                        @id @default(autoincrement())
+  filename   String                     @unique
+  processed  Boolean                    @default(false)
+  importedAt DateTime                   @default(now())
+  records    DropCowboyCampaignRecord[]
+}
+
+model SyncLog {
+  id                 Int        @id @default(autoincrement())
+  source             String     @default("dropcowboy")
+  syncType           SyncType
+  status             SyncStatus
+  filesDownloaded    Int        @default(0)
+  campaignsProcessed Int        @default(0)
+  totalRecords       Int        @default(0)
+  errorCount         Int        @default(0)
+  errorMessage       String?
+  syncStartedAt      DateTime   @default(now())
+  syncCompletedAt    DateTime?
+  durationSeconds    Int?
+  triggeredBy        String?
+
+  @@index([status])
+  @@index([syncStartedAt])
+  @@index([source])
+  @@index([syncType])
+  @@index([source, status])
+}
+
+// ==========================================================
+// MAUTIC CRM INTEGRATION
+// ==========================================================
+model MauticClient {
+  id                Int       @id @default(autoincrement())
+  name              String    @db.VarChar(255)
+  mauticUrl         String    @db.VarChar(500)
+  username          String    @db.VarChar(255)
+  password          String    @db.Text
+  reportId          String    @db.VarChar(100)
+  isActive          Boolean   @default(true)
+  lastSyncAt        DateTime?
+  syncVersion       Int       @default(1)
+  totalContacts     Int       @default(0)
+  activeContacts30d Int       @default(0)
+  totalEmails       Int       @default(0)
+  totalCampaigns    Int       @default(0)
+  totalSegments     Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  clientId      Int?                 @unique
+  client        Client?              @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  emails        MauticEmail[]
+  segments      MauticSegment[]
+  campaigns     MauticCampaign[]
+  syncLogs      MauticSyncLog[]
+  fetchedMonths MauticFetchedMonth[]
+  emailReports  MauticEmailReport[]  @relation("ClientEmailReports")
+
+  @@unique([name])
+  @@index([isActive])
+  @@index([lastSyncAt])
+  @@index([clientId])
+  @@index([isActive, lastSyncAt])
+}
+
+model MauticEmail {
+  id              Int       @id @default(autoincrement())
+  mauticEmailId   String    @db.VarChar(255)
+  name            String    @db.VarChar(500)
+  subject         String?   @db.VarChar(500)
+  emailType       String?   @db.VarChar(100)
+  dateAdded       DateTime?
+  sentCount       Int       @default(0)
+  readCount       Int       @default(0)
+  clickedCount    Int       @default(0)
+  unsubscribed    Int       @default(0)
+  bounced         Int       @default(0)
+  readRate        Decimal   @default(0) @db.Decimal(5, 2)
+  clickRate       Decimal   @default(0) @db.Decimal(5, 2)
+  unsubscribeRate Decimal   @default(0) @db.Decimal(5, 2)
+  isPublished     Boolean   @default(false)
+  publishUp       DateTime?
+  publishDown     DateTime?
+  importedAt      DateTime? @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  clientId Int
+  client   MauticClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, mauticEmailId])
+  @@index([clientId])
+  @@index([isPublished])
+  @@index([sentCount])
+}
+
+model MauticEmailReport {
+  id           Int       @id @default(autoincrement())
+  eId          Int // Mautic email ID (from e_id field in report)
+  dateSent     DateTime
+  dateRead     DateTime?
+  subject      String    @db.VarChar(500)
+  emailAddress String    @db.VarChar(255)
+  clientId     Int
+  importedAt   DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  client MauticClient @relation("ClientEmailReports", fields: [clientId], references: [id], onDelete: Cascade)
+
+  // Ensure uniqueness is scoped per client so different clients can have
+  // identical eId/email/dateSent values without conflicting.
+  @@unique([clientId, eId, emailAddress, dateSent])
+  @@index([eId])
+  @@index([clientId])
+  @@index([dateSent])
+}
+
+model MauticSegment {
+  id              Int       @id @default(autoincrement())
+  mauticSegmentId String    @db.VarChar(255)
+  name            String    @db.VarChar(500)
+  alias           String?   @db.VarChar(255)
+  description     String?   @db.Text
+  dateAdded       DateTime?
+  isPublished     Boolean   @default(false)
+  filters         Json?
+  contactCount    Int       @default(0)
+  importedAt      DateTime? @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  clientId Int
+  client   MauticClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, mauticSegmentId])
+  @@index([clientId])
+  @@index([isPublished])
+}
+
+model MauticCampaign {
+  id               Int       @id @default(autoincrement())
+  mauticCampaignId String    @db.VarChar(255)
+  name             String    @db.VarChar(500)
+  description      String?   @db.Text
+  category         String?   @db.VarChar(255)
+  isPublished      Boolean   @default(false)
+  publishUp        DateTime?
+  publishDown      DateTime?
+  dateAdded        DateTime?
+  createdBy        String?   @db.VarChar(100)
+  allowRestart     Boolean   @default(false)
+  importedAt       DateTime? @default(now())
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  clientId Int
+  client   MauticClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, mauticCampaignId])
+  @@index([clientId])
+  @@index([isPublished])
+}
+
+model MauticSyncLog {
+  id              Int              @id @default(autoincrement())
+  mauticClientId  Int
+  status          MauticSyncStatus
+  syncType        String           @default("scheduled")
+  totalFetched    Int              @default(0)
+  totalUpdated    Int              @default(0)
+  totalInserted   Int              @default(0)
+  errorCount      Int              @default(0)
+  errorMessage    String?
+  startedAt       DateTime         @default(now())
+  completedAt     DateTime?
+  durationSeconds Int?
+  triggeredBy     String?
+  version         Int              @default(1)
+  createdAt       DateTime         @default(now())
+
+  mauticClient MauticClient @relation(fields: [mauticClientId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([mauticClientId])
+  @@index([startedAt])
+}
+
+// Track months already fetched for a given Mautic client to avoid re-fetching
+model MauticFetchedMonth {
+  id        Int       @id @default(autoincrement())
+  clientId  Int
+  yearMonth String    @db.VarChar(7) // 'YYYY-MM'
+  from      DateTime?
+  to        DateTime?
+  createdAt DateTime  @default(now())
+
+  client MauticClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, yearMonth], map: "client_year_month_unique")
+  @@index([clientId])
+}
+
+model SFTPCredential {
+  id          Int      @id @default(autoincrement())
+  host        String
+  port        Int
+  username    String
+  password    String
+  remotePath  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById Int?
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+}
+
+// ==========================================================
+// SMTP Credential Model
+// ==========================================================
+model SMTPCredential {
+  id          Int      @id @default(autoincrement())
+  host        String
+  port        Int
+  username    String
+  password    String
+  fromAddress String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById Int?
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+}
+
+// ==========================================================
+// Vicidial Credential Model
+// ==========================================================
+model VicidialCredential {
+  id          Int      @id @default(autoincrement())
+  url         String
+  username    String
+  password    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById Int?
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+}
+
+// ==========================================================
+// NOTIFICATION TEMPLATES MODEL
+// ==========================================================
+model NotificationTemplate {
+  id        Int      @id @default(autoincrement())
+  action    String   @unique // The action key (e.g., 'user_created', 'client_created')
+  template  String   @db.Text // The message template with {{variables}}
+  subject   String? // Optional email subject line
+  active    Boolean  @default(true) // Whether this notification is enabled
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([action])
+  @@index([active])
+}
+
+// ==========================================================
+// EMAIL LOG MODEL (Track all sent emails)
+// ==========================================================
+model EmailLog {
+  id             Int      @id @default(autoincrement())
+  action         String // The action that triggered this email
+  recipientEmail String
+  recipientName  String?
+  subject        String?
+  success        Boolean  @default(false)
+  errorMessage   String?  @db.Text
+  messageId      String? // SMTP message ID if successful
+  sentAt         DateTime @default(now())
+
+  @@index([action])
+  @@index([recipientEmail])
+  @@index([success])
+  @@index([sentAt])
+}
+
+// ==========================================================
+// SYSTEM SETTINGS MODEL
+// ==========================================================
+model Settings {
+  id                        Int      @id @default(autoincrement())
+  notifEmailNotifications   Boolean  @default(true)
+  notifTaskDeadlineReminder Boolean  @default(true)
+  notifOverdueTasks         Boolean  @default(true)
+  notifProjectStatusUpdates Boolean  @default(true)
+  notifWeeklyReports        Boolean  @default(true)
+  notifWeeklyReportDay      String?  @default("friday")
+  notifWeeklyReportTime     String?  @default("09:00")
+  notifActivityEmails       Boolean  @default(true)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+}
+
+// Site customization / branding
+model SiteSettings {
+  id                  Int         @id @default(autoincrement())
+  siteTitle           String?
+  faviconPath         String?
+  logoPath            String?
+  loginBgType         LoginBgType @default(image)
+  loginBgImagePath    String?
+  loginBgColor        String?
+  loginBgGradientFrom String?
+  loginBgGradientTo   String?
+  createdById         Int?
+  createdBy           User?       @relation(fields: [createdById], references: [id])
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+}
+
+// ==========================================================
+// OTP (One-Time Password) SYSTEM
+// ==========================================================
+model OTP {
+  id          Int        @id @default(autoincrement())
+  code        String // 6-digit OTP code
+  userId      Int? // User requesting OTP (null for new registrations)
+  user        User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email       String // Email where OTP was sent
+  purpose     OTPPurpose // login, password_reset, account_verification
+  status      OTPStatus  @default(pending)
+  attempts    Int        @default(0) // Number of verification attempts
+  maxAttempts Int        @default(3) // Maximum allowed attempts
+  expiresAt   DateTime // OTP expiration time
+  verifiedAt  DateTime? // When OTP was successfully verified
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([email, purpose, status])
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([code])
+}
+
+// ==========================================================
+// VICIDIAL INTEGRATION MODELS
+// ==========================================================
+model Agent {
+  id        Int      @id @default(autoincrement())
+  user      String   @unique @db.VarChar(50)
+  fullName  String?  @db.VarChar(200)
+  userGroup String?  @db.VarChar(50)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaigns AgentCampaign[]
+
+  @@index([user])
+  @@map("agent")
+}
+
+model ViciDialCampaign {
+  id           Int      @id @default(autoincrement())
+  campaignId   String   @unique @db.VarChar(50)
+  campaignName String?  @db.VarChar(200)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  agents AgentCampaign[]
+
+  @@index([campaignId])
+  @@map("vicidial_campaign")
+}
+
+model AgentCampaign {
+  id                 Int      @id @default(autoincrement())
+  agentId            Int
+  viciDialCampaignId Int
+  createdAt          DateTime @default(now())
+
+  agent            Agent            @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  viciDialCampaign ViciDialCampaign @relation(fields: [viciDialCampaignId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, viciDialCampaignId])
+  @@index([agentId])
+  @@index([viciDialCampaignId])
+  @@map("agentcampaign")
+}
+
+// ==========================================================
+// ADMIN SETTINGS PERMISSIONS
+// ==========================================================
+model AdminSettingsPermission {
+  id        Int      @id @default(autoincrement())
+  adminId   Int
+  setting   String   @db.VarChar(50) // mautic, smtp, sftp, vicidial, sitecustom, notifs, maintenance
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  admin User @relation("AdminSettingsPermissions", fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@unique([adminId, setting])
+  @@index([adminId])
+  @@map("admin_settings_permission")
+}
