@@ -111,6 +111,7 @@ export const authenticate = async (req, res, next) => {
             id: true,
             name: true,
             fullAccess: true,
+            isTeamManager: true,
             permissions: true,
             isActive: true
           }

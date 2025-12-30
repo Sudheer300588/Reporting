@@ -129,7 +129,7 @@ const Navbar = () => {
                             </div>
                             <div className="hidden xl:block">
                                 <div className="text-sm font-medium text-gray-900 truncate max-w-24">{user?.name}</div>
-                                <div className="text-xs text-gray-500 capitalize">{user?.role}</div>
+                                <div className="text-xs text-gray-500 capitalize">{user?.customRole?.name || user?.role}</div>
                             </div>
                         </Link>
 
@@ -171,7 +171,7 @@ const Navbar = () => {
                                     </div>
                                     <div>
                                         <div className="text-sm font-medium text-gray-900">{user?.name}</div>
-                                        <div className="text-xs text-gray-500 capitalize">{user?.role}</div>
+                                        <div className="text-xs text-gray-500 capitalize">{user?.customRole?.name || user?.role}</div>
                                     </div>
                                 </Link>
 
