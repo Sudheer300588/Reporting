@@ -15,6 +15,7 @@ const RolesAndPermissions = () => {
     name: "",
     description: "",
     fullAccess: false,
+    isTeamManager: false,
   });
   const [permissions, setPermissions] = useState({});
 
@@ -46,7 +47,7 @@ const RolesAndPermissions = () => {
 
   const handleNewRole = () => {
     setEditingRole(null);
-    setForm({ name: "", description: "", fullAccess: false });
+    setForm({ name: "", description: "", fullAccess: false, isTeamManager: false });
     setPermissions({});
     setActiveTab("details");
     setView("form");
@@ -58,6 +59,7 @@ const RolesAndPermissions = () => {
       name: role.name,
       description: role.description || "",
       fullAccess: role.fullAccess,
+      isTeamManager: role.isTeamManager || false,
     });
     setPermissions(role.permissions || {});
     setActiveTab("details");
@@ -76,6 +78,7 @@ const RolesAndPermissions = () => {
         name: form.name.trim(),
         description: form.description,
         fullAccess: form.fullAccess,
+        isTeamManager: form.isTeamManager,
         permissions: form.fullAccess ? {} : permissions,
       };
 
@@ -120,7 +123,7 @@ const RolesAndPermissions = () => {
   const handleCancel = () => {
     setView("list");
     setEditingRole(null);
-    setForm({ name: "", description: "", fullAccess: false });
+    setForm({ name: "", description: "", fullAccess: false, isTeamManager: false });
     setPermissions({});
   };
 
@@ -197,15 +200,22 @@ const RolesAndPermissions = () => {
                       <span className="text-sm text-gray-500">{role.description || "-"}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {role.fullAccess ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          Full Access
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          Custom
-                        </span>
-                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {role.fullAccess ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            Full Access
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            Custom
+                          </span>
+                        )}
+                        {role.isTeamManager && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                            Team Manager
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-1 text-sm text-gray-500">
@@ -336,6 +346,26 @@ const RolesAndPermissions = () => {
                 type="checkbox"
                 name="fullAccess"
                 checked={form.fullAccess}
+                onChange={handleChange}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+
+          <div className="flex items-center justify-between p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div>
+              <p className="text-sm font-medium text-gray-900">Team Manager</p>
+              <p className="text-xs text-gray-500">
+                Users with this role will appear in the Manager dropdown for client assignments.
+              </p>
+            </div>
+
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                name="isTeamManager"
+                checked={form.isTeamManager}
                 onChange={handleChange}
                 className="sr-only peer"
               />
