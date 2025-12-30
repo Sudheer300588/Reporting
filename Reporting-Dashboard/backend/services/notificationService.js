@@ -149,7 +149,7 @@ class NotificationService {
 
   // Get email template based on notification type
   getEmailTemplate(notification) {
-    const baseUrl = process.env.FRONTEND_URL || 'https://hcdteam.com';
+    const baseUrl = process.env.FRONTEND_URL || '';
     
     const templates = {
       task_deadline_reminder: {
