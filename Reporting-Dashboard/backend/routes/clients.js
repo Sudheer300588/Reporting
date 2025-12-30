@@ -413,8 +413,9 @@ router.delete(
 // ============================================
 // GET MANAGERS FOR ASSIGNMENT DROPDOWN
 // A "manager" for assignment purposes is a user with:
-// - Full access, OR
-// - Users.Create permission (can create/manage team members)
+// - fullAccess role, OR
+// - customRole.isTeamManager = true
+// - OR legacy superadmin/admin/manager role
 // ============================================
 router.get(
   "/assignment/managers",
@@ -427,8 +428,7 @@ router.get(
       let managers;
 
       if (hasFullAccess(currentUser)) {
-        // Full access users see all users who can manage teams
-        // Include both: (1) users with customRole that grants team perms, (2) legacy managers
+        // Full access users see all users who are team managers
         const allActiveUsers = await prisma.user.findMany({
           where: { isActive: true },
           select: {
@@ -438,13 +438,13 @@ router.get(
             role: true,
             customRoleId: true,
             customRole: {
-              select: { name: true, fullAccess: true, permissions: true, isActive: true }
+              select: { name: true, fullAccess: true, isTeamManager: true, isActive: true }
             }
           },
           orderBy: { name: "asc" },
         });
         
-        // Filter to users who can manage teams (create users)
+        // Filter to users who are team managers
         managers = allActiveUsers.filter(u => {
           // Legacy users without customRole - check legacy role
           if (!u.customRoleId) {
@@ -452,15 +452,10 @@ router.get(
           }
           // Skip users with inactive customRole
           if (!u.customRole?.isActive) return false;
-          // Full access users can manage teams
+          // Full access users are always managers
           if (u.customRole?.fullAccess) return true;
-          // Users with Users.Create permission can manage teams
-          let perms = u.customRole?.permissions;
-          if (typeof perms === 'string') {
-            try { perms = JSON.parse(perms); } catch { perms = {}; }
-          }
-          const usersPerms = Array.isArray(perms?.Users) ? perms.Users : [];
-          return usersPerms.includes('Create');
+          // Check explicit isTeamManager flag
+          return u.customRole?.isTeamManager === true;
         }).map(u => ({
           id: u.id,
           name: u.name,
@@ -468,8 +463,8 @@ router.get(
           role: u.role,
           customRoleName: u.customRole?.name
         }));
-      } else if (userHasPermission(currentUser, 'Users', 'Create')) {
-        // Users with team management permission only see themselves
+      } else if (currentUser.customRole?.isTeamManager || currentUser.customRole?.fullAccess) {
+        // Team managers only see themselves
         managers = [{
           id: currentUser.id,
           name: currentUser.name,
@@ -494,7 +489,7 @@ router.get(
 
 // ============================================
 // GET EMPLOYEES UNDER A SPECIFIC MANAGER
-// An "employee" for assignment is a user who doesn't have team management permissions
+// An "employee" for assignment is a user who doesn't have isTeamManager=true
 // ============================================
 router.get(
   "/assignment/managers/:managerId/employees",
@@ -505,12 +500,12 @@ router.get(
       const managerId = parseInt(req.params.managerId);
       const currentUser = req.user;
 
-      // Verify the manager exists and has team management permissions
+      // Verify the manager exists and is a team manager
       const manager = await prisma.user.findUnique({
         where: { id: managerId },
         include: {
           customRole: {
-            select: { name: true, fullAccess: true, permissions: true }
+            select: { name: true, fullAccess: true, isTeamManager: true }
           }
         }
       });
@@ -519,22 +514,16 @@ router.get(
         return res.status(404).json({ message: "Manager not found" });
       }
 
-      // Verify they have team management permissions (fullAccess or Users.Create)
-      // Handle legacy users without customRole
-      let managerHasTeamPerms = false;
+      // Verify they are a team manager
+      let isManager = false;
       if (!manager.customRoleId) {
         // Legacy user - check role string
-        managerHasTeamPerms = ['superadmin', 'admin', 'manager'].includes(manager.role);
+        isManager = ['superadmin', 'admin', 'manager'].includes(manager.role);
       } else {
-        let managerPerms = manager.customRole?.permissions;
-        if (typeof managerPerms === 'string') {
-          try { managerPerms = JSON.parse(managerPerms); } catch { managerPerms = {}; }
-        }
-        const managerUsersPerms = Array.isArray(managerPerms?.Users) ? managerPerms.Users : [];
-        managerHasTeamPerms = manager.customRole?.fullAccess || managerUsersPerms.includes('Create');
+        isManager = manager.customRole?.fullAccess || manager.customRole?.isTeamManager === true;
       }
       
-      if (!managerHasTeamPerms) {
+      if (!isManager) {
         return res.status(404).json({ message: "User is not a team manager" });
       }
 
@@ -546,7 +535,7 @@ router.get(
           .json({ message: "You can only view employees under yourself" });
       }
 
-      // Get employees: users created by or assigned to this manager who don't have team management permissions
+      // Get employees: users created by or assigned to this manager who are NOT team managers
       const allTeamMembers = await prisma.user.findMany({
         where: {
           isActive: true,
@@ -563,14 +552,13 @@ router.get(
           createdAt: true,
           customRoleId: true,
           customRole: {
-            select: { name: true, fullAccess: true, permissions: true }
+            select: { name: true, fullAccess: true, isTeamManager: true }
           }
         },
         orderBy: { name: "asc" },
       });
 
-      // Filter to only employees (users without team management permissions)
-      // Uses same logic as manager filter but inverted
+      // Filter to only employees (users who are NOT team managers)
       const employees = allTeamMembers.filter(u => {
         // Legacy users without customRole - check legacy role
         if (!u.customRoleId) {
@@ -579,14 +567,8 @@ router.get(
         }
         // Full access users are managers, not employees
         if (u.customRole?.fullAccess) return false;
-        // Handle permissions that may be stored as string or object
-        let perms = u.customRole?.permissions;
-        if (typeof perms === 'string') {
-          try { perms = JSON.parse(perms); } catch { perms = {}; }
-        }
-        const usersPerms = Array.isArray(perms?.Users) ? perms.Users : [];
-        // Users with Users.Create are managers, not employees
-        if (usersPerms.includes('Create')) return false;
+        // Check isTeamManager flag
+        if (u.customRole?.isTeamManager === true) return false;
         return true;
       }).map(u => ({
         id: u.id,
