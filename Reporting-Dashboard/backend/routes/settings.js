@@ -1,6 +1,6 @@
 import express from "express";
 import prisma from "../prisma/client.js";
-import { authenticate, authorize } from "../middleware/auth.js";
+import { authenticate, requirePermission, requireFullAccess } from "../middleware/auth.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
@@ -48,20 +48,38 @@ router.get("/", authenticate, async (req, res) => {
 
 /**
  * GET /api/settings/admin-permissions
- * Get all admins with their settings permissions (superadmin only)
+ * Get all users with Settings permissions (full access users only)
+ * Returns users who have Settings permissions in their customRole
  */
 router.get(
   "/admin-permissions",
   authenticate,
-  authorize("superadmin"),
+  requireFullAccess,
   async (req, res) => {
     try {
-      const admins = await prisma.user.findMany({
-        where: { role: "admin", isActive: true },
+      // Find users with Settings permissions in their customRole
+      const usersWithSettings = await prisma.user.findMany({
+        where: { 
+          isActive: true,
+          customRole: {
+            isActive: true,
+            OR: [
+              { fullAccess: true },
+              { permissions: { path: ['Settings'], not: {} } }
+            ]
+          }
+        },
         select: {
           id: true,
           name: true,
           email: true,
+          customRole: {
+            select: {
+              name: true,
+              fullAccess: true,
+              permissions: true
+            }
+          },
           adminSettingsPermissions: {
             select: {
               setting: true,
@@ -71,11 +89,14 @@ router.get(
         orderBy: { name: "asc" },
       });
 
-      const adminsWithPermissions = admins.map((admin) => ({
-        id: admin.id,
-        name: admin.name,
-        email: admin.email,
-        permissions: admin.adminSettingsPermissions.map((p) => p.setting),
+      const adminsWithPermissions = usersWithSettings.map((user) => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        customRole: user.customRole?.name,
+        permissions: user.customRole?.fullAccess 
+          ? ["mautic", "smtp", "sftp", "vicidial", "sitecustom", "notifs", "maintenance"]
+          : user.adminSettingsPermissions.map((p) => p.setting),
       }));
 
       res.json({
@@ -98,34 +119,43 @@ router.get(
 
 /**
  * PUT /api/settings/admin-permissions/:adminId
- * Update settings permissions for a specific admin (superadmin only)
+ * Update settings permissions for a specific user (full access users only)
  * Body: { permissions: ['mautic', 'smtp', ...] }
  */
 router.put(
   "/admin-permissions/:adminId",
   authenticate,
-  authorize("superadmin"),
+  requireFullAccess,
   async (req, res) => {
     try {
       const { adminId } = req.params;
       const { permissions } = req.body;
 
-      // Validate admin exists and has admin role
-      const admin = await prisma.user.findUnique({
+      // Validate user exists and has Settings permissions
+      const user = await prisma.user.findUnique({
         where: { id: parseInt(adminId) },
+        include: {
+          customRole: {
+            select: { fullAccess: true, permissions: true }
+          }
+        }
       });
 
-      if (!admin) {
+      if (!user) {
         return res.status(404).json({
           success: false,
-          message: "Admin not found",
+          message: "User not found",
         });
       }
 
-      if (admin.role !== "admin") {
+      // Check if user has Settings access via customRole
+      const hasSettingsAccess = user.customRole?.fullAccess || 
+        (user.customRole?.permissions?.Settings && user.customRole.permissions.Settings.length > 0);
+
+      if (!hasSettingsAccess) {
         return res.status(400).json({
           success: false,
-          message: "User is not an admin",
+          message: "User does not have Settings permissions in their role",
         });
       }
 
@@ -198,8 +228,10 @@ router.put(
  */
 router.get("/my-permissions", authenticate, async (req, res) => {
   try {
-    // Superadmins have access to all settings
-    if (req.user.role === "superadmin") {
+    const { hasFullAccess } = await import("../middleware/auth.js");
+    
+    // Users with full access have access to all settings
+    if (hasFullAccess(req.user)) {
       return res.json({
         success: true,
         permissions: [
@@ -214,20 +246,28 @@ router.get("/my-permissions", authenticate, async (req, res) => {
       });
     }
 
-    // For admins, fetch their specific permissions from AdminSettingsPermission table
-    if (req.user.role === "admin") {
-      const permissions = await prisma.adminSettingsPermission.findMany({
-        where: { adminId: req.user.id },
-        select: { setting: true },
-      });
+    // For users with Settings permissions, check their customRole
+    if (req.user.customRole?.permissions?.Settings) {
+      const settingsPerms = req.user.customRole.permissions.Settings;
+      // Map Settings permissions to specific setting areas
+      // Users with Settings.Read get read-only access, Settings.Update gets full access
+      if (settingsPerms.includes('Update') || settingsPerms.includes('Read')) {
+        // Return configured permissions or all if they have full Settings access
+        const permissions = await prisma.adminSettingsPermission.findMany({
+          where: { adminId: req.user.id },
+          select: { setting: true },
+        });
 
-      return res.json({
-        success: true,
-        permissions: permissions.map((p) => p.setting),
-      });
+        return res.json({
+          success: true,
+          permissions: permissions.length > 0 
+            ? permissions.map((p) => p.setting)
+            : ["mautic", "smtp", "sftp", "vicidial", "sitecustom", "notifs", "maintenance"],
+        });
+      }
     }
 
-    // Other roles have no settings access
+    // Other users have no settings access
     res.json({
       success: true,
       permissions: [],
@@ -252,7 +292,7 @@ router.get("/my-permissions", authenticate, async (req, res) => {
 router.put(
   "/",
   authenticate,
-  authorize("superadmin", "admin"),
+  requirePermission("Settings", "Update"),
   async (req, res) => {
     try {
       const {

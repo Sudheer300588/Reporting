@@ -2,9 +2,11 @@ import express from "express";
 import prisma from "../prisma/client.js";
 import {
   authenticate,
-  authorize,
+  requirePermission,
   canManageClients,
   canViewClients,
+  hasFullAccess,
+  userHasPermission,
 } from "../middleware/auth.js";
 import {
   validate,
@@ -31,7 +33,7 @@ const router = express.Router();
 // ============================================
 router.get("/", authenticate, canViewClients, async (req, res) => {
   try {
-    const { role, id: userId } = req.user;
+    const { id: userId } = req.user;
     const { page, limit } = req.query;
 
     // Pagination parameters
@@ -43,9 +45,12 @@ router.get("/", authenticate, canViewClients, async (req, res) => {
     let whereClause = {};
     let clients, total;
 
-    if (role === "superadmin" || role === "admin") {
+    // Permission-based filtering
+    if (hasFullAccess(req.user)) {
+      // Full access users can see all clients
       whereClause = {};
-    } else if (role === "manager") {
+    } else if (userHasPermission(req.user, 'Clients', 'Read') || userHasPermission(req.user, 'Clients', 'Create')) {
+      // Users with Clients.Read or Clients.Create can see clients they created or are assigned to
       whereClause = {
         OR: [
           { createdById: userId },
@@ -53,6 +58,7 @@ router.get("/", authenticate, canViewClients, async (req, res) => {
         ],
       };
     } else {
+      // Limited users can only see clients they're assigned to
       whereClause = {
         assignments: {
           some: { userId: userId },
@@ -119,7 +125,7 @@ router.get("/", authenticate, canViewClients, async (req, res) => {
 router.get("/:id", authenticate, canViewClients, async (req, res) => {
   try {
     const clientId = parseInt(req.params.id);
-    const { role, id: userId } = req.user;
+    const { id: userId } = req.user;
 
     const client = await prisma.client.findUnique({
       where: { id: clientId },
@@ -144,12 +150,12 @@ router.get("/:id", authenticate, canViewClients, async (req, res) => {
       return res.status(404).json({ message: "Client not found" });
     }
 
-    // Check if user has permission to view this client
-    if (role === "superadmin" || role === "admin") {
-      // SuperAdmin and Admin can view any client
+    // Permission-based access check
+    if (hasFullAccess(req.user)) {
+      // Full access users can view any client
       return res.json(client);
-    } else if (role === "manager") {
-      // Manager can view if they created it or are assigned to it
+    } else if (userHasPermission(req.user, 'Clients', 'Read') || userHasPermission(req.user, 'Clients', 'Create')) {
+      // Users with Clients permissions can view if they created or are assigned
       if (
         client.createdById === userId ||
         client.assignments.some((a) => a.userId === userId)
@@ -157,7 +163,7 @@ router.get("/:id", authenticate, canViewClients, async (req, res) => {
         return res.json(client);
       }
     } else {
-      // Employee/Telecaller can only view if assigned
+      // Limited users can only view if assigned
       if (client.assignments.some((a) => a.userId === userId)) {
         return res.json(client);
       }
@@ -182,7 +188,7 @@ router.get("/:id", authenticate, canViewClients, async (req, res) => {
 router.post(
   "/",
   authenticate,
-  authorize("superadmin", "admin"),
+  requirePermission("Clients", "Create"),
   validate(createClientSchema),
   async (req, res) => {
     try {
@@ -285,7 +291,7 @@ router.post(
 // ============================================
 // UPDATE CLIENT (SuperAdmin and Admin)
 // ============================================
-router.put("/:id", authenticate, authorize("superadmin", "admin"), async (req, res) => {
+router.put("/:id", authenticate, requirePermission("Clients", "Update"), async (req, res) => {
   try {
     const clientId = parseInt(req.params.id);
     const {
@@ -361,7 +367,7 @@ router.put("/:id", authenticate, authorize("superadmin", "admin"), async (req, r
 router.delete(
   "/:id",
   authenticate,
-  authorize("superadmin", "admin"),
+  requirePermission("Clients", "Delete"),
   async (req, res) => {
     try {
       const clientId = parseInt(req.params.id);
@@ -765,7 +771,7 @@ router.delete(
 router.get("/:id/dashboard", authenticate, canViewClients, async (req, res) => {
   try {
     const clientId = parseInt(req.params.id);
-    const { role, id: userId } = req.user;
+    const { id: userId } = req.user;
 
     const client = await prisma.client.findUnique({
       where: { id: clientId },
@@ -784,19 +790,19 @@ router.get("/:id/dashboard", authenticate, canViewClients, async (req, res) => {
       return res.status(404).json({ message: "Client not found" });
     }
 
-    // Check if user has permission to view this client's dashboard
-    let hasAccess = false;
-    if (role === "superadmin" || role === "admin") {
-      hasAccess = true;
-    } else if (role === "manager") {
-      hasAccess =
+    // Permission-based access check for dashboard
+    let hasAccessPermission = false;
+    if (hasFullAccess(req.user)) {
+      hasAccessPermission = true;
+    } else if (userHasPermission(req.user, 'Clients', 'Read') || userHasPermission(req.user, 'Clients', 'Create')) {
+      hasAccessPermission =
         client.createdById === userId ||
         client.assignments.some((a) => a.userId === userId);
     } else {
-      hasAccess = client.assignments.some((a) => a.userId === userId);
+      hasAccessPermission = client.assignments.some((a) => a.userId === userId);
     }
 
-    if (!hasAccess) {
+    if (!hasAccessPermission) {
       return res.status(403).json({
         message:
           "Access denied. You do not have permission to view this client's dashboard.",

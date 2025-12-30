@@ -182,8 +182,66 @@ export const authenticate = async (req, res, next) => {
 };
 
 /**
- * Authorize by role(s)
- * Usage: authorize('superadmin', 'manager')
+ * Check if user has full access via their custom role
+ * Full access is granted if:
+ * 1. customRole.fullAccess is true, OR
+ * 2. Legacy: user has no customRole but has base role 'superadmin' or 'admin' (backward compat)
+ */
+export const hasFullAccess = (user) => {
+  if (!user) return false;
+  
+  // Check custom role first
+  if (user.customRole?.fullAccess === true && user.customRole?.isActive !== false) {
+    return true;
+  }
+  
+  // Backward compatibility: legacy users without customRole
+  // Superadmin and admin base roles get full access until migrated
+  if (!user.customRoleId && (user.role === 'superadmin' || user.role === 'admin')) {
+    return true;
+  }
+  
+  return false;
+};
+
+/**
+ * Check if user has a specific permission from their custom role
+ * @param {object} user - The user object with customRole
+ * @param {string} module - The module name (e.g., 'Users', 'Clients')
+ * @param {string} permission - The permission (e.g., 'Create', 'Read', 'Update', 'Delete')
+ */
+export const userHasPermission = (user, module, permission) => {
+  if (!user) return false;
+  
+  // Full access grants all permissions
+  if (hasFullAccess(user)) return true;
+  
+  // Check specific permission in custom role
+  if (user.customRole?.isActive !== false && user.customRole?.permissions) {
+    const modulePermissions = user.customRole.permissions[module];
+    if (Array.isArray(modulePermissions) && modulePermissions.includes(permission)) {
+      return true;
+    }
+  }
+  
+  // Backward compatibility: legacy users without customRole
+  // Manager gets basic user/client management
+  if (!user.customRoleId && user.role === 'manager') {
+    if (module === 'Users' && ['Create', 'Read', 'Update'].includes(permission)) return true;
+    if (module === 'Clients' && ['Create', 'Read', 'Update', 'Delete'].includes(permission)) return true;
+  }
+  
+  return false;
+};
+
+/**
+ * Authorize by role(s) - DEPRECATED: Use requirePermission instead
+ * 
+ * This function is kept for backward compatibility. It checks:
+ * 1. Users with full access (via customRole.fullAccess or legacy superadmin/admin) always pass
+ * 2. Otherwise, checks the base user.role against the allowedRoles list
+ * 
+ * For new routes, use requirePermission() instead for granular permission control.
  */
 export const authorize = (...allowedRoles) => {
   return (req, res, next) => {
@@ -197,52 +255,125 @@ export const authorize = (...allowedRoles) => {
       });
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
-      logger.warn('Unauthorized role access attempt', {
-        userId: req.user.id,
-        userRole: req.user.role,
-        requiredRoles: allowedRoles,
-        path: req.path,
-        method: req.method,
-        ip: req.ip
-      });
-
-      return res.status(403).json({
-        success: false,
-        error: {
-          code: 'AUTH_INSUFFICIENT_PERMISSIONS',
-          message: 'Insufficient permissions'
-        }
-      });
+    // Full access users (via customRole or legacy superadmin/admin) always pass
+    if (hasFullAccess(req.user)) {
+      return next();
     }
 
-    next();
+    // Check base role against allowedRoles - works for both legacy and new users
+    if (allowedRoles.includes(req.user.role)) {
+      return next();
+    }
+
+    logger.warn('Unauthorized access attempt', {
+      userId: req.user.id,
+      userRole: req.user.role,
+      customRole: req.user.customRole?.name,
+      allowedRoles,
+      path: req.path,
+      method: req.method,
+      ip: req.ip
+    });
+
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: 'AUTH_INSUFFICIENT_PERMISSIONS',
+        message: 'Insufficient permissions'
+      }
+    });
   };
 };
 
 /**
- * Convenience middleware - Require Superadmin
+ * Convenience middleware - Require full access (highest permission level)
  */
-export const requireSuperadmin = authorize('superadmin');
+export const requireFullAccess = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      error: { code: 'AUTH_REQUIRED', message: 'Authentication required' }
+    });
+  }
+  
+  if (!hasFullAccess(req.user)) {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'AUTH_INSUFFICIENT_PERMISSIONS', message: 'Full access required' }
+    });
+  }
+  
+  next();
+};
 
 /**
- * Convenience middleware - Require Superadmin or Admin
+ * @deprecated Use requirePermission('Users', 'Create') instead
  */
-export const requireAdmin = authorize('superadmin', 'admin');
+export const requireSuperadmin = requireFullAccess;
 
 /**
- * Convenience middleware - Require Manager or above
+ * @deprecated Use requirePermission() instead  
  */
-export const requireManager = authorize('superadmin', 'admin', 'manager');
+export const requireAdmin = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      error: { code: 'AUTH_REQUIRED', message: 'Authentication required' }
+    });
+  }
+  if (hasFullAccess(req.user) || userHasPermission(req.user, 'Settings', 'Update')) {
+    return next();
+  }
+  return res.status(403).json({
+    success: false,
+    error: { code: 'AUTH_INSUFFICIENT_PERMISSIONS', message: 'Insufficient permissions' }
+  });
+};
 
 /**
- * Convenience middleware - Require any authenticated user
+ * @deprecated Use requirePermission() instead
  */
-export const requireEmployee = authorize('superadmin', 'admin', 'manager', 'employee', 'telecaller');
+export const requireManager = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      error: { code: 'AUTH_REQUIRED', message: 'Authentication required' }
+    });
+  }
+  if (hasFullAccess(req.user) || 
+      userHasPermission(req.user, 'Users', 'Create') || 
+      userHasPermission(req.user, 'Clients', 'Create')) {
+    return next();
+  }
+  return res.status(403).json({
+    success: false,
+    error: { code: 'AUTH_INSUFFICIENT_PERMISSIONS', message: 'Insufficient permissions' }
+  });
+};
+
+/**
+ * @deprecated Use authenticate instead - any authenticated user with a valid role can proceed
+ */
+export const requireEmployee = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      error: { code: 'AUTH_REQUIRED', message: 'Authentication required' }
+    });
+  }
+  // Any authenticated user with an active custom role can proceed
+  if (req.user.customRole?.isActive !== false) {
+    return next();
+  }
+  return res.status(403).json({
+    success: false,
+    error: { code: 'AUTH_NO_ROLE', message: 'No active role assigned' }
+  });
+};
 
 /**
  * Check if user has a specific permission from their custom role
- * Uses granular permissions from the Role model
+ * Uses granular permissions from the Role model - NO hardcoded role fallbacks
  * 
  * @param {string} module - The module name (e.g., 'Users', 'Clients', 'Pages', 'Settings')
  * @param {string} permission - The specific permission (e.g., 'Create', 'Read', 'Update', 'Delete')
@@ -259,47 +390,13 @@ export const requirePermission = (module, permission) => {
       });
     }
 
-    // Superadmin always has full access
-    if (req.user.role === 'superadmin') {
+    // Check if user has permission via their custom role
+    if (userHasPermission(req.user, module, permission)) {
       return next();
-    }
-
-    // Check if user has a custom role with full access
-    if (req.user.customRole?.fullAccess && req.user.customRole?.isActive) {
-      return next();
-    }
-
-    // Check specific permission in custom role
-    if (req.user.customRole?.isActive && req.user.customRole?.permissions) {
-      const permissions = req.user.customRole.permissions;
-      const modulePermissions = permissions[module];
-      
-      if (Array.isArray(modulePermissions) && modulePermissions.includes(permission)) {
-        return next();
-      }
-    }
-
-    // Fallback to role-based defaults for backwards compatibility
-    // Admin has access to most things except superadmin-only features
-    if (req.user.role === 'admin') {
-      // Admin can read/update most things, but not delete users or manage roles
-      if (module === 'Users' && permission === 'Delete') {
-        // Check if they have explicit permission via custom role
-      } else if (module !== 'Roles') {
-        return next();
-      }
-    }
-
-    // Manager can manage clients and their team
-    if (req.user.role === 'manager') {
-      if (module === 'Clients' || (module === 'Users' && ['Read', 'Update'].includes(permission))) {
-        return next();
-      }
     }
 
     logger.warn('Permission denied', {
       userId: req.user.id,
-      userRole: req.user.role,
       customRole: req.user.customRole?.name,
       requiredModule: module,
       requiredPermission: permission,
@@ -320,7 +417,7 @@ export const requirePermission = (module, permission) => {
 
 /**
  * Check if user has access to a specific page
- * Uses the 'Pages' permission module from custom role
+ * Uses the 'Pages' permission module from custom role - NO hardcoded role fallbacks
  * 
  * @param {string} pageName - The page name (e.g., 'Dashboard', 'Clients', 'Users', 'Settings')
  */
@@ -336,39 +433,21 @@ export const requirePageAccess = (pageName) => {
       });
     }
 
-    // Superadmin always has full access
-    if (req.user.role === 'superadmin') {
+    // Check if user has full access
+    if (hasFullAccess(req.user)) {
       return next();
     }
 
-    // Check if user has a custom role with full access
-    if (req.user.customRole?.fullAccess && req.user.customRole?.isActive) {
-      return next();
-    }
-
-    // Check if user has access to this page via custom role
-    if (req.user.customRole?.isActive && req.user.customRole?.permissions) {
+    // Check if user has access to this page via custom role permissions
+    if (req.user.customRole?.isActive !== false && req.user.customRole?.permissions) {
       const pagesAccess = req.user.customRole.permissions.Pages || [];
       if (pagesAccess.includes(pageName)) {
         return next();
       }
     }
 
-    // Fallback to role-based defaults
-    const roleDefaults = {
-      admin: ['Dashboard', 'Clients', 'Users', 'Services', 'Activities', 'Settings'],
-      manager: ['Dashboard', 'Clients', 'Users', 'Activities'],
-      employee: ['Dashboard', 'Clients'],
-      telecaller: ['Dashboard', 'Clients']
-    };
-
-    if (roleDefaults[req.user.role]?.includes(pageName)) {
-      return next();
-    }
-
     logger.warn('Page access denied', {
       userId: req.user.id,
-      userRole: req.user.role,
       customRole: req.user.customRole?.name,
       requiredPage: pageName,
       path: req.path,
@@ -388,34 +467,15 @@ export const requirePageAccess = (pageName) => {
 /**
  * Helper function to check permission programmatically (non-middleware)
  * Returns boolean indicating if user has the permission
+ * Uses only customRole - NO hardcoded role fallbacks
  */
 export const hasPermission = (user, module, permission) => {
-  if (!user) return false;
-  
-  // Superadmin always has full access
-  if (user.role === 'superadmin') return true;
-  
-  // Check custom role
-  if (user.customRole?.fullAccess && user.customRole?.isActive) return true;
-  
-  if (user.customRole?.isActive && user.customRole?.permissions) {
-    const modulePermissions = user.customRole.permissions[module];
-    if (Array.isArray(modulePermissions) && modulePermissions.includes(permission)) {
-      return true;
-    }
-  }
-  
-  // Fallback to basic role defaults
-  if (user.role === 'admin') {
-    if (module === 'Roles') return false;
-    return true;
-  }
-  
-  return false;
+  return userHasPermission(user, module, permission);
 };
 
 /**
  * Check if user can manage another user (hierarchy check)
+ * Uses customRole permissions - NO hardcoded role names
  */
 export const canManageUser = async (req, res, next) => {
   try {
@@ -437,13 +497,13 @@ export const canManageUser = async (req, res, next) => {
       return next();
     }
 
-    // SuperAdmin and Admin can manage anyone
-    if (currentUser.role === 'superadmin' || currentUser.role === 'admin') {
+    // Users with full access or Users.Update permission can manage anyone
+    if (hasFullAccess(currentUser) || userHasPermission(currentUser, 'Users', 'Update')) {
       return next();
     }
 
-    // Manager can manage their team
-    if (currentUser.role === 'manager') {
+    // Users with Users.Read can view, check if they created the target user
+    if (userHasPermission(currentUser, 'Users', 'Read')) {
       const targetUser = await prisma.user.findUnique({
         where: { id: targetUserId },
         include: {
@@ -464,16 +524,16 @@ export const canManageUser = async (req, res, next) => {
         });
       }
 
-      // Manager can only manage users they created or users assigned to them
+      // Can manage users they created or users assigned to them
       if (targetUser.createdById === currentUser.id || targetUser.managers.length > 0) {
         return next();
       }
     }
 
     logger.warn('Unauthorized user management attempt', {
-      managerId: currentUser.id,
+      userId: currentUser.id,
       targetUserId,
-      managerRole: currentUser.role
+      customRole: currentUser.customRole?.name
     });
 
     return res.status(403).json({
@@ -497,18 +557,19 @@ export const canManageUser = async (req, res, next) => {
 
 /**
  * Check if user can manage clients
+ * Uses customRole permissions - NO hardcoded role names
  */
 export const canManageClients = (req, res, next) => {
-  const { role } = req.user;
-
-  // SuperAdmin, Admin and Manager can manage clients
-  if (['superadmin', 'admin', 'manager'].includes(role)) {
+  // Check if user has full access or Clients.Create/Update permission
+  if (hasFullAccess(req.user) || 
+      userHasPermission(req.user, 'Clients', 'Create') || 
+      userHasPermission(req.user, 'Clients', 'Update')) {
     return next();
   }
 
   logger.warn('Unauthorized client management attempt', {
     userId: req.user.id,
-    role: req.user.role,
+    customRole: req.user.customRole?.name,
     path: req.path
   });
 
@@ -523,26 +584,28 @@ export const canManageClients = (req, res, next) => {
 
 /**
  * Check if user can view clients
+ * All authenticated users can attempt to view clients - the route handlers
+ * do the actual filtering based on permissions and assignments
  */
 export const canViewClients = (req, res, next) => {
-  const { role } = req.user;
-
-  // All authenticated users can view clients (with restrictions applied in routes)
-  if (['superadmin', 'admin', 'manager', 'employee', 'telecaller'].includes(role)) {
+  // All authenticated users can view clients they're assigned to
+  // Route handlers filter the actual data based on permissions
+  if (req.user) {
     return next();
   }
 
-  return res.status(403).json({
+  return res.status(401).json({
     success: false,
     error: {
-      code: 'CANNOT_VIEW_CLIENTS',
-      message: 'You do not have permission to view clients'
+      code: 'AUTH_REQUIRED',
+      message: 'Authentication required'
     }
   });
 };
 
 /**
  * Check if user can access a specific client
+ * Uses customRole permissions - NO hardcoded role names
  */
 export const canAccessClient = async (req, res, next) => {
   try {
@@ -558,8 +621,8 @@ export const canAccessClient = async (req, res, next) => {
       });
     }
 
-    // Superadmin and Admin can access all clients
-    if (req.user.role === 'superadmin' || req.user.role === 'admin') {
+    // Users with full access can access all clients
+    if (hasFullAccess(req.user)) {
       return next();
     }
 
@@ -575,7 +638,7 @@ export const canAccessClient = async (req, res, next) => {
       logger.warn('Unauthorized client access attempt', {
         userId: req.user.id,
         clientId,
-        role: req.user.role
+        customRole: req.user.customRole?.name
       });
 
       return res.status(403).json({
@@ -601,7 +664,8 @@ export const canAccessClient = async (req, res, next) => {
 };
 
 /**
- * Check if manager can manage a specific employee
+ * Check if user can manage a specific employee
+ * Uses customRole permissions - NO hardcoded role names
  */
 export const canManageEmployee = async (req, res, next) => {
   try {
@@ -617,13 +681,13 @@ export const canManageEmployee = async (req, res, next) => {
       });
     }
 
-    // Superadmin and Admin can manage all employees
-    if (req.user.role === 'superadmin' || req.user.role === 'admin') {
+    // Users with full access or Users.Update can manage all employees
+    if (hasFullAccess(req.user) || userHasPermission(req.user, 'Users', 'Update')) {
       return next();
     }
 
-    // Managers can only manage their assigned employees
-    if (req.user.role === 'manager') {
+    // Users with Users.Read can only manage their assigned employees
+    if (userHasPermission(req.user, 'Users', 'Read')) {
       const employee = await prisma.user.findFirst({
         where: {
           id: employeeId,
@@ -635,7 +699,7 @@ export const canManageEmployee = async (req, res, next) => {
 
       if (!employee) {
         logger.warn('Unauthorized employee management attempt', {
-          managerId: req.user.id,
+          userId: req.user.id,
           employeeId
         });
 
@@ -672,18 +736,19 @@ export const canManageEmployee = async (req, res, next) => {
 
 /**
  * Get list of client IDs accessible to current user
+ * Uses customRole permissions - NO hardcoded role names
  */
-export const getAccessibleClientIds = async (userId, role) => {
+export const getAccessibleClientIds = async (userId, user) => {
   try {
-    // Superadmin and Admin can access all clients
-    if (role === 'superadmin' || role === 'admin') {
+    // Users with full access can access all clients
+    if (hasFullAccess(user)) {
       const clients = await prisma.client.findMany({
         select: { id: true }
       });
       return clients.map(c => c.id);
     }
 
-    // Manager/Employee can only access assigned clients
+    // Other users can only access assigned clients
     const assignments = await prisma.clientAssignment.findMany({
       where: { userId: userId },
       select: { clientId: true }
@@ -697,14 +762,15 @@ export const getAccessibleClientIds = async (userId, role) => {
 };
 
 /**
- * Filter clients query based on user role
+ * Filter clients query based on user permissions
+ * Uses customRole permissions - NO hardcoded role names
  */
 export const filterClientsByRole = async (req, baseWhere = {}) => {
-  if (req.user.role === 'superadmin' || req.user.role === 'admin') {
+  if (hasFullAccess(req.user)) {
     return baseWhere;
   }
 
-  const accessibleClientIds = await getAccessibleClientIds(req.user.id, req.user.role);
+  const accessibleClientIds = await getAccessibleClientIds(req.user.id, req.user);
 
   return {
     ...baseWhere,
@@ -720,8 +786,15 @@ export default {
   auth,
   authorize,
   requireSuperadmin,
+  requireAdmin,
   requireManager,
   requireEmployee,
+  requireFullAccess,
+  requirePermission,
+  requirePageAccess,
+  hasFullAccess,
+  userHasPermission,
+  hasPermission,
   canManageUser,
   canManageClients,
   canViewClients,

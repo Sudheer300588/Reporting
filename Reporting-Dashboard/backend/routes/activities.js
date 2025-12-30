@@ -1,6 +1,6 @@
 import express from 'express';
 import prisma from '../prisma/client.js';
-import { authenticate, authorize } from '../middleware/auth.js';
+import { authenticate, requirePermission, hasFullAccess, userHasPermission } from '../middleware/auth.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
@@ -15,12 +15,11 @@ router.get('/', authenticate, async (req, res) => {
     
     let where = {};
 
-    // Role-based filtering
-    if (['employee', 'telecaller'].includes(currentUser.role)) {
-      // Employees and telecallers can only see their own activities
-      where.userId = currentUser.id;
-    } else if (currentUser.role === 'manager') {
-      // Managers can see activities of users they manage
+    // Permission-based filtering using hasFullAccess and userHasPermission
+    if (hasFullAccess(currentUser)) {
+      // Full access users see all activities (no where filter)
+    } else if (userHasPermission(currentUser, 'Users', 'Read') || userHasPermission(currentUser, 'Activities', 'Read')) {
+      // Users with Users.Read or Activities.Read can see their team's activities
       const managedUsers = await prisma.user.findMany({
         where: {
           OR: [
@@ -33,8 +32,10 @@ router.get('/', authenticate, async (req, res) => {
       
       const userIds = [currentUser.id, ...managedUsers.map(user => user.id)];
       where.userId = { in: userIds };
+    } else {
+      // Limited users can only see their own activities
+      where.userId = currentUser.id;
     }
-    // Superadmin sees all activities (no where filter)
 
     // Additional filters
     if (target) where.entityType = target;
@@ -73,12 +74,13 @@ router.get('/', authenticate, async (req, res) => {
 // @route   GET /api/activities/stats
 // @desc    Get activity statistics
 // @access  Private (SuperAdmin, Manager)
-router.get('/stats', authenticate, authorize('superadmin', 'manager'), async (req, res) => {
+router.get('/stats', authenticate, requirePermission('Activities', 'Read'), async (req, res) => {
   try {
     const currentUser = req.user;
     let where = {};
 
-    if (currentUser.role === 'manager') {
+    // Non-full access users only see stats for users they manage
+    if (!hasFullAccess(currentUser)) {
       const managedUsers = await prisma.user.findMany({
         where: {
           OR: [

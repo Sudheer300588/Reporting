@@ -1,7 +1,7 @@
 import express from 'express';
 import prisma from '../prisma/client.js';
 import { hashPassword, comparePassword } from '../utils/password.js';
-import { authenticate, authorize, canManageUser } from '../middleware/auth.js';
+import { authenticate, canManageUser, hasFullAccess, userHasPermission, requirePermission } from '../middleware/auth.js';
 import { logActivity } from '../middleware/activityLogger.js';
 import { notifyUserCreated } from '../utils/emailHelper.js';
 import { validate, validateParams, createUserSchema, updateUserSchema, clientIdSchema } from '../validators/schemas.js';
@@ -11,8 +11,8 @@ const router = express.Router();
 
 // @route   POST /api/users
 // @desc    Create new employee with dynamic role from Settings
-// @access  Private (SuperAdmin, Admin, Manager)
-router.post('/', authenticate, authorize('superadmin', 'admin', 'manager'), validate(createUserSchema), async (req, res) => {
+// @access  Private (Users with Users.Create permission)
+router.post('/', authenticate, requirePermission('Users', 'Create'), validate(createUserSchema), async (req, res) => {
   try {
     const { name, email, password, customRoleId } = req.body;
     const currentUser = req.user;
@@ -32,7 +32,7 @@ router.post('/', authenticate, authorize('superadmin', 'admin', 'manager'), vali
       });
     }
 
-    // Validate customRoleId - this is now required for all user creation
+    // Validate customRoleId - this is required for all user creation
     if (!customRoleId) {
       return res.status(400).json({
         success: false,
@@ -78,55 +78,32 @@ router.post('/', authenticate, authorize('superadmin', 'admin', 'manager'), vali
       });
     }
 
-    // Derive base role from custom role for backwards compatibility
-    // This determines the base access level stored in the User.role enum
-    // Priority: explicit name patterns > fullAccess flag > default
-    const deriveBaseRoleFromCustomRole = (role) => {
-      const roleName = role.name?.toLowerCase() || '';
-      // Check name patterns first - these are explicit role indicators
-      if (roleName.includes('super') && roleName.includes('admin')) return 'superadmin';
-      if (roleName.includes('admin')) return 'admin';
-      if (roleName.includes('manager')) return 'manager';
-      if (roleName.includes('telecaller')) return 'telecaller';
-      // If no explicit pattern, check fullAccess flag
-      if (role.fullAccess) return 'admin';
-      return 'employee'; // Default base role
-    };
-
-    const derivedBaseRole = deriveBaseRoleFromCustomRole(customRole);
-
-    // Check permissions based on current user's effective role
-    // Managers can only create employee/telecaller level roles
-    if (currentUser.role === 'manager') {
-      if (!['employee', 'telecaller'].includes(derivedBaseRole)) {
-        return res.status(403).json({ 
-          success: false,
-          error: {
-            code: 'FORBIDDEN',
-            message: 'Managers can only assign employee or telecaller level roles'
-          }
-        });
-      }
+    // Permission check: Only users with full access can assign full access roles
+    if (customRole.fullAccess && !hasFullAccess(currentUser)) {
+      return res.status(403).json({ 
+        success: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Only users with full access can assign full access roles'
+        }
+      });
     }
 
     const hashedPassword = await hashPassword(password);
 
+    // Base role is now just for display/legacy purposes
+    // All authorization is driven by customRole permissions
     const userData = {
       name,
       email,
       password: hashedPassword,
-      role: derivedBaseRole,
+      role: customRole.fullAccess ? 'admin' : 'employee',
       createdById: currentUser.id,
       customRoleId: parsedRoleId
     };
 
-    // For manager role, set superAdmin if created by superadmin or admin
-    if ((currentUser.role === 'superadmin' || currentUser.role === 'admin') && derivedBaseRole === 'manager') {
-      userData.superAdminId = currentUser.id;
-    }
-
-    // Connect managers using M:N relation if creating employee/telecaller
-    if (['employee', 'telecaller'].includes(derivedBaseRole) && currentUser.role === 'manager') {
+    // Connect the creator as manager if they don't have full access
+    if (!hasFullAccess(currentUser)) {
       userData.managers = {
         connect: { id: currentUser.id }
       };
@@ -196,26 +173,28 @@ router.post('/', authenticate, authorize('superadmin', 'admin', 'manager'), vali
 });
 
 // @route   GET /api/users
-// @desc    Get employees based on role permissions
+// @desc    Get employees based on permissions
 // @access  Private
 router.get('/', authenticate, async (req, res) => {
   try {
     const currentUser = req.user;
     let where = {};
 
-    if (currentUser.role === 'manager') {
-      // Manager sees users they created or employees assigned to them
+    // Users with full access see all users
+    if (hasFullAccess(currentUser)) {
+      // No filter - see all users
+    } else if (userHasPermission(currentUser, 'Users', 'Read')) {
+      // Users with Users.Read see users they created or are assigned to them
       where = {
         OR: [
           { createdById: currentUser.id },
           { managers: { some: { id: currentUser.id } } }
         ]
       };
-    } else if (['employee', 'telecaller'].includes(currentUser.role)) {
-      // Employees and telecallers can only see themselves
+    } else {
+      // Users without Users.Read can only see themselves
       where = { id: currentUser.id };
     }
-    // SuperAdmin sees all users (no where filter)
 
     const users = await prisma.user.findMany({
       where,
@@ -261,18 +240,13 @@ router.get('/:id/clients', authenticate, async (req, res) => {
     const currentUser = req.user;
 
     // Check if user has permission to view this employee's clients
-    // SuperAdmin can view anyone's clients
-    // Manager can view their team members' clients
-    // Employee can only view their own clients
-    if (currentUser.role === 'employee' || currentUser.role === 'telecaller') {
-      if (currentUser.id !== employeeId) {
-        return res.status(403).json({ 
-          success: false,
-          message: 'You can only view your own clients' 
-        });
-      }
-    } else if (currentUser.role === 'manager') {
-      // Check if this employee is under this manager
+    // Users with full access can view anyone's clients
+    // Users with Users.Read can view their team members' clients
+    // Others can only view their own clients
+    if (hasFullAccess(currentUser)) {
+      // Full access - no restrictions
+    } else if (userHasPermission(currentUser, 'Users', 'Read')) {
+      // Check if this employee is under this user
       const employee = await prisma.user.findUnique({
         where: { id: employeeId },
         include: {
@@ -296,8 +270,15 @@ router.get('/:id/clients', authenticate, async (req, res) => {
           message: 'You can only view clients of employees under your management' 
         });
       }
+    } else {
+      // No Users.Read permission - can only view own clients
+      if (currentUser.id !== employeeId) {
+        return res.status(403).json({ 
+          success: false,
+          message: 'You can only view your own clients' 
+        });
+      }
     }
-    // SuperAdmin has no restrictions
 
     // Fetch clients assigned to this employee
     const assignments = await prisma.clientAssignment.findMany({
@@ -413,22 +394,11 @@ router.put('/:id', authenticate, canManageUser, async (req, res) => {
     if (email) updateData.email = email;
     if (typeof isActive === 'boolean') updateData.isActive = isActive;
     
-    // Helper to derive base role from custom role
-    const deriveBaseRoleFromCustomRole = (role) => {
-      const roleName = role.name?.toLowerCase() || '';
-      if (roleName.includes('super') && roleName.includes('admin')) return 'superadmin';
-      if (roleName.includes('admin')) return 'admin';
-      if (roleName.includes('manager')) return 'manager';
-      if (roleName.includes('telecaller')) return 'telecaller';
-      if (role.fullAccess) return 'admin';
-      return 'employee';
-    };
-    
-    // Handle customRoleId - superadmin, admin, and manager can assign roles
-    if (customRoleId !== undefined) {
+    // Handle customRoleId - users with Users.Update permission can assign roles
+    if (customRoleId !== undefined && userHasPermission(currentUser, 'Users', 'Update')) {
       if (customRoleId === null || customRoleId === '') {
-        // Only superadmin/admin can remove custom role
-        if (currentUser.role === 'superadmin' || currentUser.role === 'admin') {
+        // Only users with full access can remove custom role
+        if (hasFullAccess(currentUser)) {
           updateData.customRoleId = null;
         }
       } else {
@@ -446,16 +416,14 @@ router.put('/:id', authenticate, canManageUser, async (req, res) => {
           return res.status(400).json({ message: 'Cannot assign inactive custom role' });
         }
         
-        // Derive base role from custom role
-        const derivedBaseRole = deriveBaseRoleFromCustomRole(customRole);
-        
-        // Managers can only assign employee/telecaller level roles
-        if (currentUser.role === 'manager' && !['employee', 'telecaller'].includes(derivedBaseRole)) {
-          return res.status(403).json({ message: 'Managers can only assign employee or telecaller level roles' });
+        // Permission check: Only users with full access can assign full access roles
+        if (customRole.fullAccess && !hasFullAccess(currentUser)) {
+          return res.status(403).json({ message: 'Only users with full access can assign full access roles' });
         }
         
         updateData.customRoleId = parsedRoleId;
-        updateData.role = derivedBaseRole;
+        // Update base role based on full access status
+        updateData.role = customRole.fullAccess ? 'admin' : 'employee';
       }
     }
 

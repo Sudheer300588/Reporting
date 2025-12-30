@@ -25,27 +25,52 @@ const Employees = () => {
     fetchRoles()
   }, [user]);
 
+  // Helper to check if user has full access
+  // Supports both customRole and legacy base role for backward compatibility
+  const hasFullAccess = () => {
+    // Check custom role first
+    if (user?.customRole?.fullAccess === true) return true;
+    // Backward compatibility: legacy users without customRole
+    if (!user?.customRoleId && (user?.role === 'superadmin' || user?.role === 'admin')) return true;
+    return false;
+  };
+
+  // Helper to check if user has a permission from their customRole
+  // Includes backward compatibility for legacy users
+  const hasPermission = (module, permission) => {
+    // Full access grants all permissions
+    if (hasFullAccess()) return true;
+    
+    // Check custom role permissions
+    if (user?.customRole) {
+      const modulePermissions = user.customRole.permissions?.[module] || [];
+      if (Array.isArray(modulePermissions) && modulePermissions.includes(permission)) {
+        return true;
+      }
+    }
+    
+    // Backward compatibility: legacy manager
+    if (!user?.customRoleId && user?.role === 'manager') {
+      if (module === 'Users' && ['Create', 'Read', 'Update'].includes(permission)) return true;
+      if (module === 'Clients' && ['Create', 'Read', 'Update', 'Delete'].includes(permission)) return true;
+    }
+    
+    return false;
+  };
+
   const fetchRoles = async () => {
     try {
       setRolesLoading(true);
       const response = await axios.get('/api/roles')
       const allRoles = response.data.data?.filter(r => r.isActive) || [];
       
-      // Filter roles based on current user's permission level
+      // Filter roles based on current user's permissions
       let filteredRoles = allRoles;
-      if (user?.role === 'admin') {
-        // Admins cannot create superadmin or admin roles
-        filteredRoles = allRoles.filter(r => 
-          !r.name.toLowerCase().includes('super') && 
-          r.name.toLowerCase() !== 'admin'
-        );
-      } else if (user?.role === 'manager') {
-        // Managers can only create employee/telecaller level roles
-        filteredRoles = allRoles.filter(r => 
-          !r.name.toLowerCase().includes('super') && 
-          !r.name.toLowerCase().includes('admin') &&
-          !r.name.toLowerCase().includes('manager')
-        );
+      
+      // Users with full access can assign any role
+      // Users without full access cannot assign full access roles
+      if (!hasFullAccess()) {
+        filteredRoles = allRoles.filter(r => !r.fullAccess);
       }
       
       setAvailableRoles(filteredRoles);
@@ -64,9 +89,8 @@ const Employees = () => {
   const fetchEmployees = async () => {
     try {
       const response = await axios.get('/api/users')
-      // Filter out admin users from the list
-      const filteredEmployees = response.data.users.filter(userItem => userItem.role !== 'superadmin')
-      setEmployees(filteredEmployees)
+      // Show all users - filtering is now handled by backend based on permissions
+      setEmployees(response.data.users || [])
     } catch (error) {
       toast.error('Error fetching employees')
       console.error(error)
@@ -209,7 +233,8 @@ const Employees = () => {
     telecaller: 'badge-telecaller',
   };
 
-  const canCreateEmployee = user?.role === 'superadmin' || user?.role === 'admin' || user?.role === 'manager';
+  // Check if user can create employees based on their permissions
+  const canCreateEmployee = hasFullAccess() || hasPermission('Users', 'Create');
 
   if (loading || rolesLoading) {
     return (
