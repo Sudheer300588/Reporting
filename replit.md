@@ -87,7 +87,7 @@ The frontend uses Vite's proxy to forward `/api` requests to the backend.
 ## Database
 
 Uses PostgreSQL with Prisma ORM. Key models:
-- User, ActivityLog
+- User, ActivityLog, Role
 - Client, ClientAssignment, Campaign
 - DropCowboyCampaign, MauticClient
 - NotificationTemplate, SiteSettings
@@ -108,6 +108,46 @@ Uses PostgreSQL with Prisma ORM. Key models:
 ---
 
 ## Changelog
+
+### December 30, 2025 - Session 3: Dynamic Roles & Permissions System
+
+#### New Features
+
+**1. Dynamic Role Management**
+- **What**: Added complete CRUD for custom roles with granular permissions
+- **Why**: Roles were previously hardcoded as enum. Users needed ability to create/edit roles from Settings.
+- **Files Changed**:
+  - `backend/prisma/schema.prisma` - Added `Role` model with JSON permissions field, added `customRoleId` to User
+  - `backend/routes/roles.js` - Full CRUD API for roles
+  - `backend/app.js` - Registered roles routes
+  - `frontend/src/services/roles/api.js` - Roles API service with auth interceptor
+  - `frontend/src/components/Settings/RolesAndPermissions.jsx` - Complete UI for role list, create, edit, delete
+  - `frontend/src/components/Settings/Permissions.jsx` - Granular permissions selector with module-based grouping
+
+**Role Model Details**:
+- `name` - Unique role name
+- `description` - Optional description
+- `fullAccess` - Boolean for full system access (disables permissions tab when ON)
+- `permissions` - JSON object storing granular permissions by module
+- `isSystem` - Boolean to mark built-in roles (cannot be edited/deleted)
+- `isActive` - Soft delete capability
+
+**Permissions Schema**:
+```json
+{
+  "Pages": ["Dashboard", "Clients", "Users", "Services", "Activities", "Settings"],
+  "Settings": ["Roles", "Autovation Clients", "Notifications", "SMTP Credentials", ...],
+  "Users": ["Create", "Read", "Update", "Delete"],
+  "Clients": ["Create", "Read", "Update", "Delete"]
+}
+```
+
+**User-Role Relationship**:
+- User model has optional `customRoleId` field
+- Maintains backward compatibility with existing `role` enum (UserRole)
+- Custom role permissions override enum permissions when assigned
+
+---
 
 ### December 30, 2025 - Session 2: Delete Functionality & API Fixes
 
@@ -199,6 +239,17 @@ Uses PostgreSQL with Prisma ORM. Key models:
 | POST | `/api/auth/login` | User login |
 | POST | `/api/auth/logout` | User logout |
 | GET | `/api/auth/me` | Get current user |
+
+### Role Management
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/roles` | List all roles with user counts |
+| GET | `/api/roles/:id` | Get single role details |
+| GET | `/api/roles/schema` | Get permissions schema |
+| POST | `/api/roles` | Create new role |
+| PUT | `/api/roles/:id` | Update role |
+| DELETE | `/api/roles/:id` | Delete role (non-system only) |
+| PATCH | `/api/roles/:id/toggle` | Toggle role active status |
 
 ---
 

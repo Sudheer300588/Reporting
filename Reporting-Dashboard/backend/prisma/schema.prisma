@@ -91,6 +91,26 @@ enum OTPStatus {
 }
 
 // ==========================================================
+// ROLE & PERMISSIONS MANAGEMENT
+// ==========================================================
+model Role {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?  @db.Text
+  fullAccess  Boolean  @default(false)
+  permissions Json     @default("{}")
+  isSystem    Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users User[]
+
+  @@index([name])
+  @@index([isActive])
+}
+
+// ==========================================================
 // USER MANAGEMENT + ACTIVITY LOG
 // ==========================================================
 model User {
@@ -99,6 +119,8 @@ model User {
   email        String   @unique
   password     String
   role         UserRole @default(employee)
+  customRoleId Int?
+  customRole   Role?    @relation(fields: [customRoleId], references: [id], onDelete: SetNull)
   isActive     Boolean  @default(true)
   tokenVersion Int      @default(0) // For token revocation
   createdAt    DateTime @default(now())
@@ -132,6 +154,7 @@ model User {
 
   @@index([email])
   @@index([role])
+  @@index([customRoleId])
   @@index([isActive])
   @@index([role, isActive])
   @@index([createdById])

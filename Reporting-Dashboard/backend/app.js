@@ -16,6 +16,7 @@ import clientsRoutes from './routes/clients.js';
 import superadminRouter from './routes/superadmin.js';
 import notificationsRoutes from './routes/notifications.js';
 import settingsRoutes from './routes/settings.js';
+import rolesRoutes from './routes/roles.js';
 import vicidialAgentRoutes from './modules/vicidialer/routes/vicidialAgents.js';
 import "./modules/vicidialer/cron/sync.cron.js"; // Initialize Vicidial sync cron
 
@@ -161,6 +162,7 @@ export function createApp() {
   app.use('/api/activities', activitiesRoutes);
   app.use('/api/clients', clientsRoutes);
   app.use('/api/settings', settingsRoutes);
+  app.use('/api/roles', rolesRoutes);
   app.use('/api/superadmin', superadminRouter);
   app.use('/api/superadmin/notifications', notificationsRoutes);
   
