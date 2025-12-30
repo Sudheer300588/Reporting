@@ -208,7 +208,7 @@ router.get('/', authenticate, async (req, res) => {
         updatedAt: true,
         customRoleId: true,
         customRole: {
-          select: { id: true, name: true, fullAccess: true }
+          select: { id: true, name: true, fullAccess: true, isTeamManager: true }
         },
         createdBy: {
           select: { id: true, name: true, email: true }

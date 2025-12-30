@@ -207,18 +207,28 @@ const Dashboard = () => {
         (c.services || []).includes('mautic') || c.hasMautic
       );
 
+      // Count managers based on customRole.isTeamManager or fullAccess, with legacy fallback
+      const isManager = (e) => {
+        if (!e?.customRoleId) {
+          return ['superadmin', 'admin', 'manager'].includes(e?.role);
+        }
+        return e?.customRole?.fullAccess || e?.customRole?.isTeamManager;
+      };
+      const managerCount = employees.filter(isManager).length;
+      const employeeCount = employees.filter(e => !isManager(e)).length;
+
       if (user.role === 'superadmin') {
         setStats({
-          totalEmployees: employees.length,
+          totalEmployees: employeeCount,
           totalClients: uniqueClients.length,
-          totalManagers: employees.filter((e) => e?.role === 'manager').length,
-          totalAdmins: employees.filter((e) => e?.role === 'admin').length
+          totalManagers: managerCount,
+          totalAdmins: employees.filter((e) => e?.customRole?.fullAccess || (!e?.customRoleId && e?.role === 'admin')).length
         });
       } else if (user.role === 'admin') {
         setStats({
-          totalEmployees: employees.length,
+          totalEmployees: employeeCount,
           totalClients: uniqueClients.length,
-          totalManagers: employees.filter((e) => e?.role === 'manager').length
+          totalManagers: managerCount
         });
       } else if (user.role === 'manager') {
         // Manager should only see their direct reports (employees & telecallers)
