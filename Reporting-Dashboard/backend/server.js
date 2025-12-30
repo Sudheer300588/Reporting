@@ -1,9 +1,9 @@
-import 'dotenv/config';
-import prisma from './prisma/client.js';
-import { createApp } from './app.js';
-import { initializeSchedulers } from './config/registerSchedulers.js';
-import { createDynamicIndexHandler } from './config/loadSiteSettings.js';
-import logger from './utils/logger.js';
+import "dotenv/config";
+import prisma from "./prisma/client.js";
+import { createApp } from "./app.js";
+import { initializeSchedulers } from "./config/registerSchedulers.js";
+import { createDynamicIndexHandler } from "./config/loadSiteSettings.js";
+import logger from "./utils/logger.js";
 
 const PORT = process.env.PORT || 3027;
 
@@ -12,44 +12,46 @@ const PORT = process.env.PORT || 3027;
  * Fast-fail on startup if critical configuration is missing
  */
 function validateEnvironment() {
-  const requiredEnvVars = [
-    'DATABASE_URL',
-    'JWT_SECRET',
-    'ENCRYPTION_KEY'
-  ];
+  const requiredEnvVars = ["DATABASE_URL", "JWT_SECRET", "ENCRYPTION_KEY"];
 
-  const missing = requiredEnvVars.filter(key => !process.env[key]);
-  
+  const missing = requiredEnvVars.filter((key) => !process.env[key]);
+
   if (missing.length > 0) {
-    logger.error('Missing required environment variables', { 
+    logger.error("Missing required environment variables", {
       missing,
-      message: 'Please check your .env file'
+      message: "Please check your .env file",
     });
-    console.error('\n❌ FATAL: Missing required environment variables:');
-    missing.forEach(key => console.error(`   - ${key}`));
-    console.error('\nPlease set these in your .env file before starting the server.\n');
+    console.error("\n❌ FATAL: Missing required environment variables:");
+    missing.forEach((key) => console.error(`   - ${key}`));
+    console.error(
+      "\nPlease set these in your .env file before starting the server.\n",
+    );
     process.exit(1);
   }
 
   // Validate JWT_SECRET length (should be strong)
   if (process.env.JWT_SECRET.length < 32) {
-    logger.warn('JWT_SECRET is too short', { 
+    logger.warn("JWT_SECRET is too short", {
       length: process.env.JWT_SECRET.length,
-      recommended: 64
+      recommended: 64,
     });
-    console.warn('⚠️  WARNING: JWT_SECRET should be at least 32 characters long for security.');
+    console.warn(
+      "⚠️  WARNING: JWT_SECRET should be at least 32 characters long for security.",
+    );
   }
 
   // Validate ENCRYPTION_KEY length
   if (process.env.ENCRYPTION_KEY.length < 32) {
-    logger.warn('ENCRYPTION_KEY is too short', { 
+    logger.warn("ENCRYPTION_KEY is too short", {
       length: process.env.ENCRYPTION_KEY.length,
-      recommended: 64
+      recommended: 64,
     });
-    console.warn('⚠️  WARNING: ENCRYPTION_KEY should be at least 32 characters long for security.');
+    console.warn(
+      "⚠️  WARNING: ENCRYPTION_KEY should be at least 32 characters long for security.",
+    );
   }
 
-  logger.info('Environment validation passed');
+  logger.info("Environment validation passed");
 }
 
 /**
@@ -58,13 +60,12 @@ function validateEnvironment() {
 async function connectDatabase() {
   try {
     await prisma.$connect();
-    logger.info('Database connected successfully');
-    
+    logger.info("Database connected successfully");
+
     // Initialize all schedulers after DB connection
     await initializeSchedulers();
-    
   } catch (err) {
-    logger.error('Database connection error', { error: err.message });
+    logger.error("Database connection error", { error: err.message });
     process.exit(1);
   }
 }
@@ -75,19 +76,19 @@ async function connectDatabase() {
 function setupGracefulShutdown() {
   const shutdown = async (signal) => {
     logger.info(`Received ${signal}, shutting down gracefully...`);
-    
+
     try {
       await prisma.$disconnect();
-      logger.info('Database disconnected');
+      logger.info("Database disconnected");
       process.exit(0);
     } catch (err) {
-      logger.error('Error during shutdown', { error: err.message });
+      logger.error("Error during shutdown", { error: err.message });
       process.exit(1);
     }
   };
 
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
 }
 
 /**
@@ -109,18 +110,17 @@ async function startServer() {
 
     // Start listening
     const server = app.listen(PORT, () => {
-      logger.info(`Server running at https://hcdteam.com:${PORT}`);
-      logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-      logger.info('Application ready');
+      logger.info(`Server running on port ${PORT}`);
+      logger.info(`Environment: ${process.env.NODE_ENV || "development"}`);
+      logger.info("Application ready");
     });
 
     // Setup graceful shutdown
     setupGracefulShutdown();
 
     return server;
-
   } catch (err) {
-    logger.error('Failed to start server', { error: err.message });
+    logger.error("Failed to start server", { error: err.message });
     process.exit(1);
   }
 }

@@ -11,8 +11,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 
-// Backend API base URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || "https://hcdteam.com";
+// Backend API base URL - use environment variable or empty string for relative URLs
+const API_BASE_URL = import.meta.env.VITE_API_URL || "";
 
 const RecordsTable = ({ campaigns }) => {
   const { user } = useAuth();
@@ -68,7 +68,7 @@ const RecordsTable = ({ campaigns }) => {
     if (container) {
       const maxScroll = Math.max(
         0,
-        container.scrollHeight - container.clientHeight
+        container.scrollHeight - container.clientHeight,
       );
       const scrolled = container.scrollTop;
       scrollRatioRef.current = maxScroll > 0 ? scrolled / maxScroll : 0;
@@ -134,7 +134,7 @@ const RecordsTable = ({ campaigns }) => {
           ...record,
           campaignName: campaign.campaignName,
           client: campaign.client || "Unknown",
-        }))
+        })),
       );
       setServerRecords(records.slice(0, recordsPerPage));
       setTotalRecords(records.length);
@@ -146,10 +146,8 @@ const RecordsTable = ({ campaigns }) => {
     new Set(
       serverRecords
         .map((r) => r.client || "Unknown")
-        .concat(
-          (campaigns || []).map((c) => c.client || "Unknown")
-        )
-    )
+        .concat((campaigns || []).map((c) => c.client || "Unknown")),
+    ),
   )
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b));
@@ -166,7 +164,7 @@ const RecordsTable = ({ campaigns }) => {
           if (maintainScrollRef.current) {
             const maxAfter = Math.max(
               0,
-              container.scrollHeight - container.clientHeight
+              container.scrollHeight - container.clientHeight,
             );
             container.scrollTop = Math.round(scrollRatioRef.current * maxAfter);
           } else {
@@ -275,7 +273,7 @@ const RecordsTable = ({ campaigns }) => {
     try {
       // Use the Ringless Voicemail API records endpoint
       const res = await fetch(
-        `${API_BASE_URL}/api/dropcowboy/records?${params.toString()}`
+        `${API_BASE_URL}/api/dropcowboy/records?${params.toString()}`,
       );
       const json = await res.json();
       if (json.success) {

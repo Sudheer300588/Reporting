@@ -17,20 +17,15 @@ const MauticCampaignsContainer = ({ clientId }) => {
   const [loading, setLoading] = useState(true);
   const [expandedCampaignId, setExpandedCampaignId] = useState(null);
   const [showDetails, setShowDetails] = useState({});
-
+  // Use environment variable or default to relative URL for same-origin requests
+  const baseUrl = import.meta.env.VITE_API_URL || "";
   useEffect(() => {
     const fetchCampaigns = async () => {
       try {
         const [campaignsRes, segmentsRes, emailsRes] = await Promise.all([
-          axios.get(
-            `https://hcdteam.com/api/mautic/clients/${clientId}/campaigns`
-          ),
-          axios.get(
-            `https://hcdteam.com/api/mautic/clients/${clientId}/segments`
-          ),
-          axios.get(
-            `https://hcdteam.com/api/mautic/clients/${clientId}/emails`
-          ),
+          axios.get(`${baseUrl}/api/mautic/clients/${clientId}/campaigns`),
+          axios.get(`${baseUrl}/api/mautic/clients/${clientId}/segments`),
+          axios.get(`${baseUrl}/api/mautic/clients/${clientId}/emails`),
         ]);
 
         const segments = segmentsRes.data.data;
@@ -39,7 +34,7 @@ const MauticCampaignsContainer = ({ clientId }) => {
         const campaignsWithDetails = campaignsRes.data.data.map((c) => {
           // Match emails that belong to this campaign (by name prefix or other logic)
           const campaignEmails = emails.filter((e) =>
-            e.name.toLowerCase().includes(c.name.toLowerCase().split(":")[0])
+            e.name.toLowerCase().includes(c.name.toLowerCase().split(":")[0]),
           );
 
           // For now, we'll show all segments - you can customize this logic
@@ -95,16 +90,16 @@ const MauticCampaignsContainer = ({ clientId }) => {
   // Calculate totals across all campaigns
   const totalSegments = campaigns.reduce(
     (acc, c) => acc + c.segments.length,
-    0
+    0,
   );
   const totalEmails = campaigns.reduce((acc, c) => acc + c.emails.length, 0);
   const totalSent = campaigns.reduce(
     (acc, c) => acc + c.emails.reduce((a, e) => a + e.sentCount, 0),
-    0
+    0,
   );
   const totalRead = campaigns.reduce(
     (acc, c) => acc + c.emails.reduce((a, e) => a + e.readCount, 0),
-    0
+    0,
   );
   const totalReadPercentage = totalSent
     ? ((totalRead / totalSent) * 100).toFixed(2)
@@ -116,11 +111,11 @@ const MauticCampaignsContainer = ({ clientId }) => {
         {campaigns.map((campaign) => {
           const campaignSent = campaign.emails.reduce(
             (a, e) => a + e.sentCount,
-            0
+            0,
           );
           const campaignRead = campaign.emails.reduce(
             (a, e) => a + e.readCount,
-            0
+            0,
           );
           const emailsPercentage =
             campaign.emails.length > 0
@@ -175,8 +170,8 @@ const MauticCampaignsContainer = ({ clientId }) => {
                     readPercentage > 75
                       ? "bg-green-100 text-green-800"
                       : readPercentage > 50
-                      ? "bg-yellow-100 text-yellow-800"
-                      : "bg-red-100 text-red-800"
+                        ? "bg-yellow-100 text-yellow-800"
+                        : "bg-red-100 text-red-800"
                   }`}
                 >
                   {readPercentage}%
@@ -237,8 +232,8 @@ const MauticCampaignsContainer = ({ clientId }) => {
                             readPercentage > 75
                               ? "bg-gradient-to-br from-green-50 to-emerald-100 border-green-300"
                               : readPercentage > 50
-                              ? "bg-gradient-to-br from-yellow-50 to-amber-100 border-yellow-300"
-                              : "bg-gradient-to-br from-red-50 to-rose-100 border-red-300"
+                                ? "bg-gradient-to-br from-yellow-50 to-amber-100 border-yellow-300"
+                                : "bg-gradient-to-br from-red-50 to-rose-100 border-red-300"
                           }`}
                         >
                           <div className="flex items-center gap-2 mb-2">
@@ -247,8 +242,8 @@ const MauticCampaignsContainer = ({ clientId }) => {
                                 readPercentage > 75
                                   ? "text-green-600"
                                   : readPercentage > 50
-                                  ? "text-yellow-600"
-                                  : "text-red-600"
+                                    ? "text-yellow-600"
+                                    : "text-red-600"
                               }`}
                             />
                             <div
@@ -256,8 +251,8 @@ const MauticCampaignsContainer = ({ clientId }) => {
                                 readPercentage > 75
                                   ? "text-green-700"
                                   : readPercentage > 50
-                                  ? "text-yellow-700"
-                                  : "text-red-700"
+                                    ? "text-yellow-700"
+                                    : "text-red-700"
                               }`}
                             >
                               Read Rate
@@ -268,8 +263,8 @@ const MauticCampaignsContainer = ({ clientId }) => {
                               readPercentage > 75
                                 ? "text-green-800"
                                 : readPercentage > 50
-                                ? "text-yellow-800"
-                                : "text-red-800"
+                                  ? "text-yellow-800"
+                                  : "text-red-800"
                             }`}
                           >
                             {readPercentage}%
@@ -425,8 +420,8 @@ const MauticCampaignsContainer = ({ clientId }) => {
                 totalReadPercentage > 75
                   ? "bg-gradient-to-r from-green-100 to-emerald-100 border-green-400"
                   : totalReadPercentage > 50
-                  ? "bg-gradient-to-r from-yellow-100 to-amber-100 border-yellow-400"
-                  : "bg-gradient-to-r from-red-100 to-rose-100 border-red-400"
+                    ? "bg-gradient-to-r from-yellow-100 to-amber-100 border-yellow-400"
+                    : "bg-gradient-to-r from-red-100 to-rose-100 border-red-400"
               }`}
             >
               <div className="flex items-center justify-between">
@@ -436,8 +431,8 @@ const MauticCampaignsContainer = ({ clientId }) => {
                       totalReadPercentage > 75
                         ? "bg-green-200"
                         : totalReadPercentage > 50
-                        ? "bg-yellow-200"
-                        : "bg-red-200"
+                          ? "bg-yellow-200"
+                          : "bg-red-200"
                     }`}
                   >
                     <TrendingUp
@@ -445,8 +440,8 @@ const MauticCampaignsContainer = ({ clientId }) => {
                         totalReadPercentage > 75
                           ? "text-green-800"
                           : totalReadPercentage > 50
-                          ? "text-yellow-800"
-                          : "text-red-800"
+                            ? "text-yellow-800"
+                            : "text-red-800"
                       }`}
                     />
                   </div>
@@ -459,8 +454,8 @@ const MauticCampaignsContainer = ({ clientId }) => {
                     totalReadPercentage > 75
                       ? "text-green-900"
                       : totalReadPercentage > 50
-                      ? "text-yellow-900"
-                      : "text-red-900"
+                        ? "text-yellow-900"
+                        : "text-red-900"
                   }`}
                 >
                   {totalReadPercentage}%
