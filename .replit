@@ -1,0 +1,38 @@
+modules = ["nodejs-20"]
+[[ports]]
+localPort = 5173
+externalPort = 80
+
+[[ports]]
+localPort = 3000
+externalPort = 3000
+
+[agent]
+expertMode = true
+
+[nix]
+channel = "stable-25_05"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Backend API"
+
+[[workflows.workflow]]
+name = "Backend API"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd backend && npm run start"
+waitForPort = 3000
+
+[workflows.workflow.metadata]
+outputType = "console"
