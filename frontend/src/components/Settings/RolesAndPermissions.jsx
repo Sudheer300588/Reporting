@@ -27,6 +27,13 @@ const RolesAndPermissions = () => {
     try {
       setLoading(true);
       const response = await fetchRoles();
+      console.log("Roles loaded from backend:", response.data.data); // Debugging log
+
+      // Verify isTeamManager values
+      response.data.data.forEach((role) => {
+        console.log(`Role: ${role.name}, isTeamManager: ${role.isTeamManager}`); // Debugging log
+      });
+
       setRoles(response.data.data || []);
       setError(null);
     } catch (err) {
@@ -39,10 +46,13 @@ const RolesAndPermissions = () => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    const newValue = type === "checkbox" ? checked : value;
+    console.log(`Field changed: ${name}, New Value: ${newValue}`); // Debugging log
     setForm((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: newValue,
     }));
+    console.log("Updated form state:", { ...form, [name]: newValue }); // Debugging log
   };
 
   const handleNewRole = () => {
@@ -82,11 +92,15 @@ const RolesAndPermissions = () => {
         permissions: form.fullAccess ? {} : permissions,
       };
 
+      console.log("Saving role with data:", data); // Debugging log
+
       if (editingRole) {
-        await updateRole(editingRole.id, data);
+        const updatedRole = await updateRole(editingRole.id, data);
+        console.log("Updated role from backend:", updatedRole); // Debugging log
         alert("Role updated successfully!");
       } else {
-        await createRole(data);
+        const newRole = await createRole(data);
+        console.log("Created role from backend:", newRole); // Debugging log
         alert("Role created successfully!");
       }
 

@@ -104,7 +104,7 @@ router.get('/:id', authenticate, requireAdmin, async (req, res) => {
 
 router.post('/', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { name, description, fullAccess, permissions } = req.body;
+    const { name, description, fullAccess, permissions, isTeamManager } = req.body;
 
     if (!name || name.trim() === '') {
       return res.status(400).json({
@@ -134,7 +134,8 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
         description: description || null,
         fullAccess: fullAccess || false,
         permissions: validatedPermissions,
-        isSystem: false
+        isSystem: false,
+        isTeamManager: isTeamManager || false // Added isTeamManager field
       }
     });
 
