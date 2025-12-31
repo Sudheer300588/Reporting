@@ -1,0 +1,2 @@
+import{ak as e}from"./index-CPERY6Kl.js";const t=()=>e.jsx("div",{className:"max-w-7xl pb-4 mx-auto px-4 sm:px-6 lg:px-8 animate-fade-in",children:e.jsx("div",{className:"card",children:e.jsxs("div",{className:"flex flex-col justify-center items-center h-80",children:[e.jsx("h1",{className:"text-2xl font-bold text-gray-900",children:"Notifications"}),e.jsx("p",{className:"text-gray-600 mt-1",children:"Coming Soon..."})]})})});export{t as default};
+//# sourceMappingURL=Notifications-BUkt7tby.js.map

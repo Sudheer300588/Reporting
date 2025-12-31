@@ -50,6 +50,26 @@ The `frontend/src/components/Settings/` directory houses self-contained componen
 #### Database
 Supports both MySQL and PostgreSQL through Prisma, with a `switch-database.sh` script for easy configuration. The active schema (`backend/prisma/schema.prisma`) is dynamically updated from provider-specific templates.
 
+#### Directory Structure (CI/CD Ready - Dec 2024)
+```
+/
+├── backend/           # Node.js Express API
+│   ├── prisma/        # Database schema & migrations
+│   ├── routes/        # API routes
+│   ├── services/      # Business logic
+│   └── server.js      # Entry point
+├── frontend/          # React + Vite frontend
+│   ├── src/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   └── utils/     # Shared utilities (permissions.js)
+│   └── vite.config.js
+├── deploy.sh          # Multi-site deployment script
+├── docker-compose.yml # Container orchestration
+├── setup.sh           # Initial setup script
+└── start.sh           # Quick start script
+```
+
 #### Deployment
 An interactive `deploy.sh` script facilitates multi-site server deployments, handling database configuration, security key generation, frontend build, database migrations, and application startup via PM2.
 
