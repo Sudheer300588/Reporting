@@ -108,12 +108,17 @@ router.post('/', authenticate, requirePermission('Users', 'Create'), validate(cr
       userData.phone = phone;
     }
 
-    // Handle manager assignment
+    // Handle manager assignment - validate each ID
     if (managerIds && Array.isArray(managerIds) && managerIds.length > 0) {
-      // Use provided manager IDs
-      userData.managers = {
-        connect: managerIds.map(id => ({ id: parseInt(id) }))
-      };
+      const validManagerIds = managerIds
+        .map(id => parseInt(id))
+        .filter(id => !isNaN(id) && id > 0);
+      
+      if (validManagerIds.length > 0) {
+        userData.managers = {
+          connect: validManagerIds.map(id => ({ id }))
+        };
+      }
     } else if (!hasFullAccess(currentUser)) {
       // Connect the creator as manager if they don't have full access and no managers specified
       userData.managers = {
@@ -471,9 +476,13 @@ router.put('/:id', authenticate, canManageUser, ensureOwnerGuard(), async (req, 
 
     // Handle manager assignment updates
     if (managerIds !== undefined && Array.isArray(managerIds) && hasFullAccess(currentUser)) {
-      // Replace managers with new list
+      // Replace managers with new list - validate each ID
+      const validManagerIds = managerIds
+        .map(id => parseInt(id))
+        .filter(id => !isNaN(id) && id > 0);
+      
       updateData.managers = {
-        set: managerIds.map(id => ({ id: parseInt(id) }))
+        set: validManagerIds.map(id => ({ id }))
       };
     }
 
