@@ -474,6 +474,28 @@ router.post("/clear-and-resync", async (req, res) => {
   }
 });
 
+// Rebuild campaigns from existing records (repairs missing campaign entries)
+router.post("/rebuild-campaigns", async (req, res) => {
+  try {
+    logger.info("Rebuilding campaigns from existing records...");
+    
+    const result = await dataService.rebuildCampaignsFromRecords();
+    
+    res.json({
+      success: true,
+      message: `Rebuilt ${result.campaignsCreated} campaigns, linked ${result.campaignsLinked} to clients`,
+      data: result,
+    });
+  } catch (error) {
+    logger.error("Error rebuilding campaigns:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to rebuild campaigns",
+      error: error.message,
+    });
+  }
+});
+
 // Health check
 router.get("/health", (req, res) => {
   res.json({

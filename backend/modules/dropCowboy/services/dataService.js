@@ -46,18 +46,37 @@ class DataService {
               where: { clientType: "mautic" },
             });
 
-            // Sort by name length (longest first) to avoid "JAE" matching before "JAE Automation"
+            // Sort by name length (longest first) to prioritize more specific matches
             const sortedClients = mauticClients.sort((a, b) => b.name.length - a.name.length);
 
-            // Find the first Mautic client that matches the campaign name prefix
+            const campaignNameLower = campaign.campaignName.toLowerCase();
+
+            // Strategy 1: Try exact prefix match (case-insensitive)
             let matchedClient = sortedClients.find((client) =>
-              campaign.campaignName.startsWith(client.name)
+              campaignNameLower.startsWith(client.name.toLowerCase())
             );
+
+            // Strategy 2: Try matching first word/token of client name
+            if (!matchedClient) {
+              matchedClient = sortedClients.find((client) => {
+                const firstWord = client.name.split(/\s+/)[0].toLowerCase();
+                return firstWord.length >= 3 && campaignNameLower.startsWith(firstWord);
+              });
+            }
+
+            // Strategy 3: Check if any significant part of client name appears in campaign name
+            if (!matchedClient) {
+              matchedClient = sortedClients.find((client) => {
+                const clientWords = client.name.toLowerCase().split(/\s+/);
+                const significantWord = clientWords.find(word => word.length >= 3);
+                return significantWord && campaignNameLower.includes(significantWord);
+              });
+            }
 
             if (matchedClient) {
               clientId = matchedClient.id;
               logger.debug(
-                `ℹ️ Matched Mautic client: ${matchedClient.name} (ID: ${clientId})`
+                `ℹ️ Matched Mautic client: ${matchedClient.name} (ID: ${clientId}) for campaign: ${campaign.campaignName}`
               );
             } else {
               // No Mautic client matched - set clientId to null (do NOT create dropcowboy client)
@@ -907,6 +926,111 @@ class DataService {
       return updatedCampaign;
     } catch (error) {
       logger.error("Error unlinking campaign from client:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Rebuild missing campaigns from existing records and re-link to clients
+   * This repairs data when campaigns weren't created during sync
+   */
+  async rebuildCampaignsFromRecords() {
+    try {
+      logger.info("🔧 Rebuilding campaigns from existing records...");
+
+      // Get all distinct campaigns from records that don't have a campaign entry
+      const distinctCampaigns = await prisma.dropCowboyCampaignRecord.findMany({
+        distinct: ["campaignId"],
+        select: {
+          campaignId: true,
+          campaignName: true,
+        },
+      });
+
+      // Get Mautic clients for matching
+      const mauticClients = await prisma.client.findMany({
+        where: { clientType: "mautic" },
+      });
+      const sortedClients = mauticClients.sort((a, b) => b.name.length - a.name.length);
+
+      let created = 0;
+      let linked = 0;
+
+      for (const campaign of distinctCampaigns) {
+        // Check if campaign already exists
+        const existing = await prisma.dropCowboyCampaign.findUnique({
+          where: { campaignId: campaign.campaignId },
+        });
+
+        const campaignNameLower = campaign.campaignName.toLowerCase();
+
+        // Match client using same logic as saveCampaignData
+        let matchedClient = sortedClients.find((client) =>
+          campaignNameLower.startsWith(client.name.toLowerCase())
+        );
+
+        if (!matchedClient) {
+          matchedClient = sortedClients.find((client) => {
+            const firstWord = client.name.split(/\s+/)[0].toLowerCase();
+            return firstWord.length >= 3 && campaignNameLower.startsWith(firstWord);
+          });
+        }
+
+        if (!matchedClient) {
+          matchedClient = sortedClients.find((client) => {
+            const clientWords = client.name.toLowerCase().split(/\s+/);
+            const significantWord = clientWords.find(word => word.length >= 3);
+            return significantWord && campaignNameLower.includes(significantWord);
+          });
+        }
+
+        const clientId = matchedClient ? matchedClient.id : null;
+
+        // Get record count
+        const recordCount = await prisma.dropCowboyCampaignRecord.count({
+          where: { campaignId: campaign.campaignId },
+        });
+
+        if (!existing) {
+          // Create new campaign
+          await prisma.dropCowboyCampaign.create({
+            data: {
+              campaignId: campaign.campaignId,
+              campaignName: campaign.campaignName,
+              clientId: clientId,
+              recordCount: recordCount,
+            },
+          });
+          created++;
+          if (clientId) linked++;
+          logger.debug(`   ✅ Created campaign: ${campaign.campaignName} (${recordCount} records) → ${matchedClient?.name || "unlinked"}`);
+        } else if (!existing.clientId && clientId) {
+          // Update existing campaign with client link
+          await prisma.dropCowboyCampaign.update({
+            where: { campaignId: campaign.campaignId },
+            data: { clientId: clientId, recordCount: recordCount },
+          });
+          linked++;
+          logger.debug(`   🔗 Linked existing campaign: ${campaign.campaignName} → ${matchedClient.name}`);
+        } else {
+          // Just update record count
+          await prisma.dropCowboyCampaign.update({
+            where: { campaignId: campaign.campaignId },
+            data: { recordCount: recordCount },
+          });
+        }
+      }
+
+      logger.info(`✅ Rebuild complete: ${created} campaigns created, ${linked} campaigns linked to clients`);
+
+      return {
+        success: true,
+        campaignsCreated: created,
+        campaignsLinked: linked,
+        totalCampaigns: distinctCampaigns.length,
+      };
+    } catch (error) {
+      logger.error("❌ Error rebuilding campaigns:", error);
       throw error;
     }
   }
