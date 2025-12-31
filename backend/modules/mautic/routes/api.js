@@ -1300,10 +1300,34 @@ router.get("/reports", async (req, res) => {
  * GET /api/mautic/sync/status
  * Get current sync status
  */
-router.get("/sync/status", (req, res) => {
+router.get("/sync/status", async (req, res) => {
   const elapsedSeconds = isSyncInProgress
     ? Math.floor((Date.now() - currentSyncStartTime) / 1000)
     : 0;
+
+  // Get last successful sync from database
+  let lastSyncAt = null;
+  try {
+    const lastSync = await prisma.syncLog.findFirst({
+      where: {
+        source: 'mautic',
+        status: 'success'
+      },
+      orderBy: { syncCompletedAt: 'desc' }
+    });
+    lastSyncAt = lastSync?.syncCompletedAt || null;
+    
+    // If no sync log, check MauticClient lastSyncAt as fallback
+    if (!lastSyncAt) {
+      const client = await prisma.mauticClient.findFirst({
+        where: { lastSyncAt: { not: null } },
+        orderBy: { lastSyncAt: 'desc' }
+      });
+      lastSyncAt = client?.lastSyncAt || null;
+    }
+  } catch (error) {
+    logger.error("Error fetching last sync time:", error);
+  }
 
   res.json({
     success: true,
@@ -1312,6 +1336,7 @@ router.get("/sync/status", (req, res) => {
       elapsedTime: elapsedSeconds,
       startTime: currentSyncStartTime,
       syncType: currentSyncType,
+      lastSyncAt: lastSyncAt,
     },
   });
 });

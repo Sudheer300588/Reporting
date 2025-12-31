@@ -357,7 +357,10 @@ const Dashboard = () => {
                 Email Performance
               </h2>
               <button 
-                onClick={() => navigate('/services')}
+                onClick={() => {
+                  localStorage.setItem('selectedService', 'mautic');
+                  navigate('/services');
+                }}
                 className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1"
               >
                 View All <ArrowRight size={14} />
@@ -421,7 +424,10 @@ const Dashboard = () => {
                 Voicemail Performance
               </h2>
               <button 
-                onClick={() => navigate('/services')}
+                onClick={() => {
+                  localStorage.setItem('selectedService', 'dropcowboy');
+                  navigate('/services');
+                }}
                 className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1"
               >
                 View All <ArrowRight size={14} />
