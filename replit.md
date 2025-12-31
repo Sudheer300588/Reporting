@@ -67,6 +67,19 @@ Real-time sync progress tracking for Mautic data synchronization:
 - **Configurable Backfill**: `MAUTIC_HISTORICAL_MONTHS` env var limits historical backfill depth (default: 12 months)
 - **Concurrent Syncs**: `MAUTIC_CONCURRENT_SYNCS` controls parallel client processing (default: 5)
 
+#### Hierarchical Stats API (Dec 2024)
+A four-tiered stats API for drilling down from application-level to individual email metrics:
+- **Hierarchy**: Application > Client > Campaign > Email
+- **Endpoints**:
+  - `GET /api/mautic/stats/overview` - Application-level: all clients aggregated stats
+  - `GET /api/mautic/clients/:clientId/stats` - Client-level: campaigns and top emails for a client
+  - `GET /api/mautic/campaigns/:campaignId/stats` - Campaign-level: campaign details
+  - `GET /api/mautic/emails/:emailId/stats` - Email-level: granular individual email metrics with optional history
+- **Metrics Available**: sent, read, clicked, bounced, unsubscribed counts + openRate, clickRate, bounceRate, unsubscribeRate percentages
+- **Date Filtering**: All endpoints support `fromDate` and `toDate` query params
+- **Service**: `backend/modules/mautic/services/statsService.js` - shared aggregation helpers with Prisma groupBy/aggregate for efficient N+1-free queries
+- **Note**: Campaigns and Emails are both linked to Clients but not directly to each other in the current schema
+
 #### Modular Settings Components
 The `frontend/src/components/Settings/` directory houses self-contained components for various configurations, such as `RolesAndPermissions`, `MauticSettings`, `NotificationsSettings`, `SmtpCredentials`, `SftpCredentials`, `VicidialCredentials`, and `SiteBranding`. Each component manages its state and API calls, utilizing `useSettings()` for permission checks.
 

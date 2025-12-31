@@ -2,6 +2,7 @@ import logger from '../../../utils/logger.js';
 import express from "express";
 import mauticAPI from "../services/mauticAPI.js";
 import dataService from "../services/dataService.js";
+import statsService from "../services/statsService.js";
 import MauticSchedulerService from "../services/schedulerService.js";
 import encryptionService from "../services/encryption.js";
 import prisma from "../../../prisma/client.js";
@@ -1080,7 +1081,7 @@ router.post("/clients/test-connection", async (req, res) => {
 
 /**
  * GET /api/mautic/dashboard
- * Get dashboard metrics
+ * Get dashboard metrics (legacy - use /stats/overview for new code)
  */
 router.get("/dashboard", async (req, res) => {
   try {
@@ -1096,6 +1097,127 @@ router.get("/dashboard", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch dashboard metrics",
+      error: error.message,
+    });
+  }
+});
+
+// ============================================
+// HIERARCHICAL STATS API
+// Application > Client > Campaign > Email
+// ============================================
+
+/**
+ * GET /api/mautic/stats/overview
+ * Application-level stats - all clients aggregated
+ * Query params: fromDate, toDate
+ */
+router.get("/stats/overview", async (req, res) => {
+  try {
+    const { fromDate, toDate } = req.query;
+    const result = await statsService.getApplicationStats({ fromDate, toDate });
+    res.json(result);
+  } catch (error) {
+    logger.error("Error fetching application stats:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch application stats",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/mautic/clients/:clientId/stats
+ * Client-level stats - all campaigns for this client
+ * Query params: fromDate, toDate, includeCampaigns, page, limit
+ */
+router.get("/clients/:clientId/stats", async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const { fromDate, toDate, includeCampaigns, page, limit } = req.query;
+    
+    const result = await statsService.getClientStats(parseInt(clientId), {
+      fromDate,
+      toDate,
+      includeCampaigns: includeCampaigns !== 'false',
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 20
+    });
+    
+    if (!result.success) {
+      return res.status(404).json(result);
+    }
+    
+    res.json(result);
+  } catch (error) {
+    logger.error("Error fetching client stats:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch client stats",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/mautic/campaigns/:campaignId/stats
+ * Campaign-level stats - all emails in this campaign
+ * Query params: fromDate, toDate, page, limit
+ */
+router.get("/campaigns/:campaignId/stats", async (req, res) => {
+  try {
+    const { campaignId } = req.params;
+    const { fromDate, toDate, page, limit } = req.query;
+    
+    const result = await statsService.getCampaignStats(parseInt(campaignId), {
+      fromDate,
+      toDate,
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 50
+    });
+    
+    if (!result.success) {
+      return res.status(404).json(result);
+    }
+    
+    res.json(result);
+  } catch (error) {
+    logger.error("Error fetching campaign stats:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch campaign stats",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/mautic/emails/:emailId/stats
+ * Email-level stats - individual email (granular entry point)
+ * Query params: includeHistory, fromDate, toDate
+ */
+router.get("/emails/:emailId/stats", async (req, res) => {
+  try {
+    const { emailId } = req.params;
+    const { includeHistory, fromDate, toDate } = req.query;
+    
+    const result = await statsService.getEmailStats(parseInt(emailId), {
+      includeHistory: includeHistory === 'true',
+      fromDate,
+      toDate
+    });
+    
+    if (!result.success) {
+      return res.status(404).json(result);
+    }
+    
+    res.json(result);
+  } catch (error) {
+    logger.error("Error fetching email stats:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch email stats",
       error: error.message,
     });
   }

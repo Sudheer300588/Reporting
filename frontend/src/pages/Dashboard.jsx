@@ -133,13 +133,25 @@ const Dashboard = () => {
 
   const fetchEmailMetrics = async () => {
     try {
-      const response = await axios.get('/api/mautic/dashboard')
+      const response = await axios.get('/api/mautic/stats/overview')
       if (response.data?.success && response.data?.data) {
-        const dashboardData = response.data.data
+        const data = response.data.data
         const metrics = {
-          ...dashboardData.emailStats,
-          topEmails: dashboardData.topEmails || [],
-          overview: dashboardData.overview
+          totalSent: data.stats?.sent || 0,
+          totalRead: data.stats?.read || 0,
+          totalClicked: data.stats?.clicked || 0,
+          totalBounced: data.stats?.bounced || 0,
+          totalUnsubscribed: data.stats?.unsubscribed || 0,
+          avgReadRate: data.stats?.avgOpenRate || 0,
+          avgClickRate: data.stats?.avgClickRate || 0,
+          avgUnsubscribeRate: data.stats?.avgUnsubscribeRate || 0,
+          openRate: data.stats?.openRate || 0,
+          clickRate: data.stats?.clickRate || 0,
+          bounceRate: data.stats?.bounceRate || 0,
+          unsubscribeRate: data.stats?.unsubscribeRate || 0,
+          topEmails: data.topEmails || [],
+          overview: data.overview,
+          clients: data.clients || []
         }
         setEmailMetrics(metrics)
         generateInsights(metrics, 'email')
@@ -267,12 +279,13 @@ const Dashboard = () => {
     return emailMetrics.topEmails.slice(0, 7).map((email, idx) => ({
       name: email.name?.substring(0, 15) || `Email ${idx + 1}`,
       fullName: email.name || `Email ${idx + 1}`,
-      sent: email.sentCount || 0,
-      opened: email.readCount || 0,
-      clicked: email.clickedCount || 0,
+      clientName: email.clientName || '',
+      sent: email.sent || email.sentCount || 0,
+      opened: email.read || email.readCount || 0,
+      clicked: email.clicked || email.clickedCount || 0,
       bounced: email.bounced || 0,
       unsubscribed: email.unsubscribed || 0,
-      openRate: parseFloat(email.readRate || 0),
+      openRate: parseFloat(email.openRate || email.readRate || 0),
       clickRate: parseFloat(email.clickRate || 0),
       unsubRate: parseFloat(email.unsubscribeRate || 0)
     }))
@@ -460,8 +473,9 @@ const Dashboard = () => {
                         if (active && payload && payload.length) {
                           const data = payload[0].payload
                           return (
-                            <div className="bg-white p-3 rounded-lg shadow-lg border text-xs">
-                              <p className="font-semibold text-gray-900 mb-2">{data.fullName}</p>
+                            <div className="bg-white p-3 rounded-lg shadow-lg border text-xs max-w-xs">
+                              <p className="font-semibold text-gray-900 mb-1">{data.fullName}</p>
+                              {data.clientName && <p className="text-gray-500 text-xs mb-2">{data.clientName}</p>}
                               <div className="space-y-1">
                                 <p><span className="text-gray-500">Sent:</span> <span className="font-medium">{formatNumber(data.sent)}</span></p>
                                 <p><span className="text-gray-500">Opened:</span> <span className="font-medium text-blue-600">{formatNumber(data.opened)}</span> ({data.openRate}%)</p>
