@@ -55,6 +55,18 @@ The dashboard provides a comprehensive overview of business metrics with role-aw
 - **Permission Helpers**: `hasFullAccess()`, `hasPermission(module, action)`, `canViewClients()`, `canViewUsers()` for consistent access control
 - **No Hardcoded Roles**: All access control uses dynamic permission helpers, not legacy role checks
 
+#### Enterprise Sync Progress Tracking (Dec 2024)
+Real-time sync progress tracking for Mautic data synchronization:
+- **In-Memory Progress State**: Uses lightweight in-memory tracking (no database changes required)
+- **Progress API**: `/api/mautic/sync/progress` endpoint exposes real-time per-client sync status
+- **SyncProgressPanel UI**: Dashboard displays live progress with batch info, elapsed time, completion percentage
+- **Per-Client Status**: Shows syncing/completed/failed/pending status for each Mautic client
+- **Polling Strategy**: Frontend polls every 3 seconds during active sync, stops when complete
+- **Memory Management**: Automatic cleanup after 5 minutes to prevent memory leaks
+- **Priority-Based Syncing**: Fetches newest data first (months reversed) for faster initial value
+- **Configurable Backfill**: `MAUTIC_HISTORICAL_MONTHS` env var limits historical backfill depth (default: 12 months)
+- **Concurrent Syncs**: `MAUTIC_CONCURRENT_SYNCS` controls parallel client processing (default: 5)
+
 #### Modular Settings Components
 The `frontend/src/components/Settings/` directory houses self-contained components for various configurations, such as `RolesAndPermissions`, `MauticSettings`, `NotificationsSettings`, `SmtpCredentials`, `SftpCredentials`, `VicidialCredentials`, and `SiteBranding`. Each component manages its state and API calls, utilizing `useSettings()` for permission checks.
 
