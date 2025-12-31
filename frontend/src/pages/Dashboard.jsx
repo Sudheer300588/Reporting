@@ -134,9 +134,15 @@ const Dashboard = () => {
   const fetchEmailMetrics = async () => {
     try {
       const response = await axios.get('/api/mautic/dashboard')
-      if (response.data) {
-        setEmailMetrics(response.data)
-        generateInsights(response.data, 'email')
+      if (response.data?.success && response.data?.data) {
+        const dashboardData = response.data.data
+        const metrics = {
+          ...dashboardData.emailStats,
+          topEmails: dashboardData.topEmails || [],
+          overview: dashboardData.overview
+        }
+        setEmailMetrics(metrics)
+        generateInsights(metrics, 'email')
       }
     } catch (error) {
       console.error('Error fetching email metrics:', error)
