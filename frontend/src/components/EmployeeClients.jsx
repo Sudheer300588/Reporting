@@ -3,12 +3,14 @@ import { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import useViewLevel from "../zustand/useViewLevel.js";
+import { usePermissions } from "../utils/permissions.js";
 
 export default function EmployeeClients({ onBack }) {
   const [clients, setClients] = useState([]);
   const [employee, setEmployee] = useState(null);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
+  const { hasFullAccess, isTeamManager, canEditClients } = usePermissions(user);
 
   const { employeesStates } = useViewLevel();
   const { employeeId } = employeesStates;
@@ -73,7 +75,7 @@ export default function EmployeeClients({ onBack }) {
         className="flex items-center text-primary-600 hover:text-primary-700 mb-4"
       >
         <ArrowLeft size={20} className="mr-2" />
-        {user.role === 'superadmin' || user.role === 'manager' ? 'Back to Employees' : 'Back to Dashboard'}
+        {hasFullAccess() || isTeamManager() ? 'Back to Employees' : 'Back to Dashboard'}
       </button>
 
       <div className="card mb-6">
@@ -144,7 +146,7 @@ export default function EmployeeClients({ onBack }) {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {(user?.role === 'superadmin' || user?.role === 'manager') && (
+                      {(hasFullAccess() || isTeamManager()) && canEditClients() && (
                         <button onClick={() => handleUnassign(c.id)} className="px-3 py-1 bg-red-50 text-red-600 rounded-lg hover:bg-red-100">Unassign</button>
                       )}
                     </td>

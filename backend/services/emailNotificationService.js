@@ -1,3 +1,4 @@
+import logger from '../utils/logger.js';
 import nodemailer from 'nodemailer';
 import prisma from '../prisma/client.js';
 
@@ -23,7 +24,7 @@ class EmailNotificationService {
     try {
       const { recipientEmail, recipientName, variables = {} } = data;
       
-      console.log(`🔔 sendActionEmail called for action: ${action}, recipient: ${recipientEmail}`);
+      logger.debug(`🔔 sendActionEmail called for action: ${action}, recipient: ${recipientEmail}`);
       
       if (!recipientEmail) {
         throw new Error('Recipient email is required');
@@ -35,23 +36,23 @@ class EmailNotificationService {
       });
       
       if (!template) {
-        console.warn(`⚠️ No notification template found for action: ${action}`);
+        logger.warn(`⚠️ No notification template found for action: ${action}`);
         return { success: false, message: 'Template not found' };
       }
       
-      console.log(`✓ Template found for ${action}, active: ${template.active}`);
+      logger.debug(`✓ Template found for ${action}, active: ${template.active}`);
       
       if (!template.active) {
-        console.log(`❌ Notification template for action '${action}' is inactive, skipping email`);
+        logger.debug(`❌ Notification template for action '${action}' is inactive, skipping email`);
         return { success: false, message: 'Template is inactive' };
       }
       
       // Check if email notifications are globally enabled
       const settings = await prisma.settings.findFirst() || {};
-      console.log(`✓ Settings check - notifEmailNotifications: ${settings.notifEmailNotifications}`);
+      logger.debug(`✓ Settings check - notifEmailNotifications: ${settings.notifEmailNotifications}`);
       
       if (!settings.notifEmailNotifications) {
-        console.log('❌ Email notifications are globally disabled');
+        logger.debug('❌ Email notifications are globally disabled');
         return { success: false, message: 'Email notifications disabled' };
       }
       
@@ -61,11 +62,11 @@ class EmailNotificationService {
       });
       
       if (!smtpCred) {
-        console.error('❌ No SMTP credentials configured');
+        logger.error('❌ No SMTP credentials configured');
         return { success: false, message: 'SMTP not configured' };
       }
       
-      console.log(`✓ SMTP configured: ${smtpCred.host}:${smtpCred.port}`);
+      logger.debug(`✓ SMTP configured: ${smtpCred.host}:${smtpCred.port}`);
       
       // Create transporter
       const transporter = nodemailer.createTransport({
@@ -112,13 +113,13 @@ class EmailNotificationService {
         }
       });
       
-      console.log(`✅ Email sent successfully to ${recipientEmail} for action: ${action}`);
-      console.log(`   Message ID: ${info.messageId}`);
+      logger.debug(`✅ Email sent successfully to ${recipientEmail} for action: ${action}`);
+      logger.debug(`   Message ID: ${info.messageId}`);
       
       return { success: true, message: 'Email sent successfully', messageId: info.messageId };
       
     } catch (error) {
-      console.error(`❌ Error sending email for action '${action}':`, error);
+      logger.error(`❌ Error sending email for action '${action}':`, error);
       
       // Log failed email attempt
       try {
@@ -133,7 +134,7 @@ class EmailNotificationService {
           }
         });
       } catch (logError) {
-        console.error('Failed to log email error:', logError);
+        logger.error('Failed to log email error:', logError);
       }
       
       return { success: false, message: error.message };
@@ -276,7 +277,7 @@ class EmailNotificationService {
       failed: results.filter(r => r.status === 'rejected' || !r.value.success).length
     };
     
-    console.log(`📧 Bulk email summary for '${action}':`, summary);
+    logger.debug(`📧 Bulk email summary for '${action}':`, summary);
     
     return summary;
   }

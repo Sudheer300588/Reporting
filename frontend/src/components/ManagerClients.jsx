@@ -21,6 +21,24 @@ export default function ManagerClients({ onBack }) {
 
   const { employeesStates } = useViewLevel();
   const { managerId } = employeesStates;
+  
+  // Import permissions - use inline since we need user first
+  const getPermissions = () => {
+    if (!user) return { hasFullAccess: () => false, isTeamManager: () => false };
+    const hasFullAccess = () => {
+      if (user?.customRole?.fullAccess === true) return true;
+      if (!user?.customRoleId && ['superadmin', 'admin'].includes(user?.role)) return true;
+      return false;
+    };
+    const isTeamManager = () => {
+      if (hasFullAccess()) return true;
+      if (user?.customRole?.isTeamManager === true) return true;
+      if (!user?.customRoleId && user?.role === 'manager') return true;
+      return false;
+    };
+    return { hasFullAccess, isTeamManager };
+  };
+  const { hasFullAccess, isTeamManager } = getPermissions();
 
   const fetchClients = async () => {
     try {
@@ -44,13 +62,13 @@ export default function ManagerClients({ onBack }) {
 
   useEffect(() => {
     if (!user) return; // wait for auth to be ready
-    // Guard: only manager or superadmin should access this page
-    if (!['manager', 'superadmin'].includes(user?.role)) {
+    // Guard: only team managers or users with full access should access this page
+    if (!hasFullAccess() && !isTeamManager()) {
       navigate('/dashboard');
       return;
     }
     fetchClients();
-    if (user?.role === 'manager' && parseInt(managerId) === user.id) {
+    if (isTeamManager() && !hasFullAccess() && parseInt(managerId) === user.id) {
       fetchEmployeesForManager(managerId);
     }
   }, [managerId, user]);
@@ -203,7 +221,7 @@ export default function ManagerClients({ onBack }) {
           </div>
         </div>
       </div>
-      {user?.role === 'superadmin' && (
+      {hasFullAccess() && (
         <div className="mb-4 flex justify-end">
           <button
             onClick={() => { fetchAvailableClientsToAssign(); setShowAssignManagerModal(true); }}
@@ -256,8 +274,8 @@ export default function ManagerClients({ onBack }) {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {/* Superadmins can unassign managers from clients */}
-                      {user?.role === 'superadmin' && (
+                      {/* Users with full access can unassign managers from clients */}
+                      {hasFullAccess() && (
                         <button
                           onClick={() => handleUnassignManager(c.id)}
                           className="px-3 py-1 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
@@ -265,8 +283,8 @@ export default function ManagerClients({ onBack }) {
                           Unassign
                         </button>
                       )}
-                      {/* Manager can assign employees to this client (if viewing own manager page) */}
-                      {user?.role === 'manager' && parseInt(managerId) === user.id && (
+                      {/* Team manager can assign employees to this client (if viewing own manager page) */}
+                      {isTeamManager() && !hasFullAccess() && parseInt(managerId) === user.id && (
                         <button
                           onClick={() => {
                             setSelectedClientForAssign(c);

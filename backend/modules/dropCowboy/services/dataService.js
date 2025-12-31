@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import { format, parseISO, isWithinInterval } from "date-fns";
 import prisma from "../../../prisma/client.js";
 import { Prisma } from "@prisma/client";
@@ -7,7 +8,7 @@ import { cli } from "winston/lib/winston/config/index.js";
 class DataService {
   async saveCampaignData(campaignData) {
     try {
-      console.log(`💾 Saving ${campaignData.length} campaigns to database...`);
+      logger.debug(`💾 Saving ${campaignData.length} campaigns to database...`);
       let totalRecordsInserted = 0;
 
       // Get already imported files
@@ -19,7 +20,7 @@ class DataService {
       for (const campaign of campaignData) {
         // If this file was already imported, skip
         if (importedFilenames.has(campaign.filename)) {
-          console.log(
+          logger.debug(
             `   ⏩ Skipping already imported file: ${campaign.filename}`
           );
           continue;
@@ -55,18 +56,18 @@ class DataService {
 
             if (matchedClient) {
               clientId = matchedClient.id;
-              console.log(
+              logger.debug(
                 `ℹ️ Matched Mautic client: ${matchedClient.name} (ID: ${clientId})`
               );
             } else {
               // No Mautic client matched - set clientId to null (do NOT create dropcowboy client)
-              console.log(
+              logger.debug(
                 `⚠️  No Mautic client matched for campaign: ${campaign.campaignName}`
               );
             }
           }
         } catch (clientError) {
-          console.error(
+          logger.error(
             `   ⚠️  Error matching campaign to client: ${clientError.message}`
           );
         }
@@ -86,7 +87,7 @@ class DataService {
           },
         });
 
-        console.log(
+        logger.debug(
           `   ✓ Campaign: ${campaign.campaignName} (${campaign.recordCount} records)`
         );
 
@@ -103,7 +104,7 @@ class DataService {
           ),
         ];
 
-        console.log(
+        logger.debug(
           `     - Checking ${uniquePhoneNumbers.length} unique phones × ${uniqueDates.length} unique dates`
         );
 
@@ -151,7 +152,7 @@ class DataService {
           return !existingKeys.has(key);
         });
 
-        console.log(
+        logger.debug(
           `     - Found ${existingRecords.length} existing records, inserting ${newRecords.length} new records`
         );
 
@@ -205,7 +206,7 @@ class DataService {
             totalRecordsInserted += batch.length;
 
             if (newRecords.length > batchSize) {
-              console.log(
+              logger.debug(
                 `     - Inserted ${Math.min(
                   i + batchSize,
                   newRecords.length
@@ -223,13 +224,13 @@ class DataService {
         });
       }
 
-      console.log(`✅ Total records inserted: ${totalRecordsInserted}`);
+      logger.debug(`✅ Total records inserted: ${totalRecordsInserted}`);
 
       // Get aggregated metrics from database
       const metrics = await this.getMetrics();
       return metrics;
     } catch (error) {
-      console.error("Error saving campaign data:", error);
+      logger.error("Error saving campaign data:", error);
       throw error;
     }
   }
@@ -490,7 +491,7 @@ class DataService {
           lastSync?.syncCompletedAt?.toISOString() || new Date().toISOString(),
       };
     } catch (error) {
-      console.error("Error getting metrics:", error);
+      logger.error("Error getting metrics:", error);
       // Return empty data structure on error
       return {
         campaigns: [],
@@ -529,7 +530,7 @@ class DataService {
         },
       });
     } catch (error) {
-      console.error("Error logging sync:", error);
+      logger.error("Error logging sync:", error);
     }
   }
 
@@ -551,7 +552,7 @@ class DataService {
         error: log.errorMessage,
       }));
     } catch (error) {
-      console.error("Error fetching sync logs:", error);
+      logger.error("Error fetching sync logs:", error);
       return [];
     }
   }
@@ -581,7 +582,7 @@ class DataService {
         // Convert YYYY-MM-DD string to Date object (start of day in UTC)
         const startDate = new Date(filters.startDate + "T00:00:00.000Z");
         where.date = { gte: startDate };
-        console.log(
+        logger.debug(
           `🔍 Date filter - startDate: ${
             filters.startDate
           } → ${startDate.toISOString()}`
@@ -591,7 +592,7 @@ class DataService {
         // Convert YYYY-MM-DD string to Date object (end of day in UTC)
         const endDate = new Date(filters.endDate + "T23:59:59.999Z");
         where.date = { ...where.date, lte: endDate };
-        console.log(
+        logger.debug(
           `🔍 Date filter - endDate: ${
             filters.endDate
           } → ${endDate.toISOString()}`
@@ -682,11 +683,11 @@ class DataService {
 
       // Get total count
       const total = await prisma.dropCowboyCampaignRecord.count({ where });
-      console.log(
+      logger.debug(
         `📊 Filtered records count: ${total} records matching criteria`
       );
       if (filters.startDate || filters.endDate) {
-        console.log(
+        logger.debug(
           `📅 Date range applied: ${filters.startDate || "any"} to ${
             filters.endDate || "any"
           }`
@@ -803,7 +804,7 @@ class DataService {
         })),
       };
     } catch (error) {
-      console.error("Error getting paginated records:", error);
+      logger.error("Error getting paginated records:", error);
       return {
         total: 0,
         metrics: {
@@ -847,7 +848,7 @@ class DataService {
 
       return campaigns;
     } catch (error) {
-      console.error("Error fetching all campaigns:", error);
+      logger.error("Error fetching all campaigns:", error);
       throw error;
     }
   }
@@ -879,13 +880,13 @@ class DataService {
         },
       });
 
-      console.log(
+      logger.debug(
         `✅ Campaign "${updatedCampaign.campaignName}" linked to client "${client.name}"`
       );
 
       return updatedCampaign;
     } catch (error) {
-      console.error("Error linking campaign to client:", error);
+      logger.error("Error linking campaign to client:", error);
       throw error;
     }
   }
@@ -899,13 +900,13 @@ class DataService {
         },
       });
 
-      console.log(
+      logger.debug(
         `✅ Campaign "${updatedCampaign.campaignName}" unlinked from client`
       );
 
       return updatedCampaign;
     } catch (error) {
-      console.error("Error unlinking campaign from client:", error);
+      logger.error("Error unlinking campaign from client:", error);
       throw error;
     }
   }
@@ -916,23 +917,23 @@ class DataService {
    */
   async clearAllDropCowboyData() {
     try {
-      console.log("🗑️  Clearing all DropCowboy data from database...");
+      logger.debug("🗑️  Clearing all DropCowboy data from database...");
 
       // Delete in correct order due to foreign key constraints
       // 1. Delete campaign records first (child table)
       const deletedRecords = await prisma.dropCowboyCampaignRecord.deleteMany(
         {}
       );
-      console.log(`   ✅ Deleted ${deletedRecords.count} campaign records`);
+      logger.debug(`   ✅ Deleted ${deletedRecords.count} campaign records`);
 
       // 2. Delete campaigns
       const deletedCampaigns = await prisma.dropCowboyCampaign.deleteMany({});
-      console.log(`   ✅ Deleted ${deletedCampaigns.count} campaigns`);
+      logger.debug(`   ✅ Deleted ${deletedCampaigns.count} campaigns`);
 
       // 3. Delete imported files tracking
       const deletedImportedFiles = await prisma.importedFile.deleteMany({});
 
-      console.log("✅ All DropCowboy data cleared successfully");
+      logger.debug("✅ All DropCowboy data cleared successfully");
 
       return {
         success: true,
@@ -941,7 +942,7 @@ class DataService {
         importedFilesDeleted: deletedImportedFiles.count,
       };
     } catch (error) {
-      console.error("❌ Error clearing DropCowboy data:", error);
+      logger.error("❌ Error clearing DropCowboy data:", error);
       throw error;
     }
   }

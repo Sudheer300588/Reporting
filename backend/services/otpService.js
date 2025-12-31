@@ -385,7 +385,7 @@ class OTPService {
 
       await transporter.sendMail(mailOptions);
 
-      console.log(`✅ OTP email sent to ${email} for ${purpose}`);
+      logger.debug(`✅ OTP email sent to ${email} for ${purpose}`);
 
       return {
         success: true,
@@ -393,7 +393,7 @@ class OTPService {
       };
 
     } catch (error) {
-      console.error('Error sending OTP email:', error);
+      logger.error('Error sending OTP email:', error);
       return {
         success: false,
         message: 'Failed to send OTP email',
@@ -442,11 +442,11 @@ class OTPService {
         }
       });
 
-      console.log(`🧹 Cleaned up ${result.count} expired OTPs`);
+      logger.debug(`🧹 Cleaned up ${result.count} expired OTPs`);
       return { success: true, deleted: result.count };
 
     } catch (error) {
-      console.error('Error cleaning up OTPs:', error);
+      logger.error('Error cleaning up OTPs:', error);
       return { success: false, error: error.message };
     }
   }

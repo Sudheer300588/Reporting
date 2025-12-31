@@ -98,7 +98,7 @@ router.get('/dashboard', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching dashboard stats:', error);
+    logger.error('Error fetching dashboard stats:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch dashboard statistics',
@@ -348,7 +348,7 @@ router.post('/smtp-credentials/test', async (req, res) => {
       messageId: info.messageId
     });
   } catch (error) {
-    console.error('SMTP test error:', error);
+    logger.error('SMTP test error:', error);
     res.status(500).json({ 
       success: false, 
       message: error.message || 'Failed to send test email',
@@ -521,7 +521,7 @@ router.get('/users', async (req, res) => {
       data: users
     });
   } catch (error) {
-    console.error('Error fetching users:', error);
+    logger.error('Error fetching users:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch users',
@@ -682,7 +682,7 @@ router.post('/users', async (req, res) => {
     // Send welcome email with credentials to the new user
     const { notifyUserCreated } = await import('../utils/emailHelper.js');
     notifyUserCreated(user, req.user, password).catch(err => 
-      console.error('Failed to send user welcome email:', err.message)
+      logger.error('Failed to send user welcome email:', err.message)
     );
 
     res.status(201).json({
@@ -691,7 +691,7 @@ router.post('/users', async (req, res) => {
       data: user
     });
   } catch (error) {
-    console.error('Error creating user:', error);
+    logger.error('Error creating user:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to create user',
@@ -774,7 +774,7 @@ router.patch('/users/:id/toggle', async (req, res) => {
       data: user
     });
   } catch (error) {
-    console.error('Error toggling user status:', error);
+    logger.error('Error toggling user status:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to toggle user status',
@@ -848,7 +848,7 @@ router.patch('/users/:id', async (req, res) => {
       data: user
     });
   } catch (error) {
-    console.error('Error updating user:', error);
+    logger.error('Error updating user:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update user',
@@ -925,7 +925,7 @@ router.get('/clients', async (req, res) => {
       data: clients
     });
   } catch (error) {
-    console.error('Error fetching clients:', error);
+    logger.error('Error fetching clients:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch clients',
@@ -1055,7 +1055,7 @@ router.post('/clients', async (req, res) => {
       data: client
     });
   } catch (error) {
-    console.error('Error creating client:', error);
+    logger.error('Error creating client:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to create client',
@@ -1134,7 +1134,7 @@ router.post('/clients/:id/assign', async (req, res) => {
       data: assignments
     });
   } catch (error) {
-    console.error('Error assigning users to client:', error);
+    logger.error('Error assigning users to client:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to assign users to client',
@@ -1201,7 +1201,7 @@ router.delete('/clients/:id/unassign', async (req, res) => {
       message: 'Users unassigned from client successfully'
     });
   } catch (error) {
-    console.error('Error unassigning users from client:', error);
+    logger.error('Error unassigning users from client:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to unassign users from client',
@@ -1278,7 +1278,7 @@ router.get('/employees', async (req, res) => {
       data: employees
     });
   } catch (error) {
-    console.error('Error fetching employees:', error);
+    logger.error('Error fetching employees:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch employees',
@@ -1336,7 +1336,7 @@ router.get('/activities', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching activities:', error);
+    logger.error('Error fetching activities:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch activities',
@@ -1471,7 +1471,7 @@ router.post('/send-maintenance-email', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error sending maintenance email:', error);
+    logger.error('Error sending maintenance email:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Failed to send maintenance email', 
@@ -1544,9 +1544,9 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 // New: upload single file to categorized subfolder (favicon|logo|login-bg)
 router.post('/site-config/upload', upload.single('file'), async (req, res) => {
   try {
-    console.log('[site-config/upload] called by user:', req.user?.id);
+    logger.debug('[site-config/upload] called by user:', req.user?.id);
     const { type } = req.body; // expected: favicon | logo | loginBg
-    console.log('[site-config/upload] type:', type);
+    logger.debug('[site-config/upload] type:', type);
 
     if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
 
@@ -1565,14 +1565,14 @@ router.post('/site-config/upload', upload.single('file'), async (req, res) => {
     }
 
     if (!req.file.mimetype.startsWith('image/')) {
-      console.warn('[site-config/upload] invalid mimetype', req.file.mimetype);
+      logger.warn('[site-config/upload] invalid mimetype', req.file.mimetype);
       return res.status(400).json({ success: false, message: 'Only image uploads are allowed' });
     }
 
     const targetName = req.body?.targetName;
     const overwrite = req.body?.overwrite === 'true' || req.body?.overwrite === true;
     const alias = req.body?.alias === 'true' || req.body?.alias === true;
-    console.log('[site-config/upload] targetName, overwrite, alias:', targetName, overwrite, alias);
+    logger.debug('[site-config/upload] targetName, overwrite, alias:', targetName, overwrite, alias);
 
     // Build options for saveFileToFrontendAssets
     const saveOpts = { prefix, subfolder };
@@ -1587,10 +1587,10 @@ router.post('/site-config/upload', upload.single('file'), async (req, res) => {
     }
 
     const publicPath = await saveFileToFrontendAssets(req.file.buffer, req.file.originalname, saveOpts);
-    console.log('[site-config/upload] saved file at', publicPath);
+    logger.debug('[site-config/upload] saved file at', publicPath);
     res.json({ success: true, data: { path: publicPath } });
   } catch (err) {
-    console.error('[site-config/upload] error', err);
+    logger.error('[site-config/upload] error', err);
     res.status(500).json({ success: false, message: 'Failed to upload file', error: err.message });
   }
 });
@@ -1598,7 +1598,7 @@ router.post('/site-config/upload', upload.single('file'), async (req, res) => {
 // PUT update site config (upsert semantics for single global config)
 router.put('/site-config', async (req, res) => {
   try {
-    console.log('[site-config] PUT called by user:', req.user?.id, 'body:', req.body);
+    logger.debug('[site-config] PUT called by user:', req.user?.id, 'body:', req.body);
     const {
       siteTitle,
       faviconPath,
@@ -1626,7 +1626,7 @@ router.put('/site-config', async (req, res) => {
           loginBgGradientTo: loginBgGradientTo !== undefined ? loginBgGradientTo : existing.loginBgGradientTo
         }
       });
-      console.log('[site-config] updated:', updated);
+      logger.debug('[site-config] updated:', updated);
       return res.json({ success: true, data: updated });
     }
 
@@ -1644,10 +1644,10 @@ router.put('/site-config', async (req, res) => {
         createdById: req.user?.id || null
       }
     });
-    console.log('[site-config] created:', created);
+    logger.debug('[site-config] created:', created);
     res.json({ success: true, data: created });
   } catch (err) {
-    console.error('[site-config] error saving config', err);
+    logger.error('[site-config] error saving config', err);
     res.status(500).json({ success: false, message: 'Failed to save site config', error: err.message });
   }
 });
@@ -1655,12 +1655,12 @@ router.put('/site-config', async (req, res) => {
 // GET current site customization
 router.get('/site-customization', async (req, res) => {
   try {
-    console.log('[site-customization] GET called by user:', req.user?.id);
+    logger.debug('[site-customization] GET called by user:', req.user?.id);
     const site = await prisma.siteSettings.findFirst({ orderBy: { updatedAt: 'desc' } });
-    console.log('[site-customization] GET db result:', site);
+    logger.debug('[site-customization] GET db result:', site);
     res.json({ success: true, data: site });
   } catch (error) {
-    console.error('[site-customization] Error fetching site customization:', error);
+    logger.error('[site-customization] Error fetching site customization:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch site customization', error: error.message });
   }
 });
@@ -1674,43 +1674,43 @@ router.post('/site-customization', upload.fields([
   try {
     const { siteTitle, loginBgType, loginBgColor, loginBgGradientFrom, loginBgGradientTo } = req.body;
 
-    console.log('[site-customization] POST called by user:', req.user?.id);
-    console.log('[site-customization] POST body:', { siteTitle, loginBgType, loginBgColor, loginBgGradientFrom, loginBgGradientTo });
+    logger.debug('[site-customization] POST called by user:', req.user?.id);
+    logger.debug('[site-customization] POST body:', { siteTitle, loginBgType, loginBgColor, loginBgGradientFrom, loginBgGradientTo });
 
     // Save files if provided
     const files = req.files || {};
-    console.log('[site-customization] Received files keys:', Object.keys(files));
+    logger.debug('[site-customization] Received files keys:', Object.keys(files));
     let faviconPath, logoPath, loginBgImagePath;
     // Basic validation: ensure uploaded files are images
     if (files.favicon && files.favicon[0]) {
-      console.log('[site-customization] favicon file mime:', files.favicon[0].mimetype, 'originalName:', files.favicon[0].originalname);
+      logger.debug('[site-customization] favicon file mime:', files.favicon[0].mimetype, 'originalName:', files.favicon[0].originalname);
       if (!files.favicon[0].mimetype.startsWith('image/')) {
-        console.warn('[site-customization] favicon invalid mime');
+        logger.warn('[site-customization] favicon invalid mime');
         return res.status(400).json({ success: false, message: 'Favicon must be an image' });
       }
-      console.log('[site-customization] Saving favicon...');
+      logger.debug('[site-customization] Saving favicon...');
       faviconPath = await saveFileToFrontendAssets(files.favicon[0].buffer, files.favicon[0].originalname, { prefix: 'favicon' });
-      console.log('[site-customization] Saved favicon path:', faviconPath);
+      logger.debug('[site-customization] Saved favicon path:', faviconPath);
     }
     if (files.logo && files.logo[0]) {
-      console.log('[site-customization] logo file mime:', files.logo[0].mimetype, 'originalName:', files.logo[0].originalname);
+      logger.debug('[site-customization] logo file mime:', files.logo[0].mimetype, 'originalName:', files.logo[0].originalname);
       if (!files.logo[0].mimetype.startsWith('image/')) {
-        console.warn('[site-customization] logo invalid mime');
+        logger.warn('[site-customization] logo invalid mime');
         return res.status(400).json({ success: false, message: 'Logo must be an image' });
       }
-      console.log('[site-customization] Saving logo...');
+      logger.debug('[site-customization] Saving logo...');
       logoPath = await saveFileToFrontendAssets(files.logo[0].buffer, files.logo[0].originalname, { prefix: 'logo' });
-      console.log('[site-customization] Saved logo path:', logoPath);
+      logger.debug('[site-customization] Saved logo path:', logoPath);
     }
     if (files.loginBgImage && files.loginBgImage[0]) {
-      console.log('[site-customization] loginBgImage file mime:', files.loginBgImage[0].mimetype, 'originalName:', files.loginBgImage[0].originalname);
+      logger.debug('[site-customization] loginBgImage file mime:', files.loginBgImage[0].mimetype, 'originalName:', files.loginBgImage[0].originalname);
       if (!files.loginBgImage[0].mimetype.startsWith('image/')) {
-        console.warn('[site-customization] loginBgImage invalid mime');
+        logger.warn('[site-customization] loginBgImage invalid mime');
         return res.status(400).json({ success: false, message: 'Login background must be an image' });
       }
-      console.log('[site-customization] Saving loginBgImage...');
+      logger.debug('[site-customization] Saving loginBgImage...');
       loginBgImagePath = await saveFileToFrontendAssets(files.loginBgImage[0].buffer, files.loginBgImage[0].originalname, { prefix: 'loginbg' });
-      console.log('[site-customization] Saved loginBgImage path:', loginBgImagePath);
+      logger.debug('[site-customization] Saved loginBgImage path:', loginBgImagePath);
     }
 
     // Find existing record
@@ -1749,7 +1749,7 @@ router.post('/site-customization', upload.fields([
       res.json({ success: true, data: created });
     }
   } catch (error) {
-    console.error('Error saving site customization:', error);
+    logger.error('Error saving site customization:', error);
     res.status(500).json({ success: false, message: 'Failed to save site customization', error: error.message });
   }
 });

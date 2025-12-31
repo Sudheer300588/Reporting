@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import cron from 'node-cron';
 import mauticAPI from './mauticAPI.js';
 import dataService from './dataService.js';
@@ -16,22 +17,22 @@ class MauticSchedulerService {
     const schedule = process.env.MAUTIC_SYNC_SCHEDULE || '0 3 * * *'; // Default: 3 AM daily
 
     if (this.cronJob) {
-      console.log('⏰ Mautic scheduler already running');
+      logger.debug('⏰ Mautic scheduler already running');
       return;
     }
 
-    console.log(`⏰ Starting Mautic sync scheduler: ${schedule}`);
+    logger.debug(`⏰ Starting Mautic sync scheduler: ${schedule}`);
 
     this.cronJob = cron.schedule(schedule, async () => {
       if (this.isRunning) {
-        console.log('⏭️  Skipping Mautic sync - previous sync still running');
+        logger.debug('⏭️  Skipping Mautic sync - previous sync still running');
         return;
       }
 
       await this.syncAllClients();
     });
 
-    console.log('✅ Mautic scheduler started');
+    logger.debug('✅ Mautic scheduler started');
   }
 
   /**
@@ -41,7 +42,7 @@ class MauticSchedulerService {
     if (this.cronJob) {
       this.cronJob.stop();
       this.cronJob = null;
-      console.log('🛑 Mautic scheduler stopped');
+      logger.debug('🛑 Mautic scheduler stopped');
     }
   }
 
@@ -50,7 +51,7 @@ class MauticSchedulerService {
    */
   async syncAllClients(options = {}) {
     if (this.isRunning) {
-      console.log('⚠️  Mautic sync already in progress');
+      logger.debug('⚠️  Mautic sync already in progress');
       return {
         success: false,
         message: 'Sync already in progress. Please wait for the current sync to complete.',
@@ -62,15 +63,15 @@ class MauticSchedulerService {
     const startTime = Date.now();
 
     try {
-      console.log('🔄 Starting scheduled Mautic sync for all clients...');
+      logger.debug('🔄 Starting scheduled Mautic sync for all clients...');
 
       // Optionally force a full re-fetch by clearing lastSyncAt for active clients
       if (options.forceFull) {
-        console.log('⚠️ forceFull requested: clearing lastSyncAt for active clients');
+        logger.debug('⚠️ forceFull requested: clearing lastSyncAt for active clients');
         try {
           await prisma.mauticClient.updateMany({ where: { isActive: true }, data: { lastSyncAt: null } });
         } catch (e) {
-          console.warn('Failed to clear lastSyncAt for clients:', e.message);
+          logger.warn('Failed to clear lastSyncAt for clients:', e.message);
         }
       }
 
@@ -78,7 +79,7 @@ class MauticSchedulerService {
       const clients = await prisma.mauticClient.findMany({ where: { isActive: true } });
 
       if (clients.length === 0) {
-        console.log('ℹ️  No active clients found');
+        logger.debug('ℹ️  No active clients found');
         this.isRunning = false;
         return {
           success: false,
@@ -96,7 +97,7 @@ class MauticSchedulerService {
 
       // Sync clients in parallel batches for better performance
       const CONCURRENT_SYNCS = parseInt(process.env.MAUTIC_CONCURRENT_SYNCS) || 5;
-      console.log(`📦 Processing ${clients.length} clients in batches of ${CONCURRENT_SYNCS}...`);
+      logger.debug(`📦 Processing ${clients.length} clients in batches of ${CONCURRENT_SYNCS}...`);
 
       // Process clients in batches
       for (let i = 0; i < clients.length; i += CONCURRENT_SYNCS) {
@@ -104,17 +105,17 @@ class MauticSchedulerService {
         const batchNumber = Math.floor(i / CONCURRENT_SYNCS) + 1;
         const totalBatches = Math.ceil(clients.length / CONCURRENT_SYNCS);
 
-        console.log(`\n� Processing batch ${batchNumber}/${totalBatches} (${batch.length} clients)...`);
+        logger.debug(`\n� Processing batch ${batchNumber}/${totalBatches} (${batch.length} clients)...`);
 
         // Sync batch in parallel
         const batchPromises = batch.map(async (client) => {
           try {
-            console.log(`📊 [${client.name}] Starting sync...`);
+            logger.debug(`📊 [${client.name}] Starting sync...`);
             // Pass per-client option (forceFull respected earlier for global)
             const syncResult = await mauticAPI.syncAllData(client);
 
             if (syncResult.success) {
-              console.log(`💾 [${client.name}] Saving data to database...`);
+              logger.debug(`💾 [${client.name}] Saving data to database...`);
 
               // Save emails, campaigns, segments
               // Email reports are already saved to DB during fetch
@@ -127,11 +128,11 @@ class MauticSchedulerService {
               // Update last sync time
               await dataService.updateClientSyncTime(client.id);
 
-              console.log(`✅ [${client.name}] Synced successfully - Emails: ${saveResults[0].total}, Campaigns: ${saveResults[1].total}, Segments: ${saveResults[2].total}, Email Reports: ${syncResult.data.emailReports.created} created, ${syncResult.data.emailReports.skipped} skipped`);
+              logger.debug(`✅ [${client.name}] Synced successfully - Emails: ${saveResults[0].total}, Campaigns: ${saveResults[1].total}, Segments: ${saveResults[2].total}, Email Reports: ${syncResult.data.emailReports.created} created, ${syncResult.data.emailReports.skipped} skipped`);
               // Count total email reports currently in DB for this client
               const totalReportsInDb = await prisma.mauticEmailReport.count({ where: { clientId: client.id } });
 
-              console.log(`✅ [${client.name}] Synced successfully - Emails: ${saveResults[0].total}, Campaigns: ${saveResults[1].total}, Segments: ${saveResults[2].total}, Email Reports: ${syncResult.data.emailReports.created} created, ${syncResult.data.emailReports.skipped} skipped, totalInDb: ${totalReportsInDb}`);
+              logger.debug(`✅ [${client.name}] Synced successfully - Emails: ${saveResults[0].total}, Campaigns: ${saveResults[1].total}, Segments: ${saveResults[2].total}, Email Reports: ${syncResult.data.emailReports.created} created, ${syncResult.data.emailReports.skipped} skipped, totalInDb: ${totalReportsInDb}`);
 
               return {
                 success: true,
@@ -149,7 +150,7 @@ class MauticSchedulerService {
               throw new Error(syncResult.error);
             }
           } catch (error) {
-            console.error(`❌ [${client.name}] Failed:`, error.message);
+            logger.error(`❌ [${client.name}] Failed:`, error.message);
             return {
               success: false,
               clientId: client.id,
@@ -181,13 +182,13 @@ class MauticSchedulerService {
           }
         });
 
-        console.log(`✅ Batch ${batchNumber}/${totalBatches} completed (Success: ${results.successful}, Failed: ${results.failed})`);
+        logger.debug(`✅ Batch ${batchNumber}/${totalBatches} completed (Success: ${results.successful}, Failed: ${results.failed})`);
       }
 
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      console.log(`\n✅ Mautic sync completed in ${duration}s`);
-      console.log(`   Successful: ${results.successful}/${results.totalClients}`);
-      console.log(`   Failed: ${results.failed}/${results.totalClients}`);
+      logger.debug(`\n✅ Mautic sync completed in ${duration}s`);
+      logger.debug(`   Successful: ${results.successful}/${results.totalClients}`);
+      logger.debug(`   Failed: ${results.failed}/${results.totalClients}`);
 
       this.isRunning = false;
 
@@ -198,7 +199,7 @@ class MauticSchedulerService {
         results
       };
     } catch (error) {
-      console.error('❌ Mautic sync error:', error);
+      logger.error('❌ Mautic sync error:', error);
       this.isRunning = false;
 
       return {
@@ -215,7 +216,7 @@ class MauticSchedulerService {
    */
   async syncClient(clientId) {
     try {
-      console.log(`🔄 Starting manual sync for client ${clientId}...`);
+      logger.debug(`🔄 Starting manual sync for client ${clientId}...`);
 
       const client = await prisma.mauticClient.findUnique({ where: { id: clientId } });
 
@@ -244,7 +245,7 @@ class MauticSchedulerService {
       // Update last sync time
       await dataService.updateClientSyncTime(client.id);
 
-      console.log(`✅ Client ${client.name} synced successfully`);
+      logger.debug(`✅ Client ${client.name} synced successfully`);
 
       // Also report total email reports in DB for this client
       const totalReportsInDb = await prisma.mauticEmailReport.count({ where: { clientId: client.id } });
@@ -264,7 +265,7 @@ class MauticSchedulerService {
         }
       };
     } catch (error) {
-      console.error('Error syncing client:', error);
+      logger.error('Error syncing client:', error);
       return {
         success: false,
         message: `Failed to sync ${clientId ? 'client' : 'clients'}: ${error.message}`,

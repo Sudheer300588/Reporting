@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import crypto from 'crypto';
 
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
@@ -23,7 +24,7 @@ class EncryptionService {
       // Return IV + encrypted data (IV is needed for decryption)
       return iv.toString('hex') + ':' + encrypted;
     } catch (error) {
-      console.error('Encryption error:', error);
+      logger.error('Encryption error:', error);
       throw new Error('Failed to encrypt data');
     }
   }
@@ -54,7 +55,7 @@ class EncryptionService {
       
       return decrypted;
     } catch (error) {
-      console.error('Decryption error:', error);
+      logger.error('Decryption error:', error);
       throw new Error('Failed to decrypt data');
     }
   }

@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import SftpClient from 'ssh2-sftp-client';
 import fs from 'fs/promises';
 import path from 'path';
@@ -45,27 +46,27 @@ class SftpService {
     try {
       await fs.mkdir(this.localDataDir, { recursive: true });
     } catch (error) {
-      console.error('Error creating local directory:', error);
+      logger.error('Error creating local directory:', error);
     }
   }
 
   async connect(sftp) {
     const config = await this.getConfig();
     try {
-      console.log(`Connecting to SFTP: ${config.host}:${config.port}`);
-      console.log(`Username: ${config.username}`);
-      console.log(`Password: ${config.password ? '***' + config.password.slice(-4) : 'NOT SET'}`);
-      console.log(`Timeout: ${config.readyTimeout}ms, Retries: ${config.retries}`);
+      logger.debug(`Connecting to SFTP: ${config.host}:${config.port}`);
+      logger.debug(`Username: ${config.username}`);
+      logger.debug(`Password: ${config.password ? '***' + config.password.slice(-4) : 'NOT SET'}`);
+      logger.debug(`Timeout: ${config.readyTimeout}ms, Retries: ${config.retries}`);
       // Validate required fields
       if (!config.host || !config.username || !config.password) {
         throw new Error('Missing required SFTP credentials in database.');
       }
       await sftp.connect(config);
-      console.log('Connected to SFTP server');
+      logger.debug('Connected to SFTP server');
       return true;
     } catch (error) {
-      console.error('SFTP connection failed:', error.message);
-      console.error('Config used:', {
+      logger.error('SFTP connection failed:', error.message);
+      logger.error('Config used:', {
         host: config.host,
         port: config.port,
         username: config.username,
@@ -78,9 +79,9 @@ class SftpService {
   async disconnect(sftp) {
     try {
       await sftp.end();
-      console.log('Disconnected from SFTP server');
+      logger.debug('Disconnected from SFTP server');
     } catch (error) {
-      console.error('Error disconnecting from SFTP:', error);
+      logger.error('Error disconnecting from SFTP:', error);
     }
   }
 
@@ -94,7 +95,7 @@ class SftpService {
       // Filter for JSON files only
       return fileList.filter(file => file.name.endsWith('.json'));
     } catch (error) {
-      console.error('Error listing files:', error);
+      logger.error('Error listing files:', error);
       throw error;
     }
   }
@@ -102,10 +103,10 @@ class SftpService {
   async downloadFile(sftp, remoteFilePath, localFilePath) {
     try {
       await sftp.get(remoteFilePath, localFilePath);
-      console.log(`Downloaded: ${remoteFilePath}`);
+      logger.debug(`Downloaded: ${remoteFilePath}`);
       return true;
     } catch (error) {
-      console.error(`Failed to download ${remoteFilePath}:`, error.message);
+      logger.error(`Failed to download ${remoteFilePath}:`, error.message);
       return false;
     }
   }
@@ -117,7 +118,7 @@ class SftpService {
       });
       return importedFiles.map(f => f.filename);
     } catch (error) {
-      console.error('Error fetching imported filenames:', error);
+      logger.error('Error fetching imported filenames:', error);
       return [];
     }
   }
@@ -136,7 +137,7 @@ class SftpService {
         localFiles = await fs.readdir(this.localDataDir);
         localFiles = localFiles.filter(f => f.endsWith('.json'));
       } catch (error) {
-        console.log('Local directory empty or not readable, will download all new files');
+        logger.debug('Local directory empty or not readable, will download all new files');
       }
       
       await this.connect(sftp);
@@ -151,10 +152,10 @@ class SftpService {
         const alreadyDownloaded = files.filter(f => localFiles.includes(f.name)).length;
         const alreadyImported = files.filter(f => importedFilenames.includes(f.name)).length;
         
-        console.log(`ℹ️  All files already processed:`);
-        console.log(`   - ${alreadyImported} files imported to database`);
-        console.log(`   - ${alreadyDownloaded} files downloaded locally`);
-        console.log(`   - ${files.length} total files on SFTP`);
+        logger.debug(`ℹ️  All files already processed:`);
+        logger.debug(`   - ${alreadyImported} files imported to database`);
+        logger.debug(`   - ${alreadyDownloaded} files downloaded locally`);
+        logger.debug(`   - ${files.length} total files on SFTP`);
         
         await this.disconnect(sftp);
         return {
@@ -169,8 +170,8 @@ class SftpService {
       const downloadResults = [];
       const remotePath = await this.getRemotePath();
       
-      console.log(`📥 Downloading ${newFiles.length} new files from SFTP...`);
-      console.log(`   (Skipping ${files.length - newFiles.length} already downloaded/imported files)`);
+      logger.debug(`📥 Downloading ${newFiles.length} new files from SFTP...`);
+      logger.debug(`   (Skipping ${files.length - newFiles.length} already downloaded/imported files)`);
       
       for (let i = 0; i < newFiles.length; i++) {
         const file = newFiles[i];
@@ -178,21 +179,21 @@ class SftpService {
         const localPath = path.join(this.localDataDir, file.name);
         
         if (typeof remoteFilePath !== 'string') {
-          console.error(`Remote file path is not a string:`, remoteFilePath);
+          logger.error(`Remote file path is not a string:`, remoteFilePath);
         }
-        console.log(`   [${i + 1}/${newFiles.length}] Downloading ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
+        logger.debug(`   [${i + 1}/${newFiles.length}] Downloading ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
         const success = await this.downloadFile(sftp, remoteFilePath, localPath);
         if (!success) {
-          console.error(`Download failed for: ${remoteFilePath} -> ${localPath}`);
+          logger.error(`Download failed for: ${remoteFilePath} -> ${localPath}`);
         }
         // Check if file is empty after download
         try {
           const stats = await fs.stat(localPath);
           if (stats.size === 0) {
-            console.error(`Downloaded file is empty: ${localPath}`);
+            logger.error(`Downloaded file is empty: ${localPath}`);
           }
         } catch (statErr) {
-          console.error(`Error checking file size for ${localPath}:`, statErr.message);
+          logger.error(`Error checking file size for ${localPath}:`, statErr.message);
         }
         downloadResults.push({
           filename: file.name,
@@ -202,7 +203,7 @@ class SftpService {
         });
       }
       
-      console.log(`✅ Downloaded ${downloadResults.filter(r => r.success).length}/${newFiles.length} files`);
+      logger.debug(`✅ Downloaded ${downloadResults.filter(r => r.success).length}/${newFiles.length} files`);
       
       await this.disconnect(sftp);
       
@@ -291,7 +292,7 @@ class SftpService {
         recordId: record.recordId || record.record_id || ''
       }));
     } catch (error) {
-      console.error('Error parsing JSON:', error);
+      logger.error('Error parsing JSON:', error);
       throw new Error(`JSON parsing failed: ${error.message}`);
     }
   }
@@ -301,7 +302,7 @@ class SftpService {
       const files = await fs.readdir(this.localDataDir);
       const dataFiles = files.filter(file => file.endsWith('.json'));
       
-      console.log(`📄 Parsing ${dataFiles.length} JSON files...`);
+      logger.debug(`📄 Parsing ${dataFiles.length} JSON files...`);
       
       const parsedData = [];
       const errorFiles = [];
@@ -311,17 +312,17 @@ class SftpService {
         const filePath = path.join(this.localDataDir, file);
         
         try {
-          console.log(`   [${i + 1}/${dataFiles.length}] Parsing ${file}`);
+          logger.debug(`   [${i + 1}/${dataFiles.length}] Parsing ${file}`);
           const fileContent = await fs.readFile(filePath, 'utf-8');
           
           const records = this.parseJSON(fileContent);
-          console.log(`      → ${records.length} records found`);
+          logger.debug(`      → ${records.length} records found`);
           
           // Group records by actual campaign name from data
           const campaignGroups = {};
           
           for (const record of records) {
-            // console.log(`        - Record: Campaign="${record.campaignName}", Phone="${record.phoneNumber}", Date="${record.date}"`);
+            // logger.debug(`        - Record: Campaign="${record.campaignName}", Phone="${record.phoneNumber}", Date="${record.date}"`);
             const campaignName = record.campaignName || 'Unknown Campaign';
             const campaignId = record.campaignId || 'unknown';
             
@@ -345,8 +346,8 @@ class SftpService {
           }
         } catch (fileError) {
           // Log error but continue processing other files
-          console.error(`      ❌ Error parsing ${file}:`, fileError.message);
-          console.error(`      Skipping corrupted file. It may need to be re-downloaded.`);
+          logger.error(`      ❌ Error parsing ${file}:`, fileError.message);
+          logger.error(`      Skipping corrupted file. It may need to be re-downloaded.`);
           errorFiles.push({
             filename: file,
             error: fileError.message
@@ -355,9 +356,9 @@ class SftpService {
           // Optionally delete corrupted file so it can be re-downloaded
           try {
             await fs.unlink(filePath);
-            console.log(`      🗑️  Deleted corrupted file: ${file}`);
+            logger.debug(`      🗑️  Deleted corrupted file: ${file}`);
           } catch (deleteError) {
-            console.error(`      Failed to delete corrupted file: ${deleteError.message}`);
+            logger.error(`      Failed to delete corrupted file: ${deleteError.message}`);
           }
         }
       }
@@ -366,11 +367,11 @@ class SftpService {
         console.warn(`⚠️  ${errorFiles.length} file(s) had parsing errors and were deleted for re-download`);
       }
       
-      console.log(`✅ Parsed ${parsedData.length} campaigns from ${dataFiles.length - errorFiles.length} valid files`);
+      logger.debug(`✅ Parsed ${parsedData.length} campaigns from ${dataFiles.length - errorFiles.length} valid files`);
       
       return parsedData;
     } catch (error) {
-      console.error('Error parsing local files:', error);
+      logger.error('Error parsing local files:', error);
       throw error;
     }
   }

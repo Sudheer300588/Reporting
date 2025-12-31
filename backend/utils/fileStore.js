@@ -1,3 +1,4 @@
+import logger from '../utils/logger.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -52,17 +53,17 @@ export async function saveFileToFrontendAssets(fileBuffer, originalName, opts = 
     if (opts.overwrite) {
       try {
         if (fs.existsSync(finalPath)) {
-          console.log('[fileStore] Overwrite enabled - removing existing file at', finalPath);
+          logger.debug('[fileStore] Overwrite enabled - removing existing file at', finalPath);
           await fs.promises.unlink(finalPath);
         }
       } catch (e) {
-        console.warn('[fileStore] Failed to remove existing file before overwrite', e);
+        logger.warn('[fileStore] Failed to remove existing file before overwrite', e);
       }
     }
 
-    console.log('[fileStore] Writing file to', finalPath);
+    logger.debug('[fileStore] Writing file to', finalPath);
     await fs.promises.writeFile(finalPath, fileBuffer);
-    console.log('[fileStore] File written:', finalName);
+    logger.debug('[fileStore] File written:', finalName);
 
     // Optionally create a stable alias (symlink or copy) pointing to the written file
     if (opts.createAlias && opts.aliasName) {
@@ -79,7 +80,7 @@ export async function saveFileToFrontendAssets(fileBuffer, originalName, opts = 
 
         // If alias equals final file, nothing to do
         if (aliasName === finalName) {
-          console.log('[fileStore] Alias name equals final file name; skipping alias creation');
+          logger.debug('[fileStore] Alias name equals final file name; skipping alias creation');
           return `/assets/${opts.subfolder ? `${opts.subfolder}/${finalName}` : finalName}`;
         }
 
@@ -87,9 +88,9 @@ export async function saveFileToFrontendAssets(fileBuffer, originalName, opts = 
         if (fs.existsSync(aliasPath)) {
           try {
             await fs.promises.unlink(aliasPath);
-            console.log('[fileStore] Removed existing alias at', aliasPath);
+            logger.debug('[fileStore] Removed existing alias at', aliasPath);
           } catch (e) {
-            console.warn('[fileStore] Failed to remove existing alias', e);
+            logger.warn('[fileStore] Failed to remove existing alias', e);
           }
         }
 
@@ -97,17 +98,17 @@ export async function saveFileToFrontendAssets(fileBuffer, originalName, opts = 
         const relativeTarget = path.relative(path.dirname(aliasPath), finalPath) || finalName;
         try {
           await fs.promises.symlink(relativeTarget, aliasPath);
-          console.log('[fileStore] Created symlink alias', aliasPath, '->', relativeTarget);
+          logger.debug('[fileStore] Created symlink alias', aliasPath, '->', relativeTarget);
         } catch (symlinkErr) {
-          console.warn('[fileStore] Symlink failed, falling back to copy:', symlinkErr.message || symlinkErr);
+          logger.warn('[fileStore] Symlink failed, falling back to copy:', symlinkErr.message || symlinkErr);
           // Fallback: copy file to alias location
           await fs.promises.copyFile(finalPath, aliasPath);
-          console.log('[fileStore] Copied file to alias path', aliasPath);
+          logger.debug('[fileStore] Copied file to alias path', aliasPath);
         }
 
         return `/assets/${opts.subfolder ? `${opts.subfolder}/${aliasName}` : aliasName}`;
       } catch (aliasErr) {
-        console.warn('[fileStore] Failed to create alias, returning actual file path', aliasErr);
+        logger.warn('[fileStore] Failed to create alias, returning actual file path', aliasErr);
         return `/assets/${opts.subfolder ? `${opts.subfolder}/${finalName}` : finalName}`;
       }
     }
@@ -115,7 +116,7 @@ export async function saveFileToFrontendAssets(fileBuffer, originalName, opts = 
     // Return path relative to public (served at /assets/<file>)
     return `/assets/${opts.subfolder ? `${opts.subfolder}/${finalName}` : finalName}`;
   } catch (err) {
-    console.error('[fileStore] Error writing file', finalPath, err);
+    logger.error('[fileStore] Error writing file', finalPath, err);
     throw err;
   }
 }

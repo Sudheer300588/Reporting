@@ -22,15 +22,9 @@ const MauticCampaignsContainer = ({ clientId }) => {
     const fetchCampaigns = async () => {
       try {
         const [campaignsRes, segmentsRes, emailsRes] = await Promise.all([
-          axios.get(
-            `https://dev.hcddev.com/api/mautic/clients/${clientId}/campaigns`
-          ),
-          axios.get(
-            `https://dev.hcddev.com/api/mautic/clients/${clientId}/segments`
-          ),
-          axios.get(
-            `https://dev.hcddev.com/api/mautic/clients/${clientId}/emails`
-          ),
+          axios.get(`/api/mautic/clients/${clientId}/campaigns`),
+          axios.get(`/api/mautic/clients/${clientId}/segments`),
+          axios.get(`/api/mautic/clients/${clientId}/emails`),
         ]);
 
         const segments = segmentsRes.data.data;

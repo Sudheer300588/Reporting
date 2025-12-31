@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import prisma from '../../../prisma/client.js';
 import { Prisma } from '@prisma/client';
 
@@ -7,10 +8,10 @@ class MauticDataService {
    */
   async saveEmails(clientId, emails) {
     try {
-      console.log(`💾 Saving ${emails.length} emails for client ${clientId}...`);
+      logger.debug(`💾 Saving ${emails.length} emails for client ${clientId}...`);
 
       if (emails.length === 0) {
-        console.log(`✅ No emails to save`);
+        logger.debug(`✅ No emails to save`);
         return { success: true, created: 0, updated: 0, total: 0 };
       }
 
@@ -70,11 +71,11 @@ class MauticDataService {
               updated++;
             }
           } catch (error) {
-            console.error(`Failed to save email ${email.id}:`, error.message);
+            logger.error(`Failed to save email ${email.id}:`, error.message);
           }
         }));
 
-        console.log(`   Saved ${Math.min(i + BATCH_SIZE, emails.length)}/${emails.length} emails...`);
+        logger.debug(`   Saved ${Math.min(i + BATCH_SIZE, emails.length)}/${emails.length} emails...`);
       }
 
       // Update client email count
@@ -83,7 +84,7 @@ class MauticDataService {
         data: { totalEmails: emails.length }
       });
 
-      console.log(`✅ Emails saved: ${created} created, ${updated} updated`);
+      logger.debug(`✅ Emails saved: ${created} created, ${updated} updated`);
 
       return {
         success: true,
@@ -92,7 +93,7 @@ class MauticDataService {
         total: emails.length
       };
     } catch (error) {
-      console.error('Error saving emails:', error);
+      logger.error('Error saving emails:', error);
       throw new Error(`Failed to save emails: ${error.message}`);
     }
   }
@@ -105,11 +106,11 @@ class MauticDataService {
    */
   async saveCampaigns(clientId, campaigns) {
     try {
-      console.log(`\n💾 Saving ${campaigns.length} campaigns for client ${clientId}...`);
-      console.log(`   Campaign IDs: ${campaigns.map(c => c.id).join(', ')}`);
+      logger.debug(`\n💾 Saving ${campaigns.length} campaigns for client ${clientId}...`);
+      logger.debug(`   Campaign IDs: ${campaigns.map(c => c.id).join(', ')}`);
 
       if (campaigns.length === 0) {
-        console.log(`✅ No campaigns to save`);
+        logger.debug(`✅ No campaigns to save`);
         return { success: true, created: 0, updated: 0, total: 0 };
       }
 
@@ -124,7 +125,7 @@ class MauticDataService {
 
         await Promise.all(batch.map(async (campaign) => {
           try {
-            console.log(`   Processing campaign ID ${campaign.id}: ${campaign.name}`);
+            logger.debug(`   Processing campaign ID ${campaign.id}: ${campaign.name}`);
 
             // Extract category - handle both object and string formats
             let categoryValue = null;
@@ -167,18 +168,18 @@ class MauticDataService {
 
             if (result.createdAt.getTime() === result.updatedAt.getTime()) {
               created++;
-              console.log(`   ✅ Campaign ${campaign.id} created`);
+              logger.debug(`   ✅ Campaign ${campaign.id} created`);
             } else {
               updated++;
-              console.log(`   ✅ Campaign ${campaign.id} updated`);
+              logger.debug(`   ✅ Campaign ${campaign.id} updated`);
             }
           } catch (error) {
-            console.error(`❌ Failed to save campaign ${campaign.id} (${campaign.name}):`, error.message);
+            logger.error(`❌ Failed to save campaign ${campaign.id} (${campaign.name}):`, error.message);
             if (error.stack) {
-              console.error(`   Stack trace:`, error.stack);
+              logger.error(`   Stack trace:`, error.stack);
             }
             // Log the actual data we're trying to save, not the full campaign object
-            console.error(`   Attempted to save:`, {
+            logger.error(`   Attempted to save:`, {
               mauticCampaignId: campaign.id,
               name: campaign.name,
               isPublished: campaign.isPublished,
@@ -190,7 +191,7 @@ class MauticDataService {
           }
         }));
 
-        console.log(`   Saved ${Math.min(i + BATCH_SIZE, campaigns.length)}/${campaigns.length} campaigns...`);
+        logger.debug(`   Saved ${Math.min(i + BATCH_SIZE, campaigns.length)}/${campaigns.length} campaigns...`);
       }
 
       // Update client campaign count
@@ -199,7 +200,7 @@ class MauticDataService {
         data: { totalCampaigns: campaigns.length }
       });
 
-      console.log(`✅ Campaigns saved: ${created} created, ${updated} updated, ${failed} failed`);
+      logger.debug(`✅ Campaigns saved: ${created} created, ${updated} updated, ${failed} failed`);
 
       return {
         success: true,
@@ -209,7 +210,7 @@ class MauticDataService {
         total: campaigns.length
       };
     } catch (error) {
-      console.error('Error saving campaigns:', error);
+      logger.error('Error saving campaigns:', error);
       throw new Error(`Failed to save campaigns: ${error.message}`);
     }
   }
@@ -222,10 +223,10 @@ class MauticDataService {
    */
   async saveSegments(clientId, segments) {
     try {
-      console.log(`💾 Saving ${segments.length} segments for client ${clientId}...`);
+      logger.debug(`💾 Saving ${segments.length} segments for client ${clientId}...`);
 
       if (segments.length === 0) {
-        console.log(`✅ No segments to save`);
+        logger.debug(`✅ No segments to save`);
         return { success: true, created: 0, updated: 0, total: 0 };
       }
 
@@ -271,11 +272,11 @@ class MauticDataService {
               updated++;
             }
           } catch (error) {
-            console.error(`Failed to save segment ${segment.id}:`, error.message);
+            logger.error(`Failed to save segment ${segment.id}:`, error.message);
           }
         }));
 
-        console.log(`   Saved ${Math.min(i + BATCH_SIZE, segments.length)}/${segments.length} segments...`);
+        logger.debug(`   Saved ${Math.min(i + BATCH_SIZE, segments.length)}/${segments.length} segments...`);
       }
 
       // Update client segment count
@@ -284,7 +285,7 @@ class MauticDataService {
         data: { totalSegments: segments.length }
       });
 
-      console.log(`✅ Segments saved: ${created} created, ${updated} updated`);
+      logger.debug(`✅ Segments saved: ${created} created, ${updated} updated`);
 
       return {
         success: true,
@@ -293,7 +294,7 @@ class MauticDataService {
         total: segments.length
       };
     } catch (error) {
-      console.error('Error saving segments:', error);
+      logger.error('Error saving segments:', error);
       throw new Error(`Failed to save segments: ${error.message}`);
     }
   }
@@ -306,10 +307,10 @@ class MauticDataService {
    */
   async saveEmailReports(clientId, reportRows) {
     try {
-      console.log(`📊 Saving ${reportRows.length} email report records for client ${clientId}...`);
+      logger.debug(`📊 Saving ${reportRows.length} email report records for client ${clientId}...`);
 
       if (reportRows.length === 0) {
-        console.log(`✅ No email reports to save`);
+        logger.debug(`✅ No email reports to save`);
         return { success: true, created: 0, updated: 0, total: 0 };
       }
 
@@ -365,15 +366,15 @@ class MauticDataService {
             created += result.count;
             skipped += (validRecords.length - result.count);
           } catch (error) {
-            console.error(`Batch insert error:`, error.message);
+            logger.error(`Batch insert error:`, error.message);
             skipped += validRecords.length;
           }
         }
 
-        console.log(`   Processed ${Math.min(i + BATCH_SIZE, reportRows.length)}/${reportRows.length} email reports (${created} new, ${skipped} skipped)...`);
+        logger.debug(`   Processed ${Math.min(i + BATCH_SIZE, reportRows.length)}/${reportRows.length} email reports (${created} new, ${skipped} skipped)...`);
       }
 
-      console.log(`✅ Email reports saved: ${created} created, ${skipped} skipped`);
+      logger.debug(`✅ Email reports saved: ${created} created, ${skipped} skipped`);
 
       return {
         success: true,
@@ -382,7 +383,7 @@ class MauticDataService {
         total: reportRows.length
       };
     } catch (error) {
-      console.error('Error saving email reports:', error);
+      logger.error('Error saving email reports:', error);
       throw new Error(`Failed to save email reports: ${error.message}`);
     }
   }
@@ -469,7 +470,7 @@ class MauticDataService {
         }
       };
     } catch (error) {
-      console.error('Error getting dashboard metrics:', error);
+      logger.error('Error getting dashboard metrics:', error);
       throw new Error(`Failed to get dashboard metrics: ${error.message}`);
     }
   }
@@ -519,7 +520,7 @@ class MauticDataService {
 
       return mapped;
     } catch (error) {
-      console.error('Error fetching clients:', error);
+      logger.error('Error fetching clients:', error);
       throw new Error(`Failed to fetch clients: ${error.message}`);
     }
   }
@@ -536,7 +537,7 @@ class MauticDataService {
         data: { lastSyncAt: new Date() }
       });
     } catch (error) {
-      console.error('Error updating client sync time:', error);
+      logger.error('Error updating client sync time:', error);
       throw error;
     }
   }

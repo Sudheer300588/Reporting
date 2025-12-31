@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import cron from 'node-cron';
 import SftpService from './sftpService.js';
 import DataService from './dataService.js';
@@ -12,7 +13,7 @@ class SchedulerService {
 
   async fetchAndProcessData() {
     try {
-      console.log('Scheduled fetch started at:', new Date().toISOString());
+      logger.debug('Scheduled fetch started at:', new Date().toISOString());
       
       // Download files from SFTP
       const downloadResult = await this.sftpService.downloadAllFiles();
@@ -35,9 +36,9 @@ class SchedulerService {
         totalRecords: campaignData.reduce((sum, c) => sum + c.recordCount, 0)
       });
 
-      console.log('Scheduled fetch completed successfully');
-      console.log(`   - Files downloaded: ${downloadResult.filesDownloaded}`);
-      console.log(`   - Campaigns processed: ${campaignData.length}`);
+      logger.debug('Scheduled fetch completed successfully');
+      logger.debug(`   - Files downloaded: ${downloadResult.filesDownloaded}`);
+      logger.debug(`   - Campaigns processed: ${campaignData.length}`);
       
       return {
         success: true,
@@ -46,7 +47,7 @@ class SchedulerService {
         metrics
       };
     } catch (error) {
-      console.error('Scheduled fetch failed:', error);
+      logger.error('Scheduled fetch failed:', error);
       
       await this.dataService.logSync('failed', {
         type: 'scheduled',
@@ -62,7 +63,7 @@ class SchedulerService {
 
   start() {
     if (this.job) {
-      console.log('WARNING: Scheduler is already running');
+      logger.debug('WARNING: Scheduler is already running');
       return;
     }
 
@@ -70,15 +71,15 @@ class SchedulerService {
       await this.fetchAndProcessData();
     });
 
-    console.log(`Scheduler started with cron: ${this.cronSchedule}`);
-    console.log('   Next run will be at the scheduled time');
+    logger.debug(`Scheduler started with cron: ${this.cronSchedule}`);
+    logger.debug('   Next run will be at the scheduled time');
   }
 
   stop() {
     if (this.job) {
       this.job.stop();
       this.job = null;
-      console.log('Scheduler stopped');
+      logger.debug('Scheduler stopped');
     }
   }
 

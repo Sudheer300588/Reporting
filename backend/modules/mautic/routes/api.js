@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import express from "express";
 import mauticAPI from "../services/mauticAPI.js";
 import dataService from "../services/dataService.js";
@@ -42,7 +43,7 @@ router.get("/clients", async (req, res) => {
       data: sanitizedClients,
     });
   } catch (error) {
-    console.error("Error fetching clients:", error);
+    logger.error("Error fetching clients:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch clients",
@@ -151,7 +152,7 @@ router.get("/clients/:clientId/emails", async (req, res) => {
       res.json({ success: true, data: emails });
     }
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     res
       .status(500)
       .json({
@@ -171,7 +172,7 @@ router.get("/clients/:clientId/segments", async (req, res) => {
     });
     res.json({ success: true, data: segments });
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     res
       .status(500)
       .json({
@@ -191,7 +192,7 @@ router.get("/clients/:clientId/campaigns", async (req, res) => {
     });
     res.json({ success: true, data: campaigns });
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     res
       .status(500)
       .json({
@@ -269,7 +270,7 @@ router.get("/clients/:clientId/email-reports", async (req, res) => {
       totalEmails: normalized.length,
     });
   } catch (error) {
-    console.error("❌ Error fetching aggregated Mautic reports:", error);
+    logger.error("❌ Error fetching aggregated Mautic reports:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch email reports",
@@ -356,7 +357,7 @@ router.post("/clients", async (req, res) => {
               createdById: systemUser.id,
             },
           });
-          console.log(
+          logger.debug(
             `✨ Auto-created client: ${name} (ID: ${mainClient.id}) for Mautic service`
           );
 
@@ -376,7 +377,7 @@ router.post("/clients", async (req, res) => {
                   },
                 })
                 .catch((err) =>
-                  console.error("Error assigning to manager:", err)
+                  logger.error("Error assigning to manager:", err)
                 )
             );
           }
@@ -398,7 +399,7 @@ router.post("/clients", async (req, res) => {
                     },
                   })
                   .catch((err) =>
-                    console.error(`Error assigning to employee ${empId}:`, err)
+                    logger.error(`Error assigning to employee ${empId}:`, err)
                   )
               );
             });
@@ -407,7 +408,7 @@ router.post("/clients", async (req, res) => {
           // Execute all assignments
           if (assignmentPromises.length > 0) {
             await Promise.all(assignmentPromises);
-            console.log(
+            logger.debug(
               `✅ Created ${assignmentPromises.length} client assignments`
             );
           }
@@ -416,7 +417,7 @@ router.post("/clients", async (req, res) => {
 
       mainClientId = mainClient?.id;
     } catch (clientError) {
-      console.error("Error auto-creating client:", clientError);
+      logger.error("Error auto-creating client:", clientError);
       // Continue even if client creation fails
     }
 
@@ -439,7 +440,7 @@ router.post("/clients", async (req, res) => {
           clientId: mainClientId,
         },
       });
-      console.log(
+      logger.debug(
         `🔄 Updated existing Mautic client: ${name} (ID: ${client.id})`
       );
     } else {
@@ -455,7 +456,7 @@ router.post("/clients", async (req, res) => {
           clientId: mainClientId,
         },
       });
-      console.log(`✨ Created new Mautic client: ${name} (ID: ${client.id})`);
+      logger.debug(`✨ Created new Mautic client: ${name} (ID: ${client.id})`);
 
       // Start background month-by-month backfill (non-blocking)
       // If user provided fromDate/toDate use that range, otherwise default to 2024-05-01 → 2025-11-25
@@ -466,7 +467,7 @@ router.post("/clients", async (req, res) => {
       // Run backfill in background so client creation returns immediately
       setImmediate(async () => {
         try {
-          console.log(
+          logger.debug(
             `🔁 Starting background monthly backfill for client ${client.id} (${backfillFrom} → ${backfillTo})`
           );
 
@@ -513,7 +514,7 @@ router.post("/clients", async (req, res) => {
               where: { clientId: client.id, yearMonth: ym },
             });
             if (existing) {
-              console.log(`   ⏭️ Skipping ${ym}, already fetched`);
+              logger.debug(`   ⏭️ Skipping ${ym}, already fetched`);
               continue;
             }
 
@@ -533,18 +534,18 @@ router.post("/clients", async (req, res) => {
             const to = `${ym}-${String(toDay).padStart(2, "0")} 23:59:59`;
 
             try {
-              console.log(`   ▶️ Backfilling ${ym} (${from} → ${to})`);
+              logger.debug(`   ▶️ Backfilling ${ym} (${from} → ${to})`);
               const r = await mauticAPI.fetchHistoricalReports(
                 client,
                 from,
                 to,
                 pageLimit
               );
-              console.log(
+              logger.debug(
                 `   ✅ ${ym} -> created ${r.created} skipped ${r.skipped}`
               );
             } catch (e) {
-              console.error(
+              logger.error(
                 `   ❌ Failed to fetch ${ym}:`,
                 e && e.message ? e.message : String(e)
               );
@@ -558,11 +559,11 @@ router.post("/clients", async (req, res) => {
             }
           }
 
-          console.log(
+          logger.debug(
             `🔁 Background backfill finished for client ${client.id}`
           );
         } catch (bgErr) {
-          console.error("Background backfill error:", bgErr.message);
+          logger.error("Background backfill error:", bgErr.message);
         }
       });
     }
@@ -578,7 +579,7 @@ router.post("/clients", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error creating client:", error);
+    logger.error("Error creating client:", error);
     res.status(500).json({
       success: false,
       message: "Failed to create client",
@@ -616,7 +617,7 @@ router.get("/clients/:id/password", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error fetching client password:", error);
+    logger.error("Error fetching client password:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch password",
@@ -651,7 +652,7 @@ router.put("/clients/:id", async (req, res) => {
 
     // If historical date range provided during update, backfill reports
     if (fromDate && toDate) {
-      console.log(
+      logger.debug(
         `📅 Backfilling historical reports from ${fromDate} to ${toDate}...`
       );
       try {
@@ -661,11 +662,11 @@ router.put("/clients/:id", async (req, res) => {
           toDate,
           limit || 200000
         );
-        console.log(
+        logger.debug(
           `✅ Historical backfill complete: ${historicalResult.created} reports saved`
         );
       } catch (histError) {
-        console.error(`⚠️ Historical backfill failed:`, histError.message);
+        logger.error(`⚠️ Historical backfill failed:`, histError.message);
       }
     }
 
@@ -678,7 +679,7 @@ router.put("/clients/:id", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error updating client:", error);
+    logger.error("Error updating client:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update client",
@@ -759,7 +760,7 @@ router.post("/clients/:id/backfill", async (req, res) => {
             where: { clientId: client.id, yearMonth: ym },
           });
           if (existing) {
-            console.log(`   ⏭️ Skipping ${ym}, already fetched`);
+            logger.debug(`   ⏭️ Skipping ${ym}, already fetched`);
             continue;
           }
 
@@ -773,7 +774,7 @@ router.post("/clients/:id/backfill", async (req, res) => {
           const to = `${ym}-${String(toDay).padStart(2, "0")} 23:59:59`;
 
           try {
-            console.log(
+            logger.debug(
               `   ▶️ Backfilling ${ym} (${from} → ${to}) for client ${client.id}`
             );
             const r = await mauticAPI.fetchHistoricalReports(
@@ -782,11 +783,11 @@ router.post("/clients/:id/backfill", async (req, res) => {
               to,
               pageLimit || 200000
             );
-            console.log(
+            logger.debug(
               `   ✅ ${ym} -> created ${r.created} skipped ${r.skipped}`
             );
           } catch (e) {
-            console.error(
+            logger.error(
               `   ❌ Failed to fetch ${ym}:`,
               e && e.message ? e.message : String(e)
             );
@@ -799,16 +800,16 @@ router.post("/clients/:id/backfill", async (req, res) => {
           }
         }
 
-        console.log(`🔁 Background backfill finished for client ${client.id}`);
+        logger.debug(`🔁 Background backfill finished for client ${client.id}`);
       } catch (bgErr) {
-        console.error(
+        logger.error(
           "Background backfill error:",
           bgErr && bgErr.message ? bgErr.message : String(bgErr)
         );
       }
     })();
   } catch (error) {
-    console.error("Error initiating backfill:", error.message);
+    logger.error("Error initiating backfill:", error.message);
     res
       .status(500)
       .json({
@@ -828,7 +829,7 @@ router.delete("/clients/:id", async (req, res) => {
     const { id } = req.params;
     const clientId = parseInt(id);
 
-    console.log(
+    logger.debug(
       `[mautic-api] Received DELETE /clients/${id} request with params:`,
       req.params
     );
@@ -855,7 +856,7 @@ router.delete("/clients/:id", async (req, res) => {
         where: { id: updated.clientId },
         data: { isActive: false },
       });
-      console.log(`Deactivated linked main client (ID: ${updated.clientId})`);
+      logger.debug(`Deactivated linked main client (ID: ${updated.clientId})`);
     }
 
     // Log activity (if logActivity is available in this module scope)
@@ -880,7 +881,7 @@ router.delete("/clients/:id", async (req, res) => {
       message: "Mautic client deactivated successfully",
     });
   } catch (error) {
-    console.error("Error deleting mautic client:", error);
+    logger.error("Error deleting mautic client:", error);
     res
       .status(500)
       .json({
@@ -900,7 +901,7 @@ router.delete("/clients/:id/permanent", async (req, res) => {
     const { id } = req.params;
     const clientId = parseInt(id);
 
-    console.log(`[mautic-api] Received PERMANENT DELETE /clients/${id}/permanent request`);
+    logger.debug(`[mautic-api] Received PERMANENT DELETE /clients/${id}/permanent request`);
 
     const existing = await prisma.mauticClient.findUnique({
       where: { id: clientId },
@@ -924,7 +925,7 @@ router.delete("/clients/:id/permanent", async (req, res) => {
       const deletedSyncLogs = await tx.mauticSyncLog.deleteMany({ where: { mauticClientId: clientId } });
       const deletedMonths = await tx.mauticFetchedMonth.deleteMany({ where: { clientId: clientId } });
       
-      console.log(`Deleted ${deletedEmails.count} emails, ${deletedReports.count} reports, ${deletedCampaigns.count} campaigns, ${deletedSegments.count} segments, ${deletedSyncLogs.count} sync logs, ${deletedMonths.count} fetched months`);
+      logger.debug(`Deleted ${deletedEmails.count} emails, ${deletedReports.count} reports, ${deletedCampaigns.count} campaigns, ${deletedSegments.count} segments, ${deletedSyncLogs.count} sync logs, ${deletedMonths.count} fetched months`);
       
       await tx.mauticClient.delete({ where: { id: clientId } });
 
@@ -938,7 +939,7 @@ router.delete("/clients/:id/permanent", async (req, res) => {
             data: { clientId: null },
           });
           await tx.client.delete({ where: { id: linkedClientId } });
-          console.log(`Deleted linked main client (ID: ${linkedClientId})`);
+          logger.debug(`Deleted linked main client (ID: ${linkedClientId})`);
         }
       }
     });
@@ -959,14 +960,14 @@ router.delete("/clients/:id/permanent", async (req, res) => {
       // ignore logging errors
     }
 
-    console.log(`✓ Permanently deleted mautic client: ${clientName} (ID: ${clientId})`);
+    logger.debug(`✓ Permanently deleted mautic client: ${clientName} (ID: ${clientId})`);
 
     res.json({
       success: true,
       message: `Client "${clientName}" and all associated data permanently deleted`,
     });
   } catch (error) {
-    console.error("Error permanently deleting mautic client:", error);
+    logger.error("Error permanently deleting mautic client:", error);
     res.status(500).json({
       success: false,
       message: "Failed to permanently delete client",
@@ -1009,7 +1010,7 @@ router.patch("/clients/:id/toggle", async (req, res) => {
         where: { id: mauticClient.clientId },
         data: { isActive: newStatus },
       });
-      console.log(
+      logger.debug(
         `✓ ${newStatus ? "Activated" : "Deactivated"} linked client (ID: ${
           mauticClient.clientId
         })`
@@ -1027,7 +1028,7 @@ router.patch("/clients/:id/toggle", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error toggling client status:", error);
+    logger.error("Error toggling client status:", error);
     res.status(500).json({
       success: false,
       message: "Failed to toggle client status",
@@ -1059,7 +1060,7 @@ router.post("/clients/test-connection", async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error("Error testing connection:", error);
+    logger.error("Error testing connection:", error);
     res.status(500).json({
       success: false,
       message: "Failed to test connection",
@@ -1086,7 +1087,7 @@ router.get("/dashboard", async (req, res) => {
 
     res.json(metrics);
   } catch (error) {
-    console.error("Error fetching dashboard metrics:", error);
+    logger.error("Error fetching dashboard metrics:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch dashboard metrics",
@@ -1136,7 +1137,7 @@ router.get("/emails", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error fetching emails:", error);
+    logger.error("Error fetching emails:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch emails",
@@ -1171,7 +1172,7 @@ router.get("/segments", async (req, res) => {
       data: segments,
     });
   } catch (error) {
-    console.error("Error fetching segments:", error);
+    logger.error("Error fetching segments:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch segments",
@@ -1221,7 +1222,7 @@ router.get("/campaigns", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error fetching campaigns:", error);
+    logger.error("Error fetching campaigns:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch campaigns",
@@ -1282,7 +1283,7 @@ router.get("/reports", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error fetching reports:", error);
+    logger.error("Error fetching reports:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch reports",
@@ -1339,7 +1340,7 @@ router.post("/sync/all", async (req, res) => {
     currentSyncStartTime = Date.now();
     currentSyncType = "all";
 
-    console.log("Manual sync triggered for all clients");
+    logger.debug("Manual sync triggered for all clients");
 
     // Respond immediately to avoid frontend timeout
     res.json({
@@ -1355,7 +1356,7 @@ router.post("/sync/all", async (req, res) => {
     schedulerService
       .syncAllClients({ forceFull })
       .then((result) => {
-        console.log("✅ Sync completed:", result);
+        logger.debug("✅ Sync completed:", result);
         // Send email notification
         const duration = Math.floor((Date.now() - currentSyncStartTime) / 1000);
         notifyMauticSyncCompleted({
@@ -1365,13 +1366,13 @@ router.post("/sync/all", async (req, res) => {
           failed: result.failed || 0,
           durationSeconds: duration,
         }).catch((err) =>
-          console.error("Failed to send sync completion email:", err)
+          logger.error("Failed to send sync completion email:", err)
         );
 
         // After successful Mautic sync, trigger DropCowboy data refresh to re-match clients
         (async () => {
           try {
-            console.log(
+            logger.debug(
               "🔄 Triggering DropCowboy data refresh after Mautic sync..."
             );
             const dropCowboyDataService = new DropCowboyDataService();
@@ -1380,16 +1381,16 @@ router.post("/sync/all", async (req, res) => {
             // Clear all existing DropCowboy data
             const clearResult =
               await dropCowboyDataService.clearAllDropCowboyData();
-            console.log("DropCowboy data cleared:", clearResult);
+            logger.debug("DropCowboy data cleared:", clearResult);
 
             // Trigger SFTP sync to re-fetch and re-match data to Mautic clients
             const syncResult = await dropCowboyScheduler.fetchAndProcessData();
-            console.log(
+            logger.debug(
               "DropCowboy SFTP sync completed after Mautic sync:",
               syncResult
             );
           } catch (syncError) {
-            console.error(
+            logger.error(
               "Failed to refresh DropCowboy data after Mautic sync:",
               syncError
             );
@@ -1397,13 +1398,13 @@ router.post("/sync/all", async (req, res) => {
         })();
       })
       .catch((error) => {
-        console.error("❌ Sync failed:", error);
+        logger.error("❌ Sync failed:", error);
         // Send email notification
         notifyMauticSyncFailed({
           type: "all",
           error: error.message || String(error),
         }).catch((err) =>
-          console.error("Failed to send sync failure email:", err)
+          logger.error("Failed to send sync failure email:", err)
         );
       })
       .finally(() => {
@@ -1413,7 +1414,7 @@ router.post("/sync/all", async (req, res) => {
         currentSyncType = null;
       });
   } catch (error) {
-    console.error("Error syncing all clients:", error);
+    logger.error("Error syncing all clients:", error);
 
     // Reset sync status on error
     isSyncInProgress = false;
@@ -1454,7 +1455,7 @@ router.post("/sync/:clientId", async (req, res) => {
     currentSyncStartTime = Date.now();
     currentSyncType = clientId;
 
-    console.log(`Manual sync triggered for client ${clientId}`);
+    logger.debug(`Manual sync triggered for client ${clientId}`);
 
     // Respond immediately to avoid frontend timeout
     res.json({
@@ -1480,7 +1481,7 @@ router.post("/sync/:clientId", async (req, res) => {
             data: { lastSyncAt: null },
           });
         } catch (ee) {
-          console.warn(
+          logger.warn(
             "Could not clear lastSyncAt for client (forceFull):",
             ee.message
           );
@@ -1492,7 +1493,7 @@ router.post("/sync/:clientId", async (req, res) => {
     schedulerService
       .syncClient(parseInt(clientId))
       .then((result) => {
-        console.log("✅ Sync completed:", result);
+        logger.debug("✅ Sync completed:", result);
         // Send email notification
         const duration = Math.floor((Date.now() - currentSyncStartTime) / 1000);
         notifyMauticSyncCompleted({
@@ -1502,14 +1503,14 @@ router.post("/sync/:clientId", async (req, res) => {
           failed: result.success ? 0 : 1,
           durationSeconds: duration,
         }).catch((err) =>
-          console.error("Failed to send sync completion email:", err)
+          logger.error("Failed to send sync completion email:", err)
         );
 
         // After successful Mautic sync, trigger DropCowboy data refresh to re-match clients
         if (result.success) {
           (async () => {
             try {
-              console.log(
+              logger.debug(
                 "🔄 Triggering DropCowboy data refresh after Mautic sync..."
               );
               const dropCowboyDataService = new DropCowboyDataService();
@@ -1518,17 +1519,17 @@ router.post("/sync/:clientId", async (req, res) => {
               // Clear all existing DropCowboy data
               const clearResult =
                 await dropCowboyDataService.clearAllDropCowboyData();
-              console.log("DropCowboy data cleared:", clearResult);
+              logger.debug("DropCowboy data cleared:", clearResult);
 
               // Trigger SFTP sync to re-fetch and re-match data to Mautic clients
               const syncResult =
                 await dropCowboyScheduler.fetchAndProcessData();
-              console.log(
+              logger.debug(
                 "DropCowboy SFTP sync completed after Mautic sync:",
                 syncResult
               );
             } catch (syncError) {
-              console.error(
+              logger.error(
                 "Failed to refresh DropCowboy data after Mautic sync:",
                 syncError
               );
@@ -1537,13 +1538,13 @@ router.post("/sync/:clientId", async (req, res) => {
         }
       })
       .catch((error) => {
-        console.error("❌ Sync failed:", error);
+        logger.error("❌ Sync failed:", error);
         // Send email notification
         notifyMauticSyncFailed({
           type: "single",
           error: error.message || String(error),
         }).catch((err) =>
-          console.error("Failed to send sync failure email:", err)
+          logger.error("Failed to send sync failure email:", err)
         );
       })
       .finally(() => {
@@ -1553,7 +1554,7 @@ router.post("/sync/:clientId", async (req, res) => {
         currentSyncType = null;
       });
   } catch (error) {
-    console.error("Error syncing client:", error);
+    logger.error("Error syncing client:", error);
 
     // Reset sync status on error
     isSyncInProgress = false;

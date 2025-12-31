@@ -66,7 +66,7 @@ router.get('/', authenticate, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -124,7 +124,7 @@ router.get('/stats', authenticate, requirePermission('Activities', 'Read'), asyn
       recentActivities
     });
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     res.status(500).json({ message: 'Server error' });
   }
 });

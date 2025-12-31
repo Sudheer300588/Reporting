@@ -11,8 +11,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 
-// Backend API base URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || "https://dev.hcddev.com";
+// Backend API base URL - uses relative path for same-origin requests
+const API_BASE_URL = import.meta.env.VITE_API_URL || "";
 
 const RecordsTable = ({ campaigns }) => {
   const { user } = useAuth();

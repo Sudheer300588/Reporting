@@ -1,11 +1,11 @@
 import express from "express";
 import SftpService from "../services/sftpService.js";
 import DataService from "../services/dataService.js";
+import logger from "../../../utils/logger.js";
 import {
   notifySftpFetchCompleted,
   notifySftpFetchFailed,
 } from "../../../utils/emailHelper.js";
-import logger from "../../../utils/logger.js";
 
 const router = express.Router();
 const sftpService = new SftpService();
@@ -325,7 +325,7 @@ router.get("/campaigns", async (req, res) => {
       campaigns,
     });
   } catch (error) {
-    console.error("Error fetching campaigns:", error);
+    logger.error("Error fetching campaigns:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch campaigns",
@@ -355,7 +355,7 @@ router.post("/campaigns/:campaignId/link-client", async (req, res) => {
       data: result,
     });
   } catch (error) {
-    console.error("Error linking campaign to client:", error);
+    logger.error("Error linking campaign to client:", error);
     res.status(500).json({
       success: false,
       message: "Failed to link campaign to client",
@@ -377,7 +377,7 @@ router.post("/campaigns/:campaignId/unlink-client", async (req, res) => {
       data: result,
     });
   } catch (error) {
-    console.error("Error unlinking campaign from client:", error);
+    logger.error("Error unlinking campaign from client:", error);
     res.status(500).json({
       success: false,
       message: "Failed to unlink campaign from client",
