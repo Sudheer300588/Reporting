@@ -25,7 +25,7 @@ const SettingsSection = ({ id, children }) => {
   }, [id, registerSection]);
 
   return (
-    <div ref={ref} id={`settings-${id}`} className="mb-12 scroll-mt-20">
+    <div ref={ref} id={`settings-${id}`} className="mb-12 scroll-mt-24">
       {children}
     </div>
   );
