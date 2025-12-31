@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import axios from 'axios'
 import { toast } from 'react-toastify'
-import { UserPlus, Edit, Trash2, X, EyeOff, Eye, ToggleLeft, ToggleRight, Shield } from 'lucide-react'
+import { UserPlus, Edit, Trash2, X, EyeOff, Eye, ToggleLeft, ToggleRight, Shield, Crown } from 'lucide-react'
 import { usePermissions } from '../utils/permissions'
 
 const Employees = () => {
@@ -21,11 +21,26 @@ const Employees = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [availableRoles, setAvailableRoles] = useState([]);
   const [rolesLoading, setRolesLoading] = useState(true);
+  const [ownerId, setOwnerId] = useState(null);
 
   useEffect(() => {
     fetchEmployees()
     fetchRoles()
+    fetchOwner()
   }, [user]);
+
+  const fetchOwner = async () => {
+    try {
+      const response = await axios.get('/api/superadmin/owner')
+      if (response.data.success && response.data.data) {
+        setOwnerId(response.data.data.id)
+      }
+    } catch (error) {
+      console.error('Error fetching owner info:', error)
+    }
+  }
+
+  const isOwner = (userId) => ownerId === userId;
 
   const fetchRoles = async () => {
     try {
@@ -271,7 +286,15 @@ const Employees = () => {
                 {employees.map((userItem, index) => (
                   <tr key={index} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {userItem.name.charAt(0).toUpperCase() + userItem.name.slice(1)}
+                      <div className="flex items-center gap-2">
+                        {userItem.name.charAt(0).toUpperCase() + userItem.name.slice(1)}
+                        {isOwner(userItem.id) && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800" title="Owner - Protected Account">
+                            <Crown size={12} />
+                            Owner
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {userItem.email}
@@ -286,17 +309,23 @@ const Employees = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
-                        <button
-                          onClick={() => toggleActivity(userItem)}
-                          className="focus:outline-none"
-                          title={userItem.isActive ? 'Deactivate' : 'Reactivate'}
-                        >
-                          {userItem.isActive ? (
-                            <ToggleRight className="text-green-500" size={22} />
-                          ) : (
-                            <ToggleLeft className="text-gray-400" size={22} />
-                          )}
-                        </button>
+                        {isOwner(userItem.id) ? (
+                          <span className="text-gray-300 cursor-not-allowed" title="Owner account cannot be deactivated">
+                            <ToggleRight size={22} />
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => toggleActivity(userItem)}
+                            className="focus:outline-none"
+                            title={userItem.isActive ? 'Deactivate' : 'Reactivate'}
+                          >
+                            {userItem.isActive ? (
+                              <ToggleRight className="text-green-500" size={22} />
+                            ) : (
+                              <ToggleLeft className="text-gray-400" size={22} />
+                            )}
+                          </button>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -308,13 +337,15 @@ const Employees = () => {
                         >
                           <Edit size={16} />
                         </button>
-                        <button
-                          onClick={() => handleDelete(userItem.id)}
-                          className="text-red-600 hover:text-red-900"
-                          title="Delete Employee"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        {!isOwner(userItem.id) && (
+                          <button
+                            onClick={() => handleDelete(userItem.id)}
+                            className="text-red-600 hover:text-red-900"
+                            title="Delete Employee"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

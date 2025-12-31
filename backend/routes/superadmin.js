@@ -16,6 +16,7 @@ import multer from 'multer';
 import { saveFileToFrontendAssets } from '../utils/fileStore.js';
 import logger from '../utils/logger.js';
 import { notifyClientCreated, notifyClientAssigned, notifyClientUnassigned } from '../utils/emailHelper.js';
+import { getOwner, isOwner, ensureOwnerGuard, protectOwnerMutation, ensureOwnerRolePreserved } from '../services/ownerProtectionService.js';
 
 const router = express.Router();
 
@@ -23,6 +24,28 @@ const router = express.Router();
 router.use(authenticateToken);
 // Most routes accessible by admin too (set individually where needed)
 router.use(requireAdmin);
+
+// ============================================
+// OWNER INFO
+// ============================================
+
+/**
+ * GET /api/superadmin/owner
+ * Get information about the owner (protected superadmin account)
+ * Returns the owner's ID so frontend can show owner badge
+ */
+router.get('/owner', async (req, res) => {
+  try {
+    const owner = await getOwner();
+    res.json({
+      success: true,
+      data: owner ? { id: owner.id, name: owner.name, email: owner.email } : null
+    });
+  } catch (error) {
+    logger.error('Error fetching owner info:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch owner info' });
+  }
+});
 
 // ============================================
 // DASHBOARD & STATISTICS
@@ -707,9 +730,10 @@ router.post('/users', async (req, res) => {
 router.patch('/users/:id/toggle', async (req, res) => {
   try {
     const { id } = req.params;
+    const targetUserId = parseInt(id);
 
     const currentUser = await prisma.user.findUnique({
-      where: { id: parseInt(id) }
+      where: { id: targetUserId }
     });
 
     if (!currentUser) {
@@ -725,6 +749,27 @@ router.patch('/users/:id/toggle', async (req, res) => {
         success: false,
         message: 'You cannot deactivate your own account'
       });
+    }
+
+    // Protect the owner (first superadmin) from being deactivated
+    if (await isOwner(targetUserId)) {
+      logger.warn(`Attempted to deactivate owner account by user ${req.user.id} (${req.user.email})`);
+      return res.status(403).json({
+        success: false,
+        message: 'The owner account cannot be deactivated. This is a protected system account.'
+      });
+    }
+
+    // If deactivating a superadmin (currently active), only the owner can do this
+    if (currentUser.role === 'superadmin' && currentUser.isActive) {
+      const requestorIsOwner = await isOwner(req.user.id);
+      if (!requestorIsOwner) {
+        logger.warn(`Non-owner superadmin ${req.user.id} attempted to deactivate superadmin ${targetUserId}`);
+        return res.status(403).json({
+          success: false,
+          message: 'Only the owner can deactivate other superadmin accounts'
+        });
+      }
     }
 
     const newStatus = !currentUser.isActive;
@@ -790,7 +835,17 @@ router.patch('/users/:id/toggle', async (req, res) => {
 router.patch('/users/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const targetUserId = parseInt(id);
     const { name, email, role, managerId, employeeIds } = req.body;
+
+    // Protect owner from role demotion
+    if (role && role !== 'superadmin' && await isOwner(targetUserId)) {
+      logger.warn(`Attempted to demote owner account by user ${req.user.id} (${req.user.email})`);
+      return res.status(403).json({
+        success: false,
+        message: 'The owner account cannot be demoted from superadmin. This is a protected system account.'
+      });
+    }
 
     const updateData = {};
     if (name) updateData.name = name;

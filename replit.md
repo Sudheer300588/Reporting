@@ -25,6 +25,19 @@ The system employs a permission-based access control model with no hardcoded rol
 - **Client Assignment**: Uses `isTeamManager` flag for explicit manager classification, influencing client assignment and visibility.
 - **Backward Compatibility**: Legacy users without custom roles receive temporary fallback permissions (e.g., `superadmin`/`admin` get full access, `manager` gets team manager status) until migrated.
 
+#### Owner Protection (Updated Dec 2024)
+The platform implements robust "owner protection" to prevent hostile takeover of the primary administrator account:
+- **Owner Definition**: The oldest superadmin (by createdAt) is automatically designated as the "owner"
+- **Protected Actions**: Owner cannot be deactivated, deleted, or demoted from superadmin role
+- **Centralized Service**: `backend/services/ownerProtectionService.js` provides:
+  - `getOwner()` - Cached lookup of owner with 1-minute TTL
+  - `isOwner(userId)` - Check if user is the owner
+  - `ensureOwnerGuard()` - Express middleware for mutation endpoints
+  - `ensureOwnerRolePreserved()` - Forces superadmin role in update operations
+  - `protectOwnerMutation()` - Validates proposed changes against owner rules
+- **Frontend UI**: Owner displays Crown badge, toggle button disabled, delete button hidden
+- **Applied To**: All user mutation routes (employees.js PUT/DELETE, superadmin.js PATCH routes)
+
 #### AI Assistant Integration
 A conversational AI assistant allows users to query client statistics, campaign data, and business metrics using natural language.
 - **LLM & Voice Providers**: Supports OpenAI/Anthropic for LLM and ElevenLabs for Text-to-Speech.

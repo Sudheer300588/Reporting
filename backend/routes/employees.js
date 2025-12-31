@@ -6,6 +6,7 @@ import { logActivity } from '../middleware/activityLogger.js';
 import { notifyUserCreated } from '../utils/emailHelper.js';
 import { validate, validateParams, createUserSchema, updateUserSchema, clientIdSchema } from '../validators/schemas.js';
 import logger from '../utils/logger.js';
+import { getOwner, isOwner, ensureOwnerGuard, ensureOwnerRolePreserved, protectOwnerMutation, invalidateOwnerCache } from '../services/ownerProtectionService.js';
 
 const router = express.Router();
 
@@ -396,7 +397,7 @@ router.get('/:id', authenticate, canManageUser, async (req, res) => {
 // @route   PUT /api/users/:id
 // @desc    Update employee
 // @access  Private
-router.put('/:id', authenticate, canManageUser, async (req, res) => {
+router.put('/:id', authenticate, canManageUser, ensureOwnerGuard(), async (req, res) => {
   try {
     const { name, email, isActive, customRoleId } = req.body;
     const currentUser = req.user;
@@ -451,6 +452,9 @@ router.put('/:id', authenticate, canManageUser, async (req, res) => {
         updateData.role = customRole.fullAccess ? 'admin' : 'employee';
       }
     }
+
+    // Ensure owner's superadmin role is always preserved
+    await ensureOwnerRolePreserved(userId, updateData);
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
@@ -592,7 +596,7 @@ router.put('/:id/password', authenticate, async (req, res) => {
 // @route   DELETE /api/users/:id
 // @desc    Delete employee (hard delete with proper cleanup)
 // @access  Private
-router.delete('/:id', authenticate, canManageUser, async (req, res) => {
+router.delete('/:id', authenticate, canManageUser, ensureOwnerGuard({ isDelete: true }), async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
     const user = await prisma.user.findUnique({
