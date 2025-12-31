@@ -96,7 +96,7 @@ dev/
    **Backend** (`backend/.env`):
 
    ```env
-   PORT=3027
+   PORT=3026
    DATABASE_URL="mysql://user:password@localhost:3306/database"
    JWT_SECRET=<generate-random-secret>
    ENCRYPTION_KEY=<generate-random-key>
@@ -113,7 +113,7 @@ dev/
    **Frontend** (`frontend/.env`):
 
    ```env
-   VITE_API_URL=http://localhost:3027
+   VITE_API_URL=http://localhost:3026
    ```
 
 4. **Setup database:**
@@ -129,7 +129,7 @@ dev/
    ```bash
    ./start.sh
    ```
-   - Backend: http://localhost:3027
+   - Backend: http://localhost:3026
    - Frontend: http://localhost:5173
 
 ## 📦 Features
@@ -274,7 +274,7 @@ pm2 monit
 
 ```env
 NODE_ENV=production
-PORT=3027
+PORT=3026
 DATABASE_URL="mysql://user:password@production-host:3306/prod_db?connection_limit=10"
 JWT_SECRET=<strong-random-secret>
 FRONTEND_URL=https://your-domain.com
@@ -409,7 +409,7 @@ mysql -u user -p
 **Frontend Can't Reach Backend:**
 
 ```bash
-# Verify backend is running on port 3027
+# Verify backend is running on port 3026
 # Check VITE_API_URL in frontend/.env
 # Check CORS configuration in backend/app.js
 ```

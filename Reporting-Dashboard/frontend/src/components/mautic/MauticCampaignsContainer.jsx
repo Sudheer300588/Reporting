@@ -23,13 +23,13 @@ const MauticCampaignsContainer = ({ clientId }) => {
       try {
         const [campaignsRes, segmentsRes, emailsRes] = await Promise.all([
           axios.get(
-            `https://hcdteam.com/api/mautic/clients/${clientId}/campaigns`
+            `https://dev.hcddev.com/api/mautic/clients/${clientId}/campaigns`
           ),
           axios.get(
-            `https://hcdteam.com/api/mautic/clients/${clientId}/segments`
+            `https://dev.hcddev.com/api/mautic/clients/${clientId}/segments`
           ),
           axios.get(
-            `https://hcdteam.com/api/mautic/clients/${clientId}/emails`
+            `https://dev.hcddev.com/api/mautic/clients/${clientId}/emails`
           ),
         ]);
 

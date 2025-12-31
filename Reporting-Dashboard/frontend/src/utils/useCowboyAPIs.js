@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://hcdteam.com:3001/api';
+const API_BASE_URL = 'https://dev.hcddev.com:3001/api';
 
 const api = axios.create({
     baseURL: API_BASE_URL,

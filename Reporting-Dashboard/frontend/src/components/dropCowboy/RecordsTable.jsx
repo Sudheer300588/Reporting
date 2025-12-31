@@ -12,7 +12,7 @@ import {
 import { useAuth } from "../../contexts/AuthContext";
 
 // Backend API base URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || "https://hcdteam.com";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "https://dev.hcddev.com";
 
 const RecordsTable = ({ campaigns }) => {
   const { user } = useAuth();

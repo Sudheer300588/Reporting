@@ -20,7 +20,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             echo "➡ Entering project directory..."
-            cd /home/hcddev-dev/htdocs/hcdteam.com/dev
+            cd /home/hcddev-dev/htdocs/dev.hcddev.com/dev
 
             echo "⬇ Pulling latest code..."
             git pull origin main || true
