@@ -1,22 +1,10 @@
-modules = ["nodejs-20"]
-
-[[ports]]
-localPort = 3027
-externalPort = 3001
-
-[[ports]]
-localPort = 5173
-externalPort = 80
-
-[[ports]]
-localPort = 5000
-externalPort = 80
+modules = ["nodejs-20", "postgresql-16"]
+[nix]
+channel = "stable-25_05"
+packages = ["unzip"]
 
 [agent]
 expertMode = true
-
-[nix]
-channel = "stable-25_05"
 
 [workflows]
 runButton = "Project"
@@ -43,7 +31,8 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd backend && npm run start"
+args = "cd Reporting-Dashboard/backend && npm run start"
+waitForPort = 3000
 
 [[workflows.workflow]]
 name = "Frontend"
@@ -51,8 +40,16 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd frontend && npm run dev -- --port 5000 --host 0.0.0.0"
+args = "cd Reporting-Dashboard/frontend && npm run dev"
 waitForPort = 5000
 
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[ports]]
+localPort = 3000
+externalPort = 3000
+
+[[ports]]
+localPort = 5000
+externalPort = 80
