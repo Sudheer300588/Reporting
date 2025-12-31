@@ -432,7 +432,15 @@ class MauticDataService {
         },
         orderBy: { readRate: 'desc' },
         take: 5,
-        include: {
+        select: {
+          id: true,
+          name: true,
+          subject: true,
+          sentCount: true,
+          readCount: true,
+          clickedCount: true,
+          readRate: true,
+          clickRate: true,
           client: {
             select: { name: true }
           }
@@ -464,8 +472,10 @@ class MauticDataService {
             subject: email.subject,
             client: email.client.name,
             sentCount: email.sentCount,
-            readRate: parseFloat(email.readRate).toFixed(2),
-            clickRate: parseFloat(email.clickRate).toFixed(2)
+            readCount: email.readCount || 0,
+            clickedCount: email.clickedCount || 0,
+            readRate: parseFloat(email.readRate || 0).toFixed(2),
+            clickRate: parseFloat(email.clickRate || 0).toFixed(2)
           }))
         }
       };
