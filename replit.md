@@ -20,7 +20,8 @@ Preferred communication style: Simple, everyday language.
 - Environment validation runs on startup, failing fast if required vars are missing
 
 **Database Layer:**
-- Prisma 6.x ORM with MySQL database
+- Prisma 6.x ORM with MySQL or PostgreSQL support
+- Switch databases using: `cd backend && bash scripts/switch-database.sh postgres` (or `mysql`)
 - Client instantiated in `backend/prisma/client.js` as singleton
 - Schema and migrations managed via Prisma CLI commands
 
@@ -59,7 +60,7 @@ Preferred communication style: Simple, everyday language.
 **Framework & Build:**
 - React 19.x with Vite 7.x build tool
 - React Router v7 for routing
-- Development server proxies `/api` to backend on port 3000
+- Development server proxies `/api` to backend on port 3027
 
 **State Management:**
 - Zustand for global state (`frontend/src/zustand/store.js`)
