@@ -104,7 +104,7 @@ router.get('/:id', authenticate, requireAdmin, async (req, res) => {
 
 router.post('/', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { name, description, fullAccess, permissions } = req.body;
+    const { name, description, fullAccess, isTeamManager, permissions } = req.body;
 
     if (!name || name.trim() === '') {
       return res.status(400).json({
@@ -133,6 +133,7 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
         name: name.trim(),
         description: description || null,
         fullAccess: fullAccess || false,
+        isTeamManager: isTeamManager || false,
         permissions: validatedPermissions,
         isSystem: false
       }
@@ -158,7 +159,7 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
 router.put('/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, fullAccess, permissions } = req.body;
+    const { name, description, fullAccess, isTeamManager, permissions } = req.body;
     const roleId = parseInt(id);
 
     const existing = await prisma.role.findUnique({
@@ -201,6 +202,7 @@ router.put('/:id', authenticate, requireAdmin, async (req, res) => {
         name: name ? name.trim() : existing.name,
         description: description !== undefined ? description : existing.description,
         fullAccess: fullAccess !== undefined ? fullAccess : existing.fullAccess,
+        isTeamManager: isTeamManager !== undefined ? isTeamManager : existing.isTeamManager,
         permissions: validatedPermissions
       }
     });
