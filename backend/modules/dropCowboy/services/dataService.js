@@ -49,15 +49,19 @@ class DataService {
             // Sort by name length (longest first) to prioritize more specific matches
             const sortedClients = mauticClients.sort((a, b) => b.name.length - a.name.length);
 
+            // STRICT MATCHING: Only exact name matches (with space normalization)
+            // This prevents mixing records between clients with similar names
             const campaignNameLower = campaign.campaignName.toLowerCase();
             const campaignNameNoSpaces = campaignNameLower.replace(/\s+/g, '');
 
             // Strategy 1: Try exact prefix match (case-insensitive)
+            // e.g., "JAE Automation S1 VM 1" matches client "JAE Automation"
             let matchedClient = sortedClients.find((client) =>
               campaignNameLower.startsWith(client.name.toLowerCase())
             );
 
             // Strategy 2: Try matching without spaces (e.g., "MoneyMailer" matches "Money Mailer")
+            // This handles cases where client name has no spaces but campaign name does
             if (!matchedClient) {
               matchedClient = sortedClients.find((client) => {
                 const clientNameNoSpaces = client.name.toLowerCase().replace(/\s+/g, '');
@@ -65,22 +69,8 @@ class DataService {
               });
             }
 
-            // Strategy 3: Try matching first word/token of client name
-            if (!matchedClient) {
-              matchedClient = sortedClients.find((client) => {
-                const firstWord = client.name.split(/\s+/)[0].toLowerCase();
-                return firstWord.length >= 3 && campaignNameLower.startsWith(firstWord);
-              });
-            }
-
-            // Strategy 4: Check if any significant part of client name appears in campaign name
-            if (!matchedClient) {
-              matchedClient = sortedClients.find((client) => {
-                const clientWords = client.name.toLowerCase().split(/\s+/);
-                const significantWord = clientWords.find(word => word.length >= 3);
-                return significantWord && campaignNameLower.includes(significantWord);
-              });
-            }
+            // NO MORE PERMISSIVE STRATEGIES - to prevent mixing client records
+            // Campaign names MUST start with the client name (or normalized version)
 
             if (matchedClient) {
               clientId = matchedClient.id;
@@ -877,6 +867,26 @@ class DataService {
       return campaigns;
     } catch (error) {
       logger.error("Error fetching all campaigns:", error);
+      throw error;
+    }
+  }
+
+  // Get unique client IDs that have VM campaigns mapped
+  async getClientIdsWithCampaigns() {
+    try {
+      const campaigns = await prisma.dropCowboyCampaign.findMany({
+        where: {
+          clientId: { not: null },
+        },
+        select: {
+          clientId: true,
+        },
+        distinct: ['clientId'],
+      });
+
+      return campaigns.map(c => c.clientId).filter(id => id !== null);
+    } catch (error) {
+      logger.error("Error fetching client IDs with campaigns:", error);
       throw error;
     }
   }

@@ -41,19 +41,32 @@ const Clients = () => {
 
     const fetchClients = async () => {
         try {
-            // Fetch both Mautic and all clients (with assignments)
-            const [mauticRes, clientsRes] = await Promise.all([
+            // Fetch Mautic clients, all clients (with assignments), and clients with VM campaigns
+            const [mauticRes, clientsRes, vmClientsRes] = await Promise.all([
                 axios.get("/api/mautic/clients"),
                 axios.get("/api/clients"),
+                axios.get("/api/dropcowboy/clients-with-campaigns"),
             ]);
+            
+            // Client IDs that have VM campaigns mapped
+            const vmClientIds = new Set(vmClientsRes.data?.clientIds || []);
 
-            const mauticClients = (mauticRes.data?.data || []).map((c) => ({
-                ...c,
-                id: c.clientId || c.id,  // keep /api/clients ID for unified display and assignment
-                mauticApiId: c.id,       // store the actual Mautic system ID separately
-                uniqueId: `mautic-${c.clientId || c.id}`,
-                services: ["mautic"],
-            }));
+            const mauticClients = (mauticRes.data?.data || []).map((c) => {
+                const clientId = c.clientId || c.id;
+                // Check if this client has VM campaigns mapped
+                const hasVmCampaigns = vmClientIds.has(clientId);
+                const services = ["mautic"];
+                if (hasVmCampaigns) {
+                    services.push("dropcowboy");
+                }
+                return {
+                    ...c,
+                    id: clientId,  // keep /api/clients ID for unified display and assignment
+                    mauticApiId: c.id,       // store the actual Mautic system ID separately
+                    uniqueId: `mautic-${clientId}`,
+                    services,
+                };
+            });
 
 
             const allClients = clientsRes.data || [];

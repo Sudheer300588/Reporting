@@ -10,11 +10,12 @@ const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCamp
 
     const { selectedService, setSelectedService } = useViewLevel();
     
+    // Reset selectedService when client changes to ensure correct widget visibility
     useEffect(() => {
-        if (selectedService === null) {
-            setSelectedService(selectedClient.services[0] || 'mautic');
-        }
-    }, [selectedClient, selectedService, setSelectedService]);
+        // Always reset to the first available service when client changes
+        const defaultService = selectedClient.services[0] || 'mautic';
+        setSelectedService(defaultService);
+    }, [selectedClient.uniqueId]); // Only trigger when client changes (using uniqueId)
 
     return (
         <div className="animate-fade-in">

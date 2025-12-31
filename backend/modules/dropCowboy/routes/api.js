@@ -334,6 +334,25 @@ router.get("/campaigns", async (req, res) => {
   }
 });
 
+// Get client IDs that have VM campaigns mapped (for service detection)
+router.get("/clients-with-campaigns", async (req, res) => {
+  try {
+    const clientIds = await dataService.getClientIdsWithCampaigns();
+    
+    res.json({
+      success: true,
+      clientIds,
+    });
+  } catch (error) {
+    logger.error("Error fetching clients with VM campaigns:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch clients with VM campaigns",
+      error: error.message,
+    });
+  }
+});
+
 // Link campaign to client
 router.post("/campaigns/:campaignId/link-client", async (req, res) => {
   try {
