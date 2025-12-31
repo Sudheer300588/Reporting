@@ -90,7 +90,7 @@ const MauticSettings = () => {
       <AddClientModal
         isOpen={isMauticModalOpen}
         onClose={() => { setIsMauticModalOpen(false); setEditingMauticClient(null); }}
-        client={editingMauticClient}
+        editClient={editingMauticClient}
         onSuccess={refetchClients}
       />
     </SettingsSection>
