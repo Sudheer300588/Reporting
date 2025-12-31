@@ -424,14 +424,17 @@ class MauticDataService {
         }
       });
 
-      // Top performing emails
+      // Top performing emails - sorted by sent count to show most impactful emails
       const topEmails = await prisma.mauticEmail.findMany({
         where: {
           ...where,
-          sentCount: { gt: 0 }
+          sentCount: { gt: 100 } // Only show emails with meaningful volume
         },
-        orderBy: { readRate: 'desc' },
-        take: 5,
+        orderBy: [
+          { sentCount: 'desc' }, // Primary: highest volume
+          { readRate: 'desc' }   // Secondary: best performance
+        ],
+        take: 7,
         select: {
           id: true,
           name: true,
@@ -439,8 +442,11 @@ class MauticDataService {
           sentCount: true,
           readCount: true,
           clickedCount: true,
+          unsubscribed: true,
+          bounced: true,
           readRate: true,
           clickRate: true,
+          unsubscribeRate: true,
           client: {
             select: { name: true }
           }
@@ -474,8 +480,11 @@ class MauticDataService {
             sentCount: email.sentCount,
             readCount: email.readCount || 0,
             clickedCount: email.clickedCount || 0,
+            unsubscribed: email.unsubscribed || 0,
+            bounced: email.bounced || 0,
             readRate: parseFloat(email.readRate || 0).toFixed(2),
-            clickRate: parseFloat(email.clickRate || 0).toFixed(2)
+            clickRate: parseFloat(email.clickRate || 0).toFixed(2),
+            unsubscribeRate: parseFloat(email.unsubscribeRate || 0).toFixed(2)
           }))
         }
       };
