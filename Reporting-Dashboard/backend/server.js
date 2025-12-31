@@ -104,8 +104,11 @@ async function startServer() {
     // Create Express app with all routes and middleware
     const app = createApp();
 
-    // Add catch-all route for serving dynamic index.html (must be last)
-    app.get(/.*/, createDynamicIndexHandler());
+    // Add catch-all route for serving dynamic index.html (production only)
+    // In development, frontend runs on Vite dev server (port 5000)
+    if (process.env.NODE_ENV === 'production') {
+      app.get(/.*/, createDynamicIndexHandler());
+    }
 
     // Start listening
     const server = app.listen(PORT, () => {
