@@ -107,25 +107,14 @@ export async function loadSiteSettings(indexPath) {
  */
 export function createDynamicIndexHandler() {
   const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
-  const isDevelopment = process.env.NODE_ENV !== 'production';
-  const distExists = fs.existsSync(indexPath);
 
-  return async (req, res, next) => {
-    // In development mode or when dist doesn't exist, skip and let Vite handle it
-    if (isDevelopment && !distExists) {
-      return next();
-    }
-
+  return async (req, res) => {
     try {
       const html = await loadSiteSettings(indexPath);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.send(html);
     } catch (err) {
       logger.error('Error serving dynamic index.html, falling back to static file', { error: err.message, stack: err.stack });
-      // In development, just skip if file not found
-      if (isDevelopment) {
-        return next();
-      }
       return res.sendFile(indexPath);
     }
   };
