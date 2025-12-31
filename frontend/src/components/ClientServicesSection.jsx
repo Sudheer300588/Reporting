@@ -1,14 +1,20 @@
+import { useEffect } from "react";
 import { Mail, PhoneOff, ArrowLeft } from "lucide-react";
 import DropCowboyServiceStats from "./dropCowboy/DropCowboyServiceStats";
 import MauticServiceStats from "./mautic/MauticServiceStats";
+import EmailPerformanceWidget from "./widgets/EmailPerformanceWidget";
+import VoicemailPerformanceWidget from "./widgets/VoicemailPerformanceWidget";
 import useViewLevel from "../zustand/useViewLevel";
 
 const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCampaigns, openDropcowboyCampaigns }) => {
 
     const { selectedService, setSelectedService } = useViewLevel();
-    if (selectedService === null) {
-        setSelectedService(selectedClient.services[0] || 'mautic');
-    }
+    
+    useEffect(() => {
+        if (selectedService === null) {
+            setSelectedService(selectedClient.services[0] || 'mautic');
+        }
+    }, [selectedClient, selectedService, setSelectedService]);
 
     return (
         <div className="animate-fade-in">
@@ -70,6 +76,22 @@ const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCamp
                 {selectedService === 'dropcowboy' && <DropCowboyServiceStats selectedClient={selectedClient} />}
 
                 {selectedService === 'mautic' && <MauticServiceStats selectedClient={selectedClient} />}
+            </div>
+
+            {/* Performance Widgets */}
+            <div className="my-4">
+                {selectedService === 'mautic' && selectedClient.mauticApiId && (
+                    <EmailPerformanceWidget 
+                        clientId={selectedClient.mauticApiId} 
+                        clientName={selectedClient.name} 
+                    />
+                )}
+
+                {selectedService === 'dropcowboy' && (
+                    <VoicemailPerformanceWidget 
+                        clientName={selectedClient.name} 
+                    />
+                )}
             </div>
 
             {/* Header */}
