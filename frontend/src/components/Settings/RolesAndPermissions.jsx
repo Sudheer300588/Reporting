@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
 import Permissions from "./Permissions";
+import SettingsSection from "./SettingsSection";
+import { useSettings } from "./SettingsLayout";
 import { Save, X, Plus, Edit, Trash2, Users, Shield, ChevronLeft } from "lucide-react";
 import { fetchRoles, createRole, updateRole, deleteRole } from "../../services/roles/api";
 
 const RolesAndPermissions = () => {
+  const { canAccessSetting } = useSettings();
   const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -127,18 +130,23 @@ const RolesAndPermissions = () => {
     setPermissions({});
   };
 
+  if (!canAccessSetting('roles')) return null;
+
   if (loading) {
     return (
-      <div className="card p-8 text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-        <p className="mt-4 text-gray-500">Loading roles...</p>
-      </div>
+      <SettingsSection id="roles">
+        <div className="card p-8 text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-500">Loading roles...</p>
+        </div>
+      </SettingsSection>
     );
   }
 
   if (view === "list") {
     return (
-      <div className="card">
+      <SettingsSection id="roles">
+        <div className="card">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-xl font-semibold text-gray-900">Roles & Permissions</h2>
@@ -249,12 +257,14 @@ const RolesAndPermissions = () => {
             </table>
           </div>
         )}
-      </div>
+        </div>
+      </SettingsSection>
     );
   }
 
   return (
-    <div className="card">
+    <SettingsSection id="roles">
+      <div className="card">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
           <button
@@ -393,7 +403,8 @@ const RolesAndPermissions = () => {
           onPermissionsChange={setPermissions}
         />
       )}
-    </div>
+      </div>
+    </SettingsSection>
   );
 };
 
