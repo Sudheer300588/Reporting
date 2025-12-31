@@ -50,13 +50,22 @@ class DataService {
             const sortedClients = mauticClients.sort((a, b) => b.name.length - a.name.length);
 
             const campaignNameLower = campaign.campaignName.toLowerCase();
+            const campaignNameNoSpaces = campaignNameLower.replace(/\s+/g, '');
 
             // Strategy 1: Try exact prefix match (case-insensitive)
             let matchedClient = sortedClients.find((client) =>
               campaignNameLower.startsWith(client.name.toLowerCase())
             );
 
-            // Strategy 2: Try matching first word/token of client name
+            // Strategy 2: Try matching without spaces (e.g., "MoneyMailer" matches "Money Mailer")
+            if (!matchedClient) {
+              matchedClient = sortedClients.find((client) => {
+                const clientNameNoSpaces = client.name.toLowerCase().replace(/\s+/g, '');
+                return campaignNameNoSpaces.startsWith(clientNameNoSpaces);
+              });
+            }
+
+            // Strategy 3: Try matching first word/token of client name
             if (!matchedClient) {
               matchedClient = sortedClients.find((client) => {
                 const firstWord = client.name.split(/\s+/)[0].toLowerCase();
@@ -64,7 +73,7 @@ class DataService {
               });
             }
 
-            // Strategy 3: Check if any significant part of client name appears in campaign name
+            // Strategy 4: Check if any significant part of client name appears in campaign name
             if (!matchedClient) {
               matchedClient = sortedClients.find((client) => {
                 const clientWords = client.name.toLowerCase().split(/\s+/);
