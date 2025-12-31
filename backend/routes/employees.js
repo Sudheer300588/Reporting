@@ -15,7 +15,7 @@ const router = express.Router();
 // @access  Private (Users with Users.Create permission)
 router.post('/', authenticate, requirePermission('Users', 'Create'), validate(createUserSchema), async (req, res) => {
   try {
-    const { name, email, password, customRoleId } = req.body;
+    const { name, email, password, customRoleId, phone, managerIds, sendWelcomeEmail = true } = req.body;
     const currentUser = req.user;
 
     // Check if user already exists
@@ -103,8 +103,19 @@ router.post('/', authenticate, requirePermission('Users', 'Create'), validate(cr
       customRoleId: parsedRoleId
     };
 
-    // Connect the creator as manager if they don't have full access
-    if (!hasFullAccess(currentUser)) {
+    // Add phone if provided
+    if (phone) {
+      userData.phone = phone;
+    }
+
+    // Handle manager assignment
+    if (managerIds && Array.isArray(managerIds) && managerIds.length > 0) {
+      // Use provided manager IDs
+      userData.managers = {
+        connect: managerIds.map(id => ({ id: parseInt(id) }))
+      };
+    } else if (!hasFullAccess(currentUser)) {
+      // Connect the creator as manager if they don't have full access and no managers specified
       userData.managers = {
         connect: { id: currentUser.id }
       };
@@ -143,19 +154,23 @@ router.post('/', authenticate, requirePermission('Users', 'Create'), validate(cr
       req
     );
 
-    // Send welcome email with credentials to the new user
-    notifyUserCreated(user, currentUser, password)
-      .then(result => {
-        logger.info('User welcome email sent', { result, userId: user.id, userEmail: user.email });
-      })
-      .catch(err => {
-        logger.error('Failed to send user welcome email', { 
-          error: err.message, 
-          stack: err.stack,
-          userId: user.id,
-          userEmail: user.email 
+    // Send welcome email with credentials to the new user (if enabled)
+    if (sendWelcomeEmail) {
+      notifyUserCreated(user, currentUser, password)
+        .then(result => {
+          logger.info('User welcome email sent', { result, userId: user.id, userEmail: user.email });
+        })
+        .catch(err => {
+          logger.error('Failed to send user welcome email', { 
+            error: err.message, 
+            stack: err.stack,
+            userId: user.id,
+            userEmail: user.email 
+          });
         });
-      });
+    } else {
+      logger.info('Welcome email skipped by user request', { userId: user.id, userEmail: user.email });
+    }
 
     res.status(201).json({
       message: 'User created successfully',
@@ -399,7 +414,7 @@ router.get('/:id', authenticate, canManageUser, async (req, res) => {
 // @access  Private
 router.put('/:id', authenticate, canManageUser, ensureOwnerGuard(), async (req, res) => {
   try {
-    const { name, email, isActive, customRoleId } = req.body;
+    const { name, email, isActive, customRoleId, phone, managerIds } = req.body;
     const currentUser = req.user;
     const userId = parseInt(req.params.id);
 
@@ -419,6 +434,7 @@ router.put('/:id', authenticate, canManageUser, ensureOwnerGuard(), async (req, 
     if (name) updateData.name = name;
     if (email) updateData.email = email;
     if (typeof isActive === 'boolean') updateData.isActive = isActive;
+    if (phone !== undefined) updateData.phone = phone || null;
     
     // Handle customRoleId - users with Users.Update permission can assign roles
     if (customRoleId !== undefined && userHasPermission(currentUser, 'Users', 'Update')) {
@@ -451,6 +467,14 @@ router.put('/:id', authenticate, canManageUser, ensureOwnerGuard(), async (req, 
         // Update base role based on full access status
         updateData.role = customRole.fullAccess ? 'admin' : 'employee';
       }
+    }
+
+    // Handle manager assignment updates
+    if (managerIds !== undefined && Array.isArray(managerIds) && hasFullAccess(currentUser)) {
+      // Replace managers with new list
+      updateData.managers = {
+        set: managerIds.map(id => ({ id: parseInt(id) }))
+      };
     }
 
     // Ensure owner's superadmin role is always preserved

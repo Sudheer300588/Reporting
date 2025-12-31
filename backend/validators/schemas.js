@@ -94,7 +94,10 @@ export const createUserSchema = z.object({
   password,
   role: role.optional(), // Deprecated: base role is now derived from customRole
   managerId: z.number().int().positive().optional(),
-  customRoleId: z.union([z.number().int().positive(), z.string()]) // Required: dynamic role from Settings
+  customRoleId: z.union([z.number().int().positive(), z.string()]), // Required: dynamic role from Settings
+  phone: z.string().max(50).optional().nullable(),
+  managerIds: z.array(z.union([z.number().int().positive(), z.string()])).optional(),
+  sendWelcomeEmail: z.boolean().optional()
 });
 
 export const updateUserSchema = z.object({
@@ -103,7 +106,9 @@ export const updateUserSchema = z.object({
   role: role.optional(),
   isActive: z.boolean().optional(),
   managerId: z.number().int().positive().optional().nullable(),
-  customRoleId: z.union([z.number().int().positive(), z.string(), z.null()]).optional()
+  customRoleId: z.union([z.number().int().positive(), z.string(), z.null()]).optional(),
+  phone: z.string().max(50).optional().nullable(),
+  managerIds: z.array(z.union([z.number().int().positive(), z.string()])).optional()
 });
 
 // Client Schemas
