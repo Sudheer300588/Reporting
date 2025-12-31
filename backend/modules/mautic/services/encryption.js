@@ -1,22 +1,38 @@
 import logger from '../../../utils/logger.js';
 import crypto from 'crypto';
 
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
 const ALGORITHM = 'aes-256-cbc';
 
+function getEncryptionKey() {
+  const envKey = process.env.ENCRYPTION_KEY;
+  
+  if (!envKey) {
+    logger.error('ENCRYPTION_KEY environment variable is required but not set');
+    throw new Error('ENCRYPTION_KEY must be set. Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+  }
+  
+  if (/^[0-9a-fA-F]{64}$/.test(envKey)) {
+    return Buffer.from(envKey, 'hex');
+  }
+  
+  if (envKey.length < 16) {
+    logger.error('ENCRYPTION_KEY is too short (minimum 16 characters)');
+    throw new Error('ENCRYPTION_KEY must be at least 16 characters');
+  }
+  
+  const hash = crypto.createHash('sha256').update(envKey).digest();
+  return hash;
+}
+
+const ENCRYPTION_KEY_BUFFER = getEncryptionKey();
+
 class EncryptionService {
-  /**
-   * Encrypt a string
-   * @param {string} text - Plain text to encrypt
-   * @returns {string} Encrypted text with IV prepended
-   */
   encrypt(text) {
     if (!text) return '';
     
     try {
-      const key = Buffer.from(ENCRYPTION_KEY.slice(0, 64), 'hex');
       const iv = crypto.randomBytes(16);
-      const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+      const cipher = crypto.createCipheriv(ALGORITHM, ENCRYPTION_KEY_BUFFER, iv);
       
       let encrypted = cipher.update(text, 'utf8', 'hex');
       encrypted += cipher.final('hex');
@@ -38,7 +54,6 @@ class EncryptionService {
     if (!encryptedText) return '';
     
     try {
-      const key = Buffer.from(ENCRYPTION_KEY.slice(0, 64), 'hex');
       const parts = encryptedText.split(':');
       
       if (parts.length !== 2) {
@@ -48,7 +63,7 @@ class EncryptionService {
       const iv = Buffer.from(parts[0], 'hex');
       const encrypted = parts[1];
       
-      const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+      const decipher = crypto.createDecipheriv(ALGORITHM, ENCRYPTION_KEY_BUFFER, iv);
       
       let decrypted = decipher.update(encrypted, 'hex', 'utf8');
       decrypted += decipher.final('utf8');
