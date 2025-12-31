@@ -16,23 +16,11 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Backend API"
+args = "Frontend"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Frontend"
-
-[[workflows.workflow]]
-name = "Backend API"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd Reporting-Dashboard/backend && npm run start"
-waitForPort = 3000
+args = "Backend API"
 
 [[workflows.workflow]]
 name = "Frontend"
@@ -45,6 +33,17 @@ outputType = "webview"
 task = "shell.exec"
 args = "cd Reporting-Dashboard/frontend && npm run dev"
 waitForPort = 5000
+
+[[workflows.workflow]]
+name = "Backend API"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd Reporting-Dashboard/backend && npm run start"
+
+[workflows.workflow.metadata]
+outputType = "console"
 
 [[ports]]
 localPort = 3000
