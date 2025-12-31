@@ -206,9 +206,9 @@ class MauticAPIService {
   }
 
   /**
-   * Fetch all segments (lists) from Mautic
+   * Fetch all segments (lists) from Mautic with contact counts
    * @param {Object} client - Client configuration
-   * @returns {Promise<Array>} Array of segment objects
+   * @returns {Promise<Array>} Array of segment objects with leadCount
    */
   async fetchSegments(client) {
     try {
@@ -254,7 +254,42 @@ class MauticAPIService {
       }
 
       console.log(`✅ Total segments fetched: ${segments.length}`);
-      return segments;
+      
+      // ⚡ COUNT CONTACTS FOR EACH SEGMENT
+      console.log(`\n🔍 Counting contacts for each segment...`);
+      
+      const segmentsWithCounts = await Promise.all(
+        segments.map(async (segment) => {
+          try {
+            // Query contacts API filtered by segment to get count
+            const contactResponse = await apiClient.get('/contacts', {
+              params: {
+                search: `segment:${segment.alias}`,
+                limit: 1,  // We only need the count, not the data
+                start: 0
+              }
+            });
+            
+            const count = parseInt(contactResponse.data?.total || 0, 10);
+            segment.leadCount = count;
+            
+            if (count > 0) {
+              console.log(`   ✅ ${segment.name}: ${count} contacts`);
+            } else {
+              console.log(`   ⚪ ${segment.name}: 0 contacts`);
+            }
+          } catch (error) {
+            console.error(`   ⚠️  Failed to count for segment ${segment.id} (${segment.name}): ${error.message}`);
+            segment.leadCount = 0;
+          }
+          return segment;
+        })
+      );
+
+      const totalContacts = segmentsWithCounts.reduce((sum, seg) => sum + (seg.leadCount || 0), 0);
+      console.log(`\n✅ Contact count complete! Total across all segments: ${totalContacts}`);
+      
+      return segmentsWithCounts;
     } catch (error) {
       console.error('Error fetching segments:', error.message);
       throw new Error(`Failed to fetch segments: ${error.message}`);
