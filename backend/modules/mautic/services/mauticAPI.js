@@ -553,11 +553,22 @@ class MauticAPIService {
    * Sync all data for a client (emails, campaigns, segments, reports)
    * Email reports are saved to database during fetch (streaming)
    * @param {Object} client - Client configuration
+   * @param {Function} onProgress - Optional progress callback
    * @returns {Promise<Object>} Sync results
    */
-  async syncAllData(client) {
+  async syncAllData(client, onProgress = null) {
     try {
       logger.debug(`🔄 Starting full sync for ${client.name}...`);
+
+      // Report progress: fetching metadata
+      if (onProgress) {
+        onProgress({
+          phase: 'metadata',
+          message: 'Fetching emails, campaigns, and segments...',
+          recordsProcessed: 0,
+          totalRecords: 0
+        });
+      }
 
       // Fetch emails, campaigns, and segments in parallel (fast metadata)
       const [emails, campaigns, segments] = await Promise.all([
@@ -566,9 +577,29 @@ class MauticAPIService {
         this.fetchSegments(client)
       ]);
 
+      // Report progress: metadata complete
+      if (onProgress) {
+        onProgress({
+          phase: 'reports',
+          message: `Metadata complete. Fetching email reports...`,
+          recordsProcessed: emails.length + campaigns.length + segments.length,
+          totalRecords: 0
+        });
+      }
+
       // Fetch report data AFTER metadata succeeds (prevents background execution on error)
       // This is a long-running operation that saves directly to DB
       const emailReportResult = await this.fetchReport(client);
+
+      // Report progress: complete
+      if (onProgress) {
+        onProgress({
+          phase: 'complete',
+          message: 'Sync complete',
+          recordsProcessed: emailReportResult.created,
+          totalRecords: emailReportResult.totalRows
+        });
+      }
 
       return {
         success: true,

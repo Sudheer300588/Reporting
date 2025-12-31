@@ -459,16 +459,19 @@ router.post("/clients", async (req, res) => {
       logger.debug(`✨ Created new Mautic client: ${name} (ID: ${client.id})`);
 
       // Start background month-by-month backfill (non-blocking)
-      // If user provided fromDate/toDate use that range, otherwise default to 2024-05-01 → 2025-11-25
-      const backfillFrom = fromDate || "2024-05-01";
-      const backfillTo = toDate || "2025-11-25";
+      // Calculate backfill range based on MAUTIC_HISTORICAL_MONTHS config
+      const historicalMonths = parseInt(process.env.MAUTIC_HISTORICAL_MONTHS || "12", 10);
+      const now = new Date();
+      const defaultFromDate = new Date(now.getFullYear(), now.getMonth() - historicalMonths, 1);
+      const backfillFrom = fromDate || defaultFromDate.toISOString().split('T')[0];
+      const backfillTo = toDate || now.toISOString().split('T')[0];
       const pageLimit = limit || 5000; // default per-page limit; can be customized from frontend
 
       // Run backfill in background so client creation returns immediately
       setImmediate(async () => {
         try {
           logger.debug(
-            `🔁 Starting background monthly backfill for client ${client.id} (${backfillFrom} → ${backfillTo})`
+            `🔁 Starting background monthly backfill for client ${client.id} (${backfillFrom} → ${backfillTo}, ${historicalMonths} months)`
           );
 
           // Helper to iterate months inclusive
@@ -493,7 +496,8 @@ router.post("/clients", async (req, res) => {
             return months;
           }
 
-          const monthList = monthsBetween(backfillFrom, backfillTo);
+          // Reverse month list so we fetch newest data first (priority-based syncing)
+          const monthList = monthsBetween(backfillFrom, backfillTo).reverse();
 
           const PAUSE_MS = parseInt(
             process.env.MAUTIC_BACKFILL_PAUSE_MS || "2000",
@@ -743,7 +747,8 @@ router.post("/clients/:id/backfill", async (req, res) => {
           return out;
         }
 
-        const months = monthsBetween(start, end);
+        // Reverse month list so we fetch newest data first (priority-based syncing)
+        const months = monthsBetween(start, end).reverse();
         const PAUSE_MS = parseInt(
           process.env.MAUTIC_BACKFILL_PAUSE_MS || "2000",
           10
@@ -1295,6 +1300,27 @@ router.get("/reports", async (req, res) => {
 // ============================================
 // SYNC ROUTES
 // ============================================
+
+/**
+ * GET /api/mautic/sync/progress
+ * Get detailed per-client sync progress
+ */
+router.get("/sync/progress", async (req, res) => {
+  try {
+    const progress = schedulerService.getSyncProgress();
+    res.json({
+      success: true,
+      data: progress
+    });
+  } catch (error) {
+    logger.error("Error fetching sync progress:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch sync progress",
+      error: error.message
+    });
+  }
+});
 
 /**
  * GET /api/mautic/sync/status
