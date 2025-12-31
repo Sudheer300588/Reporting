@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Mail, PhoneOff, ArrowLeft } from "lucide-react";
 import DropCowboyServiceStats from "./dropCowboy/DropCowboyServiceStats";
 import MauticServiceStats from "./mautic/MauticServiceStats";
@@ -6,9 +7,12 @@ import useViewLevel from "../zustand/useViewLevel";
 const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCampaigns, openDropcowboyCampaigns }) => {
 
     const { selectedService, setSelectedService } = useViewLevel();
-    if (selectedService === null) {
-        setSelectedService(selectedClient.services[0] || 'mautic');
-    }
+    
+    useEffect(() => {
+        if (selectedService === null) {
+            setSelectedService(selectedClient.services[0] || 'mautic');
+        }
+    }, [selectedService, selectedClient.services, setSelectedService]);
 
     return (
         <div className="animate-fade-in">
