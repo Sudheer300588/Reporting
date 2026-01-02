@@ -80,6 +80,26 @@ A four-tiered stats API for drilling down from application-level to individual e
 - **Service**: `backend/modules/mautic/services/statsService.js` - shared aggregation helpers with Prisma groupBy/aggregate for efficient N+1-free queries
 - **Note**: Campaigns and Emails are both linked to Clients but not directly to each other in the current schema
 
+#### DropCowboy Client-Campaign Mapping (Jan 2025)
+Strict mapping system for linking DropCowboy voicemail campaigns to Mautic clients:
+- **Strict Matching Only**: Campaign names MUST start with the client name (no permissive heuristics)
+  - Strategy 1: Exact prefix match (case-insensitive) - e.g., "JAE Automation S1 VM 1" matches "JAE Automation"
+  - Strategy 2: Space-normalized match - e.g., "MoneyMailer" matches "Money Mailer Win Back VM 1"
+- **No Hardcoding**: All matching is dynamic based on Mautic client names
+- **Prevents Data Mixing**: Conservative matching ensures no cross-client record contamination
+- **Campaign Naming Convention**: Team should name campaigns starting with exact client name
+- **Service Detection**: `/api/dropcowboy/clients-with-campaigns` returns client IDs with mapped VM campaigns
+- **Rebuild Endpoint**: `POST /api/dropcowboy/rebuild-campaigns` repairs unlinked campaign data
+- **Files**: `backend/modules/dropCowboy/services/dataService.js`, `backend/modules/dropCowboy/routes/api.js`
+
+#### Client Performance Widgets (Jan 2025)
+Interactive performance visualization widgets on the Clients page:
+- **EmailPerformanceWidget**: Recharts bar chart showing email metrics (sent, read, clicked, bounced) for selected Mautic client
+- **VoicemailPerformanceWidget**: Delivery metrics and charts for DropCowboy campaigns linked to client
+- **Dynamic Service Detection**: Ringless Voicemail row enables only when client has actual VM campaigns mapped
+- **State Management**: `ClientServicesSection` resets selected service on client change to ensure correct widget display
+- **Files**: `frontend/src/components/widgets/EmailPerformanceWidget.jsx`, `frontend/src/components/widgets/VoicemailPerformanceWidget.jsx`, `frontend/src/components/ClientServicesSection.jsx`
+
 #### Modular Settings Components
 The `frontend/src/components/Settings/` directory houses self-contained components for various configurations, such as `RolesAndPermissions`, `MauticSettings`, `NotificationsSettings`, `SmtpCredentials`, `SftpCredentials`, `VicidialCredentials`, and `SiteBranding`. Each component manages its state and API calls, utilizing `useSettings()` for permission checks.
 
