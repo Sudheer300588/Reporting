@@ -1,6 +1,7 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticate, requireAdmin, hasFullAccess, userHasPermission } from '../middleware/auth.js';
+import logger from '../utils/logger.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
