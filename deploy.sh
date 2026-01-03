@@ -452,20 +452,34 @@ const prisma = new PrismaClient();
     await prisma.$disconnect();
     process.exit(0);
   } catch (e) {
-    console.error('FAILED:', e?.message || e);
+    console.error('FAILED');
+    console.error('Error:', e?.message || e);
+    if (e?.code) console.error('Code:', e.code);
     process.exit(1);
   }
 })();
 TESTEOF
 
-  if node "$tmpfile" 2>&1 | grep -q "SUCCESS"; then
+  local test_output
+  test_output=$(node "$tmpfile" 2>&1)
+  
+  if echo "$test_output" | grep -q "SUCCESS"; then
     print_success "Database connection successful"
     rm -f "$tmpfile"
     return 0
   else
     print_error "Database connection failed"
-    rm -f "$tmpfile"
     echo ""
+    echo -e "${YELLOW}Error details:${NC}"
+    echo "$test_output" | grep -v "^$" | head -10
+    echo ""
+    rm -f "$tmpfile"
+    
+    echo -e "${CYAN}Common fixes:${NC}"
+    echo "  1. Password has special chars? URL-encode them or use simpler password"
+    echo "  2. Check: mysql -h $DB_HOST -P $DB_PORT -u $DB_USER -p $DB_NAME"
+    echo ""
+    
     read -r -p "Continue anyway? [y/N]: " continue_anyway
     if [ "${continue_anyway:-N}" != "y" ] && [ "${continue_anyway:-N}" != "Y" ]; then
       print_error "Deployment aborted. Fix database connection and retry."
