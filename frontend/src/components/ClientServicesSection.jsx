@@ -80,10 +80,7 @@ const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCamp
             </div>
 
             {/* Performance Widgets */}
-            <div className="my-4 p-2" style={{ backgroundColor: '#fef3c7', border: '3px solid #f59e0b' }}>
-                <div className="text-xs mb-2" style={{ color: '#92400e' }}>
-                    DEBUG: selectedService={selectedService}, mauticApiId={String(selectedClient.mauticApiId)}, shouldShow={String(selectedService === 'mautic' && selectedClient.mauticApiId)}
-                </div>
+            <div className="my-4">
                 {selectedService === 'mautic' && selectedClient.mauticApiId && (
                     <EmailPerformanceWidget 
                         clientId={selectedClient.mauticApiId} 
