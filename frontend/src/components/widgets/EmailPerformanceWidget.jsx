@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
 import { Mail, CheckCircle, TrendingUp, AlertTriangle, Loader2 } from 'lucide-react'
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip
 } from 'recharts'
 
 const formatNumber = (num) => {
@@ -133,15 +133,6 @@ const EmailPerformanceWidget = ({ clientId, clientName }) => {
   const clientStats = stats?.stats || {}
   const sentCount = Number(clientStats.sent) || 0
   const hasData = sentCount > 0 || (stats?.topEmails?.length > 0)
-  
-  // Debug logging - remove after fixing
-  console.log('EmailPerformanceWidget Debug:', {
-    stats,
-    clientStats,
-    sentCount,
-    hasData,
-    topEmailsLength: stats?.topEmails?.length
-  })
 
   if (!hasData) {
     return (
@@ -201,37 +192,35 @@ const EmailPerformanceWidget = ({ clientId, clientName }) => {
       {emailChartData.length > 0 && (
         <>
           <div className="text-sm font-medium text-gray-700 mb-2">Top Emails by Volume</div>
-          <div className="relative w-full" style={{ height: '200px', minWidth: '300px' }}>
-            <ResponsiveContainer width="100%" height={200} debounce={50} minWidth={300}>
-              <BarChart data={emailChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip 
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload
-                      return (
-                        <div className="bg-white p-3 rounded-lg shadow-lg border text-xs max-w-xs">
-                          <p className="font-semibold text-gray-900 mb-2">{data.fullName}</p>
-                          <div className="space-y-1">
-                            <p><span className="text-gray-500">Sent:</span> <span className="font-medium">{formatNumber(data.sent)}</span></p>
-                            <p><span className="text-gray-500">Opened:</span> <span className="font-medium text-blue-600">{formatNumber(data.opened)}</span> ({data.openRate}%)</p>
-                            <p><span className="text-gray-500">Clicked:</span> <span className="font-medium text-green-600">{formatNumber(data.clicked)}</span> ({data.clickRate}%)</p>
-                            <p><span className="text-gray-500">Bounced:</span> <span className="font-medium text-red-600">{formatNumber(data.bounced)}</span></p>
-                            <p><span className="text-gray-500">Unsubs:</span> <span className="font-medium text-orange-600">{formatNumber(data.unsubscribed)}</span> ({data.unsubRate}%)</p>
-                          </div>
+          <div style={{ width: '100%', height: 220 }}>
+            <BarChart width={500} height={200} data={emailChartData} style={{ maxWidth: '100%' }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+              <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 10 }} />
+              <Tooltip 
+                content={({ active, payload }) => {
+                  if (active && payload && payload.length) {
+                    const data = payload[0].payload
+                    return (
+                      <div className="bg-white p-3 rounded-lg shadow-lg border text-xs max-w-xs">
+                        <p className="font-semibold text-gray-900 mb-2">{data.fullName}</p>
+                        <div className="space-y-1">
+                          <p><span className="text-gray-500">Sent:</span> <span className="font-medium">{formatNumber(data.sent)}</span></p>
+                          <p><span className="text-gray-500">Opened:</span> <span className="font-medium text-blue-600">{formatNumber(data.opened)}</span> ({data.openRate}%)</p>
+                          <p><span className="text-gray-500">Clicked:</span> <span className="font-medium text-green-600">{formatNumber(data.clicked)}</span> ({data.clickRate}%)</p>
+                          <p><span className="text-gray-500">Bounced:</span> <span className="font-medium text-red-600">{formatNumber(data.bounced)}</span></p>
+                          <p><span className="text-gray-500">Unsubs:</span> <span className="font-medium text-orange-600">{formatNumber(data.unsubscribed)}</span> ({data.unsubRate}%)</p>
                         </div>
-                      )
-                    }
-                    return null
-                  }}
-                />
-                <Bar dataKey="sent" fill="#94A3B8" name="Sent" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="opened" fill="#3B82F6" name="Opened" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="clicked" fill="#10B981" name="Clicked" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+                      </div>
+                    )
+                  }
+                  return null
+                }}
+              />
+              <Bar dataKey="sent" fill="#94A3B8" name="Sent" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="opened" fill="#3B82F6" name="Opened" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="clicked" fill="#10B981" name="Clicked" radius={[4, 4, 0, 0]} />
+            </BarChart>
           </div>
         </>
       )}
