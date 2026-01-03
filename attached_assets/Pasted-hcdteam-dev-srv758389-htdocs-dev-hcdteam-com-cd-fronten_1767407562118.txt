@@ -1,0 +1,43 @@
+hcdteam-dev@srv758389:~/htdocs/dev.hcdteam.com$ cd frontend && npm run build
+
+> frontend@0.0.0 build
+> vite build
+
+vite v7.3.0 building client environment for production...
+✓ 2832 modules transformed.
+Export "Bar" of module "node_modules/recharts/es6/cartesian/Bar.js" was reexported through module "node_modules/recharts/es6/index.js" while both modules are dependencies of each other and will end up in different chunks by current Rollup settings. This scenario is not well supported at the moment as it will produce a circular dependency between chunks and will likely lead to broken execution order.
+Either change the import in "src/pages/Dashboard.jsx" to point directly to the exporting module or reconfigure "output.manualChunks" to ensure these modules end up in the same chunk.
+Export "Bar" of module "node_modules/recharts/es6/cartesian/Bar.js" was reexported through module "node_modules/recharts/es6/index.js" while both modules are dependencies of each other and will end up in different chunks by current Rollup settings. This scenario is not well supported at the moment as it will produce a circular dependency between chunks and will likely lead to broken execution order.
+Either change the import in "src/components/widgets/EmailPerformanceWidget.jsx" to point directly to the exporting module or reconfigure "output.manualChunks" to ensure these modules end up in the same chunk.
+dist/index.html                          0.54 kB │ gzip:   0.34 kB
+dist/assets/index-Bky-DN3z.css          88.45 kB │ gzip:  13.70 kB
+dist/assets/clock-DQnAZhu6.js            0.21 kB │ gzip:   0.20 kB │ map:     0.91 kB
+dist/assets/circle-x-D54FqCC9.js         0.25 kB │ gzip:   0.21 kB │ map:     1.02 kB
+dist/assets/calendar-BEhegPwH.js         0.30 kB │ gzip:   0.24 kB │ map:     1.17 kB
+dist/assets/folder-open-w80xMG75.js      0.34 kB │ gzip:   0.25 kB │ map:     1.01 kB
+dist/assets/phone-Bsuetmuy.js            0.37 kB │ gzip:   0.26 kB │ map:     1.01 kB
+dist/assets/save-Dgh814IH.js             0.37 kB │ gzip:   0.26 kB │ map:     1.14 kB
+dist/assets/Notifications-DqdHdU12.js    0.50 kB │ gzip:   0.32 kB │ map:     0.96 kB
+dist/assets/trash-2-BJ0XtXEA.js          1.17 kB │ gzip:   0.60 kB │ map:     4.75 kB
+dist/assets/permissions-D8RRL2Xv.js      1.21 kB │ gzip:   0.50 kB │ map:     4.29 kB
+dist/assets/useViewLevel-DUC3fo2d.js     1.94 kB │ gzip:   0.77 kB │ map:     7.11 kB
+dist/assets/helpers-BngLhtw8.js          4.60 kB │ gzip:   1.55 kB │ map:    26.72 kB
+dist/assets/Activities-DC31oYj7.js       7.02 kB │ gzip:   2.29 kB │ map:    20.67 kB
+dist/assets/Profile-DlHNqhBB.js          8.30 kB │ gzip:   2.40 kB │ map:    21.18 kB
+dist/assets/useMautic-h3FH3CaB.js        8.63 kB │ gzip:   2.13 kB │ map:    37.40 kB
+dist/assets/Employees-B6t7-kUk.js       13.51 kB │ gzip:   4.00 kB │ map:    39.18 kB
+dist/assets/PieChart-BADev9Io.js        15.29 kB │ gzip:   5.19 kB │ map:    66.79 kB
+dist/assets/Dashboard-Dz7oJ3GE.js       19.96 kB │ gzip:   6.17 kB │ map:    57.34 kB
+dist/assets/helpers-9xmn8x6F.js         24.36 kB │ gzip:   7.60 kB │ map:   159.37 kB
+dist/assets/HierarchyPage-CcM9MsTc.js   30.02 kB │ gzip:   5.15 kB │ map:    73.23 kB
+dist/assets/Services-C7RQ0L_f.js        47.44 kB │ gzip:   9.22 kB │ map:   127.46 kB
+dist/assets/Clients-Dkb_4wNj.js         79.25 kB │ gzip:  17.43 kB │ map:   255.65 kB
+dist/assets/Settings-Adav3oym.js       189.01 kB │ gzip:  53.33 kB │ map:   707.77 kB
+dist/assets/index-Tmamdz62.js          719.49 kB │ gzip: 223.73 kB │ map: 3,551.84 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 9.39s
+hcdteam-dev@srv758389:~/htdocs/dev.hcdteam.com/frontend$ 
