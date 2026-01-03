@@ -128,8 +128,18 @@ Supports both MySQL and PostgreSQL through Prisma, with a `switch-database.sh` s
 └── start.sh           # Quick start script
 ```
 
-#### Deployment
-An interactive `deploy.sh` script facilitates multi-site server deployments, handling database configuration, security key generation, frontend build, database migrations, and application startup via PM2.
+#### Deployment (Updated Jan 2025)
+An interactive `deploy.sh` script (Hardened) facilitates multi-site server deployments:
+- **4-Step Wizard**: Database config, App settings, Super Admin creation, Scheduler config
+- **Same-Domain Deployment**: Frontend at `/`, API at `/api` on same domain
+- **ES Module Compatible**: Uses `.cjs` extension for PM2 ecosystem config
+- **Production Migrations**: Uses `prisma migrate deploy` with fallback to `db push`
+- **Quick Mode**: `./deploy.sh --quick` for redeployments using existing `.env`
+
+**Important Frontend Configuration:**
+- `VITE_API_URL` must be **empty** for same-domain deployment
+- API paths in code already include `/api` prefix (e.g., `/api/auth/login`)
+- Setting `VITE_API_URL=/api` causes double prefix bug (`/api/api/...`)
 
 #### Environment Variables
 Key configurations like `PORT`, `DATABASE_URL`, `JWT_SECRET`, `ENCRYPTION_KEY`, and `FRONTEND_URL` are managed via environment variables.

@@ -411,8 +411,9 @@ build_frontend() {
 
   cd "$FRONTEND_DIR"
 
-  # Same-domain deployment: API is /api (relative)
-  echo "VITE_API_URL=/api" > .env.production
+  # Same-domain deployment: API paths already include /api prefix in code
+  # Set VITE_API_URL to empty to avoid double /api/api/ in URLs
+  echo "VITE_API_URL=" > .env.production
 
   npm run build
   print_success "Frontend built successfully"
