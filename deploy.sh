@@ -31,6 +31,9 @@ ENCRYPTION_KEY=""
 MAUTIC_SYNC_SCHEDULE=""
 DROPCOWBOY_SYNC_SCHEDULE=""
 ENABLE_SCHEDULER=""
+SUPERADMIN_NAME=""
+SUPERADMIN_EMAIL=""
+SUPERADMIN_PASSWORD=""
 
 print_header() {
     echo ""
@@ -256,7 +259,42 @@ collect_config() {
         echo ""
     fi
     
-    print_header "Step 3: Scheduler Configuration"
+    print_header "Step 3: Super Admin Account"
+    echo "Create the initial super admin account for system access."
+    echo ""
+    
+    read -p "Super Admin Name [Super Admin]: " SUPERADMIN_NAME
+    SUPERADMIN_NAME=${SUPERADMIN_NAME:-"Super Admin"}
+    
+    while true; do
+        read -p "Super Admin Email: " SUPERADMIN_EMAIL
+        if [ -z "$SUPERADMIN_EMAIL" ]; then
+            print_error "Email is required"
+        elif [[ ! "$SUPERADMIN_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
+            print_error "Please enter a valid email address"
+        else
+            break
+        fi
+    done
+    
+    while true; do
+        read -sp "Super Admin Password (min 8 characters): " SUPERADMIN_PASSWORD
+        echo ""
+        if [ ${#SUPERADMIN_PASSWORD} -lt 8 ]; then
+            print_error "Password must be at least 8 characters"
+        else
+            read -sp "Confirm Password: " password_confirm
+            echo ""
+            if [ "$SUPERADMIN_PASSWORD" != "$password_confirm" ]; then
+                print_error "Passwords do not match"
+            else
+                break
+            fi
+        fi
+    done
+    print_success "Super Admin account configured"
+    
+    print_header "Step 4: Scheduler Configuration"
     echo "Configure automatic data sync schedules (cron format)."
     echo ""
     
@@ -292,6 +330,11 @@ collect_config() {
     echo -e "${CYAN}Security:${NC}"
     echo "  JWT Secret: [generated/provided]"
     echo "  Encryption Key: [generated/provided]"
+    echo ""
+    echo -e "${CYAN}Super Admin:${NC}"
+    echo "  Name: $SUPERADMIN_NAME"
+    echo "  Email: $SUPERADMIN_EMAIL"
+    echo "  Password: ********"
     echo ""
     echo -e "${CYAN}Schedulers:${NC}"
     echo "  Enabled: $ENABLE_SCHEDULER"
@@ -451,12 +494,18 @@ setup_database() {
         print_success "Notification templates seeded"
     fi
     
-    # Ask about full database seed
-    read -p "Run full database seed? [y/N]: " do_seed
-    if [ "$do_seed" == "y" ] || [ "$do_seed" == "Y" ]; then
-        print_step "Seeding database..."
-        npx prisma db seed
-        print_success "Database seeded"
+    # Create super admin account
+    print_step "Creating Super Admin account..."
+    if [ -f "prisma/seed-superadmin.js" ]; then
+        cd prisma
+        SUPERADMIN_NAME="$SUPERADMIN_NAME" \
+        SUPERADMIN_EMAIL="$SUPERADMIN_EMAIL" \
+        SUPERADMIN_PASSWORD="$SUPERADMIN_PASSWORD" \
+        node seed-superadmin.js
+        cd ..
+        print_success "Super Admin account created"
+    else
+        print_warning "Super Admin seed script not found"
     fi
 }
 
@@ -522,11 +571,9 @@ print_summary() {
     echo -e "${CYAN}Access Your Application:${NC}"
     echo "  URL: $SITE_URL"
     echo ""
-    print_info "Default superadmin credentials (if database was seeded):"
-    echo "  Email:    admin@digitalbevy.com"
-    echo "  Password: admin123"
-    echo ""
-    print_warning "SECURITY: Change the default password immediately after first login!"
+    print_info "Your Super Admin login credentials:"
+    echo "  Email:    $SUPERADMIN_EMAIL"
+    echo "  Password: [the password you entered during setup]"
     echo ""
     echo -e "${CYAN}Useful Commands:${NC}"
     echo "  pm2 status              - Check application status"
@@ -579,12 +626,41 @@ quick_deploy() {
     install_dependencies
     validate_db_connection
     build_frontend
-    setup_database
+    setup_database_quick
     start_application
     
     echo ""
     print_success "Quick deployment complete!"
-    print_summary
+    echo ""
+    echo -e "${CYAN}Access Your Application:${NC}"
+    echo "  URL: $SITE_URL"
+    echo ""
+}
+
+# Setup database for quick deploy (no superadmin creation - already exists)
+setup_database_quick() {
+    print_header "Setting Up Database"
+    
+    cd "$BACKEND_DIR"
+    
+    print_step "Generating Prisma client..."
+    npx prisma generate
+    print_success "Prisma client generated"
+    
+    print_step "Pushing schema to database..."
+    npx prisma db push
+    print_success "Database schema synchronized"
+    
+    # Seed notification templates
+    print_step "Seeding notification templates..."
+    if [ -f "prisma/seed-notifications.js" ]; then
+        cd prisma
+        node seed-notifications.js
+        cd ..
+        print_success "Notification templates seeded"
+    fi
+    
+    print_info "Skipping Super Admin creation (quick mode assumes existing users)"
 }
 
 # Main deployment flow
@@ -599,7 +675,8 @@ main() {
     echo -e "${CYAN}║     This wizard will guide you through:                          ║${NC}"
     echo -e "${CYAN}║       1. Database configuration (MySQL/PostgreSQL)               ║${NC}"
     echo -e "${CYAN}║       2. Application settings (URL, Port, Security Keys)         ║${NC}"
-    echo -e "${CYAN}║       3. Scheduler configuration (Mautic, DropCowboy)            ║${NC}"
+    echo -e "${CYAN}║       3. Super Admin account creation                            ║${NC}"
+    echo -e "${CYAN}║       4. Scheduler configuration (Mautic, DropCowboy)            ║${NC}"
     echo -e "${CYAN}║                                                                   ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
@@ -644,9 +721,10 @@ if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
     echo "    - Database type (MySQL/PostgreSQL) and credentials"
     echo "    - Application URL and port"
     echo "    - Security keys (auto-generated or manual)"
+    echo "    - Super Admin account (email and password)"
     echo "    - Scheduler configuration (optional)"
     echo ""
-    echo "  Note: SFTP and other integration credentials are configured"
+    echo "  Note: SFTP, SMTP, and other integration credentials are configured"
     echo "  through the Settings page in the application after deployment."
     echo ""
     echo "  All settings are written to backend/.env automatically."
