@@ -88,7 +88,7 @@ check_prerequisites() {
   if command -v pm2 &>/dev/null; then
     print_success "PM2 $(pm2 -v) installed"
   else
-    print_warning "PM2 not found (will install globally)"
+    print_warning "PM2 not found (will install if needed)"
   fi
 
   if [ "$missing" -eq 1 ]; then
@@ -140,7 +140,6 @@ collect_config() {
   echo ""
 
   if [ "$DB_PROVIDER" == "mysql" ]; then
-    echo ""
     echo -e "${CYAN}Examples: localhost, 192.168.1.100, db.myserver.com${NC}"
     read -r -p "MySQL Host [localhost]: " DB_HOST
     DB_HOST=${DB_HOST:-localhost}
@@ -160,7 +159,6 @@ collect_config() {
 
     DATABASE_URL="mysql://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
   else
-    echo ""
     echo -e "${CYAN}Examples: localhost, 192.168.1.100, db.myserver.com${NC}"
     read -r -p "PostgreSQL Host [localhost]: " DB_HOST
     DB_HOST=${DB_HOST:-localhost}
@@ -185,7 +183,7 @@ collect_config() {
   print_header "Step 2: Application Settings"
 
   echo -e "${CYAN}Public URL where users will access the application.${NC}"
-  echo -e "${CYAN}Examples: https://crm.mycompany.com, https://app.example.com, http://192.168.1.100:3026${NC}"
+  echo -e "${CYAN}Example: https://dev.abc.com${NC}"
   read -r -p "Website URL: " SITE_URL
   if [ -z "$SITE_URL" ]; then
     print_error "Website URL is required"
@@ -195,8 +193,7 @@ collect_config() {
   print_success "Website URL: $SITE_URL"
   echo ""
 
-  echo -e "${CYAN}Port your Node app will listen on. Common ports: 3000, 3026, 8080${NC}"
-  echo -e "${CYAN}(Reverse proxy can still expose 80/443 externally)${NC}"
+  echo -e "${CYAN}Port your Node app will listen on (reverse proxy can still expose 80/443).${NC}"
   read -r -p "Application port [3026]: " APP_PORT
   APP_PORT=${APP_PORT:-3026}
   print_success "Application port: $APP_PORT"
@@ -233,16 +230,13 @@ collect_config() {
   fi
 
   print_header "Step 3: Super Admin Account"
-  echo "Create the initial super admin account for system access."
-  echo "This will be the first user with full administrative privileges."
+  echo "Create the initial super admin account."
   echo ""
 
-  echo -e "${CYAN}Example: John Smith, Admin User${NC}"
   read -r -p "Super Admin Name [Super Admin]: " SUPERADMIN_NAME
   SUPERADMIN_NAME=${SUPERADMIN_NAME:-"Super Admin"}
 
   while true; do
-    echo -e "${CYAN}Example: admin@yourcompany.com, john@example.com${NC}"
     read -r -p "Super Admin Email: " SUPERADMIN_EMAIL
     if [ -z "$SUPERADMIN_EMAIL" ]; then
       print_error "Email is required"
@@ -254,7 +248,6 @@ collect_config() {
   done
 
   while true; do
-    echo -e "${CYAN}Choose a strong password (letters, numbers, symbols recommended)${NC}"
     read -r -s -p "Super Admin Password (min 8 chars): " SUPERADMIN_PASSWORD
     echo ""
     if [ "${#SUPERADMIN_PASSWORD}" -lt 8 ]; then
@@ -272,34 +265,19 @@ collect_config() {
   print_success "Super Admin configured"
 
   print_header "Step 4: Scheduler Configuration"
-  echo "Configure automatic data sync schedules."
-  echo "Schedulers automatically sync data from Mautic and DropCowboy at specified times."
-  echo ""
-
   read -r -p "Enable automatic schedulers? [Y/n]: " enable_sched
   if [ "${enable_sched:-Y}" != "n" ] && [ "${enable_sched:-Y}" != "N" ]; then
     ENABLE_SCHEDULER="true"
-
-    echo ""
-    echo -e "${CYAN}Cron format: minute hour day month weekday${NC}"
-    echo -e "${CYAN}Examples:${NC}"
-    echo -e "${CYAN}  0 3 * * *   = Every day at 3:00 AM${NC}"
-    echo -e "${CYAN}  0 */6 * * * = Every 6 hours${NC}"
-    echo -e "${CYAN}  0 2 * * 0   = Every Sunday at 2:00 AM${NC}"
-    echo ""
-
     read -r -p "Mautic sync schedule [0 3 * * *]: " MAUTIC_SYNC_SCHEDULE
     MAUTIC_SYNC_SCHEDULE=${MAUTIC_SYNC_SCHEDULE:-"0 3 * * *"}
-
     read -r -p "DropCowboy sync schedule [0 4 * * *]: " DROPCOWBOY_SYNC_SCHEDULE
     DROPCOWBOY_SYNC_SCHEDULE=${DROPCOWBOY_SYNC_SCHEDULE:-"0 4 * * *"}
-
     print_success "Schedulers enabled"
   else
     ENABLE_SCHEDULER="false"
     MAUTIC_SYNC_SCHEDULE="0 3 * * *"
     DROPCOWBOY_SYNC_SCHEDULE="0 4 * * *"
-    print_info "Schedulers disabled (you can sync manually from the dashboard)"
+    print_info "Schedulers disabled"
   fi
 
   print_header "Configuration Summary"
@@ -311,10 +289,6 @@ collect_config() {
   echo -e "${CYAN}Application:${NC}"
   echo "  URL: $SITE_URL"
   echo "  Port: $APP_PORT"
-  echo ""
-  echo -e "${CYAN}Super Admin:${NC}"
-  echo "  Name: $SUPERADMIN_NAME"
-  echo "  Email: $SUPERADMIN_EMAIL"
   echo ""
   echo -e "${CYAN}Schedulers:${NC}"
   echo "  Enabled: $ENABLE_SCHEDULER"
@@ -397,13 +371,6 @@ install_dependencies() {
     npm install
   fi
   print_success "Frontend dependencies installed"
-
-  # Install PM2 globally if not present
-  if ! command -v pm2 &>/dev/null; then
-    print_step "Installing PM2 globally..."
-    npm install -g pm2
-    print_success "PM2 installed"
-  fi
 }
 
 build_frontend() {
@@ -411,7 +378,7 @@ build_frontend() {
 
   cd "$FRONTEND_DIR"
 
-  # Same-domain deployment: API is /api (relative)
+  # Same-domain deployment: API is /api (relative). This is the correct config.
   echo "VITE_API_URL=/api" > .env.production
 
   npm run build
@@ -422,7 +389,7 @@ build_frontend() {
     rm -rf "$BACKEND_DIR/dist"
   fi
 
-  # Vite outputs to ./dist by default
+  # Vite outputs to ./dist by default in frontend dir
   mv dist "$BACKEND_DIR/"
   print_success "Frontend moved to backend/dist"
 }
@@ -476,64 +443,58 @@ TESTEOF
   fi
 }
 
+# Apply database schema (prefer migrations in prod)
 apply_database_schema() {
-  print_header "Applying Database Schema"
-
+  print_header "Setting Up Database"
   cd "$BACKEND_DIR"
 
-  # Check if migrations folder exists with migration files
-  if [ -d "prisma/migrations" ] && [ "$(ls -A prisma/migrations 2>/dev/null)" ]; then
-    print_step "Found migrations, running prisma migrate deploy..."
-    if npx prisma migrate deploy --schema "$PRISMA_SCHEMA" 2>/dev/null; then
-      print_success "Migrations applied successfully"
-    else
-      print_warning "migrate deploy failed, falling back to db push..."
-      npx prisma db push --schema "$PRISMA_SCHEMA" --accept-data-loss
-      print_success "Schema pushed (db push fallback)"
-    fi
+  print_step "Generating Prisma client..."
+  npx prisma generate --schema "$PRISMA_SCHEMA"
+  print_success "Prisma client generated"
+
+  # Prefer migrate deploy if migrations exist; fallback to db push
+  if [ -d "$BACKEND_DIR/prisma/migrations" ] && [ "$(ls -A "$BACKEND_DIR/prisma/migrations" 2>/dev/null | wc -l | tr -d ' ')" != "0" ]; then
+    print_step "Applying migrations (prisma migrate deploy)..."
+    npx prisma migrate deploy --schema "$PRISMA_SCHEMA"
+    print_success "Migrations applied"
   else
-    print_step "No migrations found, using db push..."
+    print_warning "No migrations found; falling back to prisma db push (drift risk)."
+    print_step "Pushing schema to database (prisma db push)..."
     npx prisma db push --schema "$PRISMA_SCHEMA"
     print_success "Database schema synchronized"
   fi
 
-  # Seed notification templates if script exists
+  # Seed notification templates
+  print_step "Seeding notification templates..."
   if [ -f "prisma/seed-notifications.js" ]; then
-    print_step "Seeding notification templates..."
-    cd prisma
-    node seed-notifications.js
-    cd ..
+    (cd prisma && node seed-notifications.js)
     print_success "Notification templates seeded"
+  else
+    print_info "Notification seed script not found (skipping)"
   fi
 }
 
 create_superadmin_if_needed() {
-  print_header "Creating Super Admin Account"
-
+  print_step "Creating Super Admin account..."
   cd "$BACKEND_DIR"
 
-  if [ -z "$SUPERADMIN_EMAIL" ] || [ -z "$SUPERADMIN_PASSWORD" ]; then
-    print_info "Skipping Super Admin creation (no credentials provided)"
-    return 0
-  fi
-
-  # Export for the seed script
-  export SUPERADMIN_NAME
-  export SUPERADMIN_EMAIL
-  export SUPERADMIN_PASSWORD
-  export PRISMA_SCHEMA
-
   if [ -f "prisma/seed-superadmin.js" ]; then
-    print_step "Creating Super Admin account..."
-    cd prisma
-    if node seed-superadmin.js; then
-      print_success "Super Admin account ready"
-    else
-      print_warning "Super Admin creation returned non-zero (may already exist)"
-    fi
-    cd ..
+    (cd prisma && \
+      SUPERADMIN_NAME="$SUPERADMIN_NAME" \
+      SUPERADMIN_EMAIL="$SUPERADMIN_EMAIL" \
+      SUPERADMIN_PASSWORD="$SUPERADMIN_PASSWORD" \
+      node seed-superadmin.js)
+    print_success "Super Admin account created"
   else
-    print_warning "seed-superadmin.js not found, skipping Super Admin creation"
+    print_warning "Super Admin seed script not found (skipping)"
+  fi
+}
+
+ensure_pm2() {
+  if ! command -v pm2 &>/dev/null; then
+    print_step "Installing PM2..."
+    npm install -g pm2
+    print_success "PM2 installed"
   fi
 }
 
@@ -541,109 +502,77 @@ start_application() {
   print_header "Starting Application"
 
   cd "$BACKEND_DIR"
+  ensure_pm2
 
-  # Stop existing PM2 processes
   pm2 delete digitalbevy 2>/dev/null || true
 
-  # Create PM2 ecosystem file
-  cat > ecosystem.config.js <<EOF
-module.exports = {
-  apps: [{
-    name: 'digitalbevy',
-    script: 'server.js',
-    instances: 1,
-    exec_mode: 'fork',
-    env: {
-      NODE_ENV: 'production',
-      PORT: $APP_PORT
-    },
-    max_memory_restart: '1G',
-    error_file: 'logs/error.log',
-    out_file: 'logs/out.log',
-    log_file: 'logs/combined.log',
-    time: true
-  }]
-};
-EOF
+  if [ -f "ecosystem.config.cjs" ]; then
+    print_step "Starting with ecosystem.config.cjs..."
+    pm2 start ecosystem.config.cjs
+  else
+    print_step "Starting server.js with PM2..."
+    pm2 start server.js --name "digitalbevy" -i 1 --env production
+  fi
 
-  # Create logs directory
-  mkdir -p logs
+  pm2 save >/dev/null || true
 
-  # Start with PM2
-  print_step "Starting application with PM2..."
-  pm2 start ecosystem.config.js
-  pm2 save
-
-  print_success "Application started!"
+  print_success "Application started with PM2"
   echo ""
-  pm2 status
+  print_info "PM2 commands:"
+  echo "  pm2 status"
+  echo "  pm2 logs digitalbevy --lines 200"
+  echo "  pm2 restart digitalbevy"
 }
 
 print_summary() {
+  print_header "Deployment Complete!"
+  echo -e "${GREEN}Deployed successfully.${NC}"
   echo ""
-  echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════════╗${NC}"
-  echo -e "${GREEN}║                                                                   ║${NC}"
-  echo -e "${GREEN}║     ${CYAN}Deployment Complete!${GREEN}                                       ║${NC}"
-  echo -e "${GREEN}║                                                                   ║${NC}"
-  echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════════╝${NC}"
+  echo -e "${CYAN}Access:${NC} $SITE_URL"
+  echo -e "${CYAN}API:${NC}    $SITE_URL/api"
   echo ""
-  echo -e "${CYAN}Access Your Application:${NC}"
-  echo "  Frontend: $SITE_URL"
-  echo "  API:      $SITE_URL/api"
+  echo -e "${CYAN}Backend .env:${NC} $BACKEND_DIR/.env"
+  echo -e "${CYAN}Prisma schema:${NC} $PRISMA_SCHEMA"
   echo ""
-  if [ -n "$SUPERADMIN_EMAIL" ]; then
-    print_info "Your Super Admin login credentials:"
-    echo "  Email:    $SUPERADMIN_EMAIL"
-    echo "  Password: [the password you entered during setup]"
-    echo ""
-  fi
-  echo -e "${CYAN}Useful Commands:${NC}"
-  echo "  pm2 status              - Check application status"
-  echo "  pm2 logs digitalbevy    - View application logs"
-  echo "  pm2 restart all         - Restart application"
-  echo "  pm2 stop all            - Stop application"
-  echo ""
-  echo -e "${CYAN}Configuration Files:${NC}"
-  echo "  Environment: $BACKEND_DIR/.env"
-  echo "  PM2 Config:  $BACKEND_DIR/ecosystem.config.js"
+  echo -e "${CYAN}Admin:${NC} $SUPERADMIN_EMAIL"
   echo ""
 }
 
-# Quick deploy mode (non-interactive, uses existing .env)
+# Quick deploy mode (non-interactive; uses existing backend/.env)
 quick_deploy() {
   print_header "Quick Deploy Mode"
 
-  if [ ! -f "$BACKEND_DIR/.env" ]; then
-    print_error "No .env file found. Run without --quick for interactive setup."
+  local ENV_FILE="$BACKEND_DIR/.env"
+  if [ ! -f "$ENV_FILE" ]; then
+    print_error "No .env found at $ENV_FILE. Run without --quick for interactive setup."
     exit 1
   fi
 
-  # Determine DB provider from .env (only match uncommented DATABASE_URL= lines)
+  # Determine DB provider from DATABASE_URL in .env
   local DB_URL
-  DB_URL=$(grep "^DATABASE_URL=" "$BACKEND_DIR/.env" | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+  DB_URL="$(grep "^DATABASE_URL=" "$ENV_FILE" | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")"
   if echo "$DB_URL" | grep -qE "^mysql://"; then
     DB_PROVIDER="mysql"
   elif echo "$DB_URL" | grep -qE "^(postgres|postgresql)://"; then
     DB_PROVIDER="postgres"
   else
-    print_error "Could not determine database provider from DATABASE_URL"
-    print_info "Expected format: mysql://... or postgresql://..."
+    print_error "Could not determine DB provider from DATABASE_URL in .env"
     exit 1
   fi
 
-  # Get PORT from .env if available
-  APP_PORT=$(grep "^PORT=" "$BACKEND_DIR/.env" | head -1 | cut -d'=' -f2 | tr -d ' ')
-  APP_PORT=${APP_PORT:-3026}
+  APP_PORT="$(grep "^PORT=" "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d ' ' || true)"
+  APP_PORT="${APP_PORT:-3026}"
 
-  # Get FRONTEND_URL from .env if available
-  SITE_URL=$(grep "^FRONTEND_URL=" "$BACKEND_DIR/.env" | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
-  SITE_URL=${SITE_URL:-"http://localhost:$APP_PORT"}
-
-  print_info "Using existing .env configuration"
-  print_info "Database provider: $DB_PROVIDER"
-  print_info "Port: $APP_PORT"
+  SITE_URL="$(grep "^FRONTEND_URL=" "$ENV_FILE" | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)"
+  SITE_URL="${SITE_URL:-http://localhost:$APP_PORT}"
 
   set_prisma_schema
+
+  print_info "Using existing .env"
+  print_info "Database provider: $DB_PROVIDER"
+  print_info "Port: $APP_PORT"
+  print_info "URL: $SITE_URL"
+
   load_node
   check_prerequisites
   install_dependencies
@@ -652,50 +581,25 @@ quick_deploy() {
   apply_database_schema
   start_application
 
-  echo ""
   print_success "Quick deployment complete!"
-  echo ""
-  echo -e "${CYAN}Access Your Application:${NC}"
-  echo "  Frontend: $SITE_URL"
-  echo "  API:      $SITE_URL/api"
-  echo ""
-}
-
-show_help() {
-  echo ""
-  echo -e "${CYAN}DigitalBevy Deployment Script (Hardened)${NC}"
-  echo ""
-  echo "Usage: ./deploy.sh [OPTIONS]"
-  echo ""
-  echo "Options:"
-  echo "  -h, --help    Show this help message"
-  echo "  -q, --quick   Quick deploy using existing backend/.env"
-  echo ""
-  echo "Interactive Mode (default):"
-  echo "  Step 1: Database configuration (MySQL/PostgreSQL)"
-  echo "  Step 2: Application settings (URL, Port, Security Keys)"
-  echo "  Step 3: Super Admin account creation"
-  echo "  Step 4: Scheduler configuration (Mautic, DropCowboy)"
-  echo ""
-  echo "Notes:"
-  echo "  - Frontend uses VITE_API_URL=/api (same domain deployment)."
-  echo "  - Prisma uses --schema flag (no schema.prisma copying)."
-  echo "  - Production prefers 'migrate deploy' if migrations exist;"
-  echo "    otherwise falls back to 'db push'."
-  echo ""
-  exit 0
+  echo -e "${CYAN}Access:${NC} $SITE_URL"
+  echo -e "${CYAN}API:${NC}    $SITE_URL/api"
 }
 
 main() {
   clear || true
   echo ""
   echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════════╗${NC}"
-  echo -e "${CYAN}║     ${GREEN}DigitalBevy Deployment Script (Hardened)${CYAN}                      ║${NC}"
+  echo -e "${CYAN}║     ${GREEN}DigitalBevy Deployment Script (Hardened)${CYAN}                  ║${NC}"
   echo -e "${CYAN}║     Same-domain: frontend '/', API '/api'                         ║${NC}"
   echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════════╝${NC}"
   echo ""
 
-  read -r -p "Press Enter to start deployment wizard..."
+  # Quick mode
+  if [ "${1:-}" == "--quick" ] || [ "${1:-}" == "-q" ]; then
+    quick_deploy
+    exit 0
+  fi
 
   load_node
   check_prerequisites
@@ -710,15 +614,22 @@ main() {
   print_summary
 }
 
-# Handle command line arguments
-case "${1:-}" in
-  -h|--help)
-    show_help
-    ;;
-  -q|--quick)
-    quick_deploy
-    ;;
-  *)
-    main "$@"
-    ;;
-esac
+if [ "${1:-}" == "--help" ] || [ "${1:-}" == "-h" ]; then
+  echo ""
+  echo -e "${CYAN}DigitalBevy Deployment Script (Hardened)${NC}"
+  echo ""
+  echo "Usage: ./deploy.sh [OPTIONS]"
+  echo ""
+  echo "Options:"
+  echo "  -h, --help    Show help"
+  echo "  -q, --quick   Quick deploy using existing backend/.env"
+  echo ""
+  echo "Notes:"
+  echo "  - Frontend uses VITE_API_URL=/api (same domain)."
+  echo "  - Prisma uses --schema (no schema.prisma copying)."
+  echo "  - Production prefers 'migrate deploy' if migrations exist; otherwise falls back to 'db push'."
+  echo ""
+  exit 0
+fi
+
+main "$@"
