@@ -72,13 +72,26 @@ const EmailPerformanceWidget = ({ clientId, clientName }) => {
     fetchClientStats()
   }, [clientId])
 
+  const truncateName = (name, maxLen = 20) => {
+    if (!name || name.length <= maxLen) return name
+    const lastSpaceIdx = name.lastIndexOf(' ')
+    if (lastSpaceIdx > 0 && lastSpaceIdx > name.length - 10) {
+      const suffix = name.substring(lastSpaceIdx)
+      const prefixLen = maxLen - suffix.length - 3
+      if (prefixLen > 5) {
+        return name.substring(0, prefixLen) + '...' + suffix
+      }
+    }
+    return name.substring(0, maxLen - 3) + '...'
+  }
+
   const emailChartData = useMemo(() => {
     if (!stats?.topEmails) return []
     
-    return stats.topEmails.slice(0, 5).map(email => {
+    return stats.topEmails.slice(0, 5).map((email, index) => {
       const emailStats = email.stats || {}
       return {
-        name: email.name?.length > 15 ? email.name.substring(0, 15) + '...' : email.name,
+        name: truncateName(email.name) || `Email ${index + 1}`,
         fullName: email.name,
         sent: emailStats.sent || email.sentCount || 0,
         opened: emailStats.read || email.readCount || 0,
