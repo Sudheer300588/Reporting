@@ -1,0 +1,56 @@
+hcdteam-dev@srv758389:~/htdocs/dev.hcdteam.com$ pm2 logs digitalbevy --lines 50
+[TAILING] Tailing last 50 lines for [digitalbevy] process (change the value with --lines option)
+/home/hcdteam-dev/htdocs/dev.hcdteam.com/backend/logs/error-0.log last 50 lines:
+/home/hcdteam-dev/htdocs/dev.hcdteam.com/backend/logs/out-0.log last 50 lines:
+0|digitalb | 2026-01-03T01:18:45: ?   createdUsers?: UserCreateNestedManyWithoutCreatedByInput,
+0|digitalb | 2026-01-03T01:18:45: ?   superAdmin?: UserCreateNestedOneWithoutManagedUsersInput,
+0|digitalb | 2026-01-03T01:18:45: ?   managedUsers?: UserCreateNestedManyWithoutSuperAdminInput,
+0|digitalb | 2026-01-03T01:18:45: ?   employees?: UserCreateNestedManyWithoutManagersInput,
+0|digitalb | 2026-01-03T01:18:45: ?   managers?: UserCreateNestedManyWithoutEmployeesInput,
+0|digitalb | 2026-01-03T01:18:45: ?   activities?: ActivityLogCreateNestedManyWithoutUserInput,
+0|digitalb | 2026-01-03T01:18:45: ?   createdClients?: ClientCreateNestedManyWithoutCreatedByInput,
+0|digitalb | 2026-01-03T01:18:45: ?   userAssignments?: ClientAssignmentCreateNestedManyWithoutUserInput,
+0|digitalb | 2026-01-03T01:18:45: ?   assignedClients?: ClientAssignmentCreateNestedManyWithoutAssignedByInput,
+0|digitalb | 2026-01-03T01:18:45: ?   campaigns?: CampaignCreateNestedManyWithoutCreatedByInput,
+0|digitalb | 2026-01-03T01:18:45: ?   sftpcredentials?: SFTPCredentialCreateNestedManyWithoutCreatedByInput,
+0|digitalb | 2026-01-03T01:18:45: ?   smtpcredentials?: SMTPCredentialCreateNestedManyWithoutCreatedByInput,
+0|digitalb | 2026-01-03T01:18:45: ?   vicidialcredentials?: VicidialCredentialCreateNestedManyWithoutCreatedByInput,
+0|digitalb | 2026-01-03T01:18:45: ?   siteSettings?: SiteSettingsCreateNestedManyWithoutCreatedByInput,
+0|digitalb | 2026-01-03T01:18:45: ?   otps?: OTPCreateNestedManyWithoutUserInput,
+0|digitalb | 2026-01-03T01:18:45: ?   adminSettingsPermissions?: AdminSettingsPermissionCreateNestedManyWithoutAdminInput
+0|digitalb | 2026-01-03T01:18:45:   },
+0|digitalb | 2026-01-03T01:18:45:   select: {
+0|digitalb | 2026-01-03T01:18:45:     id: true,
+0|digitalb | 2026-01-03T01:18:45:     name: true,
+0|digitalb | 2026-01-03T01:18:45:     email: true,
+0|digitalb | 2026-01-03T01:18:45:     role: true,
+0|digitalb | 2026-01-03T01:18:45:     isActive: true,
+0|digitalb | 2026-01-03T01:18:45:     createdAt: true,
+0|digitalb | 2026-01-03T01:18:45:     customRoleId: true,
+0|digitalb | 2026-01-03T01:18:45:     customRole: {
+0|digitalb | 2026-01-03T01:18:45:       select: {
+0|digitalb | 2026-01-03T01:18:45:         id: true,
+0|digitalb | 2026-01-03T01:18:45:         name: true,
+0|digitalb | 2026-01-03T01:18:45:         fullAccess: true
+0|digitalb | 2026-01-03T01:18:45:       }
+0|digitalb | 2026-01-03T01:18:45:     },
+0|digitalb | 2026-01-03T01:18:45:     createdBy: {
+0|digitalb | 2026-01-03T01:18:45:       select: {
+0|digitalb | 2026-01-03T01:18:45:         id: true,
+0|digitalb | 2026-01-03T01:18:45:         name: true,
+0|digitalb | 2026-01-03T01:18:45:         email: true
+0|digitalb | 2026-01-03T01:18:45:       }
+0|digitalb | 2026-01-03T01:18:45:     },
+0|digitalb | 2026-01-03T01:18:45:     managers: {
+0|digitalb | 2026-01-03T01:18:45:       select: {
+0|digitalb | 2026-01-03T01:18:45:         id: true,
+0|digitalb | 2026-01-03T01:18:45:         name: true,
+0|digitalb | 2026-01-03T01:18:45:         email: true
+0|digitalb | 2026-01-03T01:18:45:       }
+0|digitalb | 2026-01-03T01:18:45:     }
+0|digitalb | 2026-01-03T01:18:45:   }
+0|digitalb | 2026-01-03T01:18:45: }
+0|digitalb | 2026-01-03T01:18:45: 
+0|digitalb | 2026-01-03T01:18:45: Unknown argument `phone`. Did you mean `role`? Available options are marked with ?.
+
+

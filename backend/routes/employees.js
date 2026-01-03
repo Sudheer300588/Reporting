@@ -103,10 +103,7 @@ router.post('/', authenticate, requirePermission('Users', 'Create'), validate(cr
       customRole: { connect: { id: parsedRoleId } }
     };
 
-    // Add phone if provided
-    if (phone) {
-      userData.phone = phone;
-    }
+    // Note: phone field is not included as it may not exist in all database schemas
 
     // Handle manager assignment - validate each ID
     if (managerIds && Array.isArray(managerIds) && managerIds.length > 0) {
