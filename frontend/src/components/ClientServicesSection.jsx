@@ -81,6 +81,14 @@ const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCamp
 
             {/* Performance Widgets */}
             <div className="my-4">
+                {/* Debug - remove after fixing */}
+                {(() => {
+                    const debugInfo = `selectedService: ${selectedService}, mauticApiId: ${selectedClient.mauticApiId}, name: ${selectedClient.name}`;
+                    console.log('DEBUG:', debugInfo);
+                    // Uncomment next line to see alert popup
+                    // alert(debugInfo);
+                    return null;
+                })()}
                 {selectedService === 'mautic' && selectedClient.mauticApiId && (
                     <EmailPerformanceWidget 
                         clientId={selectedClient.mauticApiId} 
