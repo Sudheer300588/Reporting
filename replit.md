@@ -8,8 +8,9 @@ I prefer detailed explanations.
 I want iterative development.
 Ask before making major changes.
 Do not make changes to the folder `backend/prisma/migrations`.
-Do not make changes to the file `backend/prisma/schema.prisma`.
 I prefer clear and concise communication.
+**All changes must be deployment-ready** - just `git pull && pm2 restart` on production, no manual fixes needed.
+**Always update all 3 Prisma schema files** when making database changes (schema.prisma, schema.mysql.prisma, schema.postgres.prisma).
 
 ## System Architecture
 
@@ -106,7 +107,20 @@ The `frontend/src/components/Settings/` directory houses self-contained componen
 ### System Design Choices
 
 #### Database
-Supports both MySQL and PostgreSQL through Prisma, with a `switch-database.sh` script for easy configuration. The active schema (`backend/prisma/schema.prisma`) is dynamically updated from provider-specific templates.
+Supports both MySQL and PostgreSQL through Prisma. The project maintains THREE schema files that MUST stay in sync:
+- `schema.prisma` - Main schema (PostgreSQL, used on Replit dev)
+- `schema.mysql.prisma` - MySQL template (used by deploy.sh for production)
+- `schema.postgres.prisma` - PostgreSQL template
+
+**CRITICAL: When modifying the schema, update ALL THREE files before committing.**
+
+#### Deployment-Ready Development Workflow (Jan 2025)
+All changes must be deployment-ready with a simple `git pull && pm2 restart`:
+1. **Schema Changes**: Update all 3 schema files simultaneously
+2. **Prisma Syntax**: Use relation connect syntax for all create operations
+3. **API Changes**: Include new fields in all relevant select statements
+4. **Frontend**: Ensure new fields are handled in forms and displays
+5. **Test locally on Replit before committing**
 
 #### Directory Structure (CI/CD Ready - Dec 2024)
 ```
