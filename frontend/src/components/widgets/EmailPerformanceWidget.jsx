@@ -75,18 +75,24 @@ const EmailPerformanceWidget = ({ clientId, clientName }) => {
   const emailChartData = useMemo(() => {
     if (!stats?.topEmails) return []
     
-    return stats.topEmails.slice(0, 5).map(email => ({
-      name: email.name?.length > 15 ? email.name.substring(0, 15) + '...' : email.name,
-      fullName: email.name,
-      sent: email.sentCount || 0,
-      opened: email.readCount || 0,
-      clicked: email.clickedCount || 0,
-      bounced: email.bounced || 0,
-      unsubscribed: email.unsubscribed || 0,
-      openRate: typeof email.readRate === 'number' ? email.readRate.toFixed(1) : '0',
-      clickRate: typeof email.clickRate === 'number' ? email.clickRate.toFixed(1) : '0',
-      unsubRate: typeof email.unsubscribeRate === 'number' ? email.unsubscribeRate.toFixed(1) : '0'
-    }))
+    return stats.topEmails.slice(0, 5).map(email => {
+      const emailStats = email.stats || {}
+      return {
+        name: email.name?.length > 15 ? email.name.substring(0, 15) + '...' : email.name,
+        fullName: email.name,
+        sent: emailStats.sent || email.sentCount || 0,
+        opened: emailStats.read || email.readCount || 0,
+        clicked: emailStats.clicked || email.clickedCount || 0,
+        bounced: emailStats.bounced || email.bounced || 0,
+        unsubscribed: emailStats.unsubscribed || email.unsubscribed || 0,
+        openRate: typeof emailStats.openRate === 'number' ? emailStats.openRate.toFixed(1) : 
+                  typeof email.readRate === 'number' ? email.readRate.toFixed(1) : '0',
+        clickRate: typeof emailStats.clickRate === 'number' ? emailStats.clickRate.toFixed(1) : 
+                   typeof email.clickRate === 'number' ? email.clickRate.toFixed(1) : '0',
+        unsubRate: typeof emailStats.unsubscribeRate === 'number' ? emailStats.unsubscribeRate.toFixed(1) : 
+                   typeof email.unsubscribeRate === 'number' ? email.unsubscribeRate.toFixed(1) : '0'
+      }
+    })
   }, [stats])
 
   if (loading) {
@@ -111,7 +117,7 @@ const EmailPerformanceWidget = ({ clientId, clientName }) => {
     )
   }
 
-  if (!stats?.clientStats) {
+  if (!stats?.stats) {
     return (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="text-center py-4">
@@ -122,7 +128,7 @@ const EmailPerformanceWidget = ({ clientId, clientName }) => {
     )
   }
 
-  const { clientStats } = stats
+  const clientStats = stats.stats
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
