@@ -336,7 +336,7 @@ model SyncLog {
   campaignsProcessed Int        @default(0)
   totalRecords       Int        @default(0)
   errorCount         Int        @default(0)
-  errorMessage       String?
+  errorMessage       String?    @db.Text
   syncStartedAt      DateTime   @default(now())
   syncCompletedAt    DateTime?
   durationSeconds    Int?
@@ -494,7 +494,7 @@ model MauticSyncLog {
   totalUpdated    Int              @default(0)
   totalInserted   Int              @default(0)
   errorCount      Int              @default(0)
-  errorMessage    String?
+  errorMessage    String?          @db.Text
   startedAt       DateTime         @default(now())
   completedAt     DateTime?
   durationSeconds Int?
