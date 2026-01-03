@@ -191,8 +191,8 @@ const EmailPerformanceWidget = ({ clientId, clientName }) => {
       {emailChartData.length > 0 && (
         <>
           <div className="text-sm font-medium text-gray-700 mb-2">Top Emails by Volume</div>
-          <div className="h-48 w-full" style={{ minWidth: '300px', minHeight: '180px' }}>
-            <ResponsiveContainer width="100%" height="100%" debounce={50}>
+          <div className="relative w-full" style={{ height: '200px', minWidth: '300px' }}>
+            <ResponsiveContainer width="100%" height={200} debounce={50} minWidth={300}>
               <BarChart data={emailChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} />

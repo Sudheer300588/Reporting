@@ -475,8 +475,8 @@ const Dashboard = () => {
             </div>
 
             {emailChartData.length > 0 && (
-              <div className="h-48 w-full" style={{ minWidth: '300px', minHeight: '180px' }}>
-                <ResponsiveContainer width="100%" height="100%" debounce={50}>
+              <div className="relative w-full" style={{ height: '200px', minWidth: '300px' }}>
+                <ResponsiveContainer width="100%" height={200} debounce={50} minWidth={300}>
                   <BarChart data={emailChartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                     <XAxis dataKey="name" tick={{ fontSize: 10 }} />
@@ -574,8 +574,8 @@ const Dashboard = () => {
             </div>
 
             {pieChartData.length > 0 && (
-              <div className="h-40 flex items-center justify-center">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="relative flex items-center justify-center" style={{ height: '160px', minWidth: '200px' }}>
+                <ResponsiveContainer width="100%" height={160}>
                   <PieChart>
                     <Pie
                       data={pieChartData}
