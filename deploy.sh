@@ -439,8 +439,8 @@ validate_db_connection() {
 
   print_step "Testing database connection..."
   
-  # Create test script in backend directory so it can find @prisma/client
-  local tmpfile="$BACKEND_DIR/db-connection-test.js"
+  # Create test script in backend directory with .cjs extension for CommonJS compatibility
+  local tmpfile="$BACKEND_DIR/db-connection-test.cjs"
 
   cat >"$tmpfile" <<'TESTEOF'
 const { PrismaClient } = require('@prisma/client');
@@ -462,7 +462,7 @@ const prisma = new PrismaClient();
 TESTEOF
 
   local test_output
-  test_output=$(cd "$BACKEND_DIR" && node db-connection-test.js 2>&1)
+  test_output=$(cd "$BACKEND_DIR" && node db-connection-test.cjs 2>&1)
   
   # Clean up test file
   rm -f "$tmpfile"
