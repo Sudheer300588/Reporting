@@ -438,8 +438,9 @@ validate_db_connection() {
   print_success "Prisma client generated"
 
   print_step "Testing database connection..."
-  local tmpfile
-  tmpfile="$(mktemp /tmp/digitalbevy-dbtest.XXXXXX.js)"
+  
+  # Create test script in backend directory so it can find @prisma/client
+  local tmpfile="$BACKEND_DIR/db-connection-test.js"
 
   cat >"$tmpfile" <<'TESTEOF'
 const { PrismaClient } = require('@prisma/client');
@@ -461,11 +462,13 @@ const prisma = new PrismaClient();
 TESTEOF
 
   local test_output
-  test_output=$(node "$tmpfile" 2>&1)
+  test_output=$(cd "$BACKEND_DIR" && node db-connection-test.js 2>&1)
+  
+  # Clean up test file
+  rm -f "$tmpfile"
   
   if echo "$test_output" | grep -q "SUCCESS"; then
     print_success "Database connection successful"
-    rm -f "$tmpfile"
     return 0
   else
     print_error "Database connection failed"
@@ -473,11 +476,10 @@ TESTEOF
     echo -e "${YELLOW}Error details:${NC}"
     echo "$test_output" | grep -v "^$" | head -10
     echo ""
-    rm -f "$tmpfile"
     
     echo -e "${CYAN}Common fixes:${NC}"
     echo "  1. Password has special chars? URL-encode them or use simpler password"
-    echo "  2. Check: mysql -h $DB_HOST -P $DB_PORT -u $DB_USER -p $DB_NAME"
+    echo "  2. Check: mysql -h ${DB_HOST:-your_host} -P ${DB_PORT:-3306} -u ${DB_USER:-your_user} -p ${DB_NAME:-your_db}"
     echo ""
     
     read -r -p "Continue anyway? [y/N]: " continue_anyway
