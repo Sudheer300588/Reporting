@@ -146,7 +146,10 @@ const EmailPerformanceWidget = ({ clientId, clientName }) => {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+    <div className="bg-white rounded-lg shadow-sm border-2 border-blue-500 p-4">
+      <div className="bg-green-100 p-2 mb-2 text-green-800 font-bold">
+        WIDGET LOADED - Sent: {sentCount}
+      </div>
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
           <Mail className="text-blue-600" size={20} />
