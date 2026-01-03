@@ -3,6 +3,7 @@
 # DigitalBevy Deployment Script
 # Interactive deployment script for DigitalBevy platform
 # Supports both MySQL and PostgreSQL databases
+# Version: 2.0.0 - Full Interactive Configuration
 
 set -e
 
@@ -12,12 +13,29 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$SCRIPT_DIR/backend"
 FRONTEND_DIR="$SCRIPT_DIR/frontend"
+
+# Configuration variables (will be set during interactive prompts)
+DB_PROVIDER=""
+DATABASE_URL=""
+APP_PORT=""
+SITE_URL=""
+JWT_SECRET=""
+ENCRYPTION_KEY=""
+SFTP_HOST=""
+SFTP_PORT=""
+SFTP_USER=""
+SFTP_PASS=""
+SFTP_PATH=""
+MAUTIC_SYNC_SCHEDULE=""
+DROPCOWBOY_SYNC_SCHEDULE=""
+ENABLE_SCHEDULER=""
 
 print_header() {
     echo ""
@@ -155,11 +173,11 @@ check_prerequisites() {
 
 # Collect deployment configuration
 collect_config() {
-    print_header "Deployment Configuration"
+    print_header "Step 1: Database Configuration"
     
     # Database provider
     echo "Select database provider:"
-    echo "  1) MySQL"
+    echo "  1) MySQL (recommended for production)"
     echo "  2) PostgreSQL"
     read -p "Enter choice [1-2]: " db_choice
     
@@ -203,7 +221,8 @@ collect_config() {
         DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
     fi
     print_success "Database connection configured"
-    echo ""
+    
+    print_header "Step 2: Application Settings"
     
     # Website URL
     read -p "Website URL (e.g., https://yoursite.com): " SITE_URL
@@ -211,6 +230,8 @@ collect_config() {
         print_error "Website URL is required"
         exit 1
     fi
+    # Remove trailing slash if present
+    SITE_URL="${SITE_URL%/}"
     print_success "Website URL: $SITE_URL"
     echo ""
     
@@ -239,6 +260,81 @@ collect_config() {
         read -sp "Enter existing encryption key: " ENCRYPTION_KEY
         echo ""
     fi
+    
+    print_header "Step 3: DropCowboy SFTP Configuration (Optional)"
+    echo "Configure SFTP for DropCowboy voicemail data sync."
+    read -p "Configure DropCowboy SFTP now? [y/N]: " config_sftp
+    
+    if [ "$config_sftp" == "y" ] || [ "$config_sftp" == "Y" ]; then
+        read -p "SFTP Host: " SFTP_HOST
+        read -p "SFTP Port [22]: " SFTP_PORT
+        SFTP_PORT=${SFTP_PORT:-22}
+        read -p "SFTP Username: " SFTP_USER
+        read -sp "SFTP Password: " SFTP_PASS
+        echo ""
+        read -p "SFTP Remote Path [/]: " SFTP_PATH
+        SFTP_PATH=${SFTP_PATH:-/}
+        print_success "SFTP configured"
+    else
+        print_info "Skipping SFTP configuration (can be set later in Settings)"
+    fi
+    
+    print_header "Step 4: Scheduler Configuration"
+    echo "Configure automatic data sync schedules (cron format)."
+    echo ""
+    
+    read -p "Enable automatic schedulers? [Y/n]: " enable_sched
+    if [ "$enable_sched" != "n" ] && [ "$enable_sched" != "N" ]; then
+        ENABLE_SCHEDULER="true"
+        
+        read -p "Mautic sync schedule [0 3 * * *] (3 AM daily): " MAUTIC_SYNC_SCHEDULE
+        MAUTIC_SYNC_SCHEDULE=${MAUTIC_SYNC_SCHEDULE:-"0 3 * * *"}
+        
+        read -p "DropCowboy sync schedule [0 4 * * *] (4 AM daily): " DROPCOWBOY_SYNC_SCHEDULE
+        DROPCOWBOY_SYNC_SCHEDULE=${DROPCOWBOY_SYNC_SCHEDULE:-"0 4 * * *"}
+        
+        print_success "Schedulers enabled"
+    else
+        ENABLE_SCHEDULER="false"
+        MAUTIC_SYNC_SCHEDULE="0 3 * * *"
+        DROPCOWBOY_SYNC_SCHEDULE="0 4 * * *"
+        print_info "Schedulers disabled (can sync manually from dashboard)"
+    fi
+    
+    # Display configuration summary
+    print_header "Configuration Summary"
+    echo -e "${CYAN}Database:${NC}"
+    echo "  Provider: $DB_PROVIDER"
+    echo "  Host: $DB_HOST:$DB_PORT"
+    echo "  Database: $DB_NAME"
+    echo ""
+    echo -e "${CYAN}Application:${NC}"
+    echo "  URL: $SITE_URL"
+    echo "  Port: $APP_PORT"
+    echo ""
+    echo -e "${CYAN}Security:${NC}"
+    echo "  JWT Secret: [generated/provided]"
+    echo "  Encryption Key: [generated/provided]"
+    echo ""
+    if [ -n "$SFTP_HOST" ]; then
+        echo -e "${CYAN}DropCowboy SFTP:${NC}"
+        echo "  Host: $SFTP_HOST:$SFTP_PORT"
+        echo "  Path: $SFTP_PATH"
+        echo ""
+    fi
+    echo -e "${CYAN}Schedulers:${NC}"
+    echo "  Enabled: $ENABLE_SCHEDULER"
+    if [ "$ENABLE_SCHEDULER" == "true" ]; then
+        echo "  Mautic: $MAUTIC_SYNC_SCHEDULE"
+        echo "  DropCowboy: $DROPCOWBOY_SYNC_SCHEDULE"
+    fi
+    echo ""
+    
+    read -p "Proceed with this configuration? [Y/n]: " confirm
+    if [ "$confirm" == "n" ] || [ "$confirm" == "N" ]; then
+        print_error "Deployment cancelled. Run script again to reconfigure."
+        exit 1
+    fi
 }
 
 # Create environment file
@@ -249,37 +345,74 @@ create_env_file() {
     
     # Backup existing .env if it exists
     if [ -f "$ENV_FILE" ]; then
-        mv "$ENV_FILE" "$ENV_FILE.backup.$(date +%Y%m%d%H%M%S)"
-        print_warning "Existing .env backed up"
+        BACKUP_FILE="$ENV_FILE.backup.$(date +%Y%m%d%H%M%S)"
+        mv "$ENV_FILE" "$BACKUP_FILE"
+        print_warning "Existing .env backed up to: $BACKUP_FILE"
     fi
     
     cat > "$ENV_FILE" << EOF
-# DigitalBevy Environment Configuration
-# Generated on $(date)
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║ DigitalBevy Environment Configuration                             ║
+# ║ Generated on $(date)
+# ╚═══════════════════════════════════════════════════════════════════╝
 
+# ─────────────────────────────────────────────────────────────────────
 # Server Configuration
+# ─────────────────────────────────────────────────────────────────────
 PORT=$APP_PORT
 NODE_ENV=production
 
+# ─────────────────────────────────────────────────────────────────────
 # Database Configuration
 # Provider: $DB_PROVIDER
+# ─────────────────────────────────────────────────────────────────────
 DATABASE_URL="$DATABASE_URL"
 
-# Security Keys
+# ─────────────────────────────────────────────────────────────────────
+# Security Keys (do not share or commit to version control)
+# ─────────────────────────────────────────────────────────────────────
 JWT_SECRET=$JWT_SECRET
 ENCRYPTION_KEY=$ENCRYPTION_KEY
 
-# Frontend URL (for email links)
+# ─────────────────────────────────────────────────────────────────────
+# Application URLs
+# ─────────────────────────────────────────────────────────────────────
 FRONTEND_URL=$SITE_URL
 
-# Scheduler Configuration
+# ─────────────────────────────────────────────────────────────────────
+# Scheduler Configuration (cron format)
+# ─────────────────────────────────────────────────────────────────────
+ENABLE_SCHEDULER=$ENABLE_SCHEDULER
+ENABLE_MAUTIC_SCHEDULER=$ENABLE_SCHEDULER
+ENABLE_DROPCOWBOY_SCHEDULER=$ENABLE_SCHEDULER
+MAUTIC_SYNC_SCHEDULE=$MAUTIC_SYNC_SCHEDULE
+DROPCOWBOY_SYNC_SCHEDULE=$DROPCOWBOY_SYNC_SCHEDULE
 CRON_SCHEDULE=0 2 * * *
-ENABLE_SCHEDULER=true
-MAUTIC_SYNC_SCHEDULE=0 3 * * *
-ENABLE_MAUTIC_SCHEDULER=true
+
+# ─────────────────────────────────────────────────────────────────────
+# Mautic Sync Settings
+# ─────────────────────────────────────────────────────────────────────
+MAUTIC_HISTORICAL_MONTHS=12
+MAUTIC_CONCURRENT_SYNCS=5
 EOF
 
+    # Add SFTP configuration if provided
+    if [ -n "$SFTP_HOST" ]; then
+        cat >> "$ENV_FILE" << EOF
+
+# ─────────────────────────────────────────────────────────────────────
+# DropCowboy SFTP Configuration
+# ─────────────────────────────────────────────────────────────────────
+SFTP_HOST=$SFTP_HOST
+SFTP_PORT=$SFTP_PORT
+SFTP_USER=$SFTP_USER
+SFTP_PASSWORD=$SFTP_PASS
+SFTP_REMOTE_PATH=$SFTP_PATH
+EOF
+    fi
+
     print_success "Environment file created at $ENV_FILE"
+    print_info "You can edit this file later to add additional settings"
 }
 
 # Switch database provider
@@ -418,20 +551,36 @@ start_application() {
 print_summary() {
     print_header "Deployment Complete!"
     
-    echo -e "${GREEN}Your DigitalBevy application has been deployed!${NC}"
+    echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║  Your DigitalBevy application has been deployed successfully!     ║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo "Configuration Summary:"
-    echo "  • Database: $DB_PROVIDER"
-    echo "  • Port: $APP_PORT"
-    echo "  • URL: $SITE_URL"
+    echo -e "${CYAN}Configuration Summary:${NC}"
+    echo "  ┌─────────────────────────────────────────────────────────────────┐"
+    echo "  │ Database Provider:  $DB_PROVIDER"
+    echo "  │ Application Port:   $APP_PORT"
+    echo "  │ Website URL:        $SITE_URL"
+    echo "  │ Schedulers:         $ENABLE_SCHEDULER"
+    echo "  └─────────────────────────────────────────────────────────────────┘"
     echo ""
-    echo "Access your application at: $SITE_URL:$APP_PORT"
+    echo -e "${CYAN}Access Your Application:${NC}"
+    echo "  URL: $SITE_URL"
     echo ""
-    print_info "Default superadmin credentials (if seeded):"
-    echo "  Email: admin@digitalbevy.com"
+    print_info "Default superadmin credentials (if database was seeded):"
+    echo "  Email:    admin@digitalbevy.com"
     echo "  Password: admin123"
     echo ""
-    print_warning "IMPORTANT: Change the default password immediately!"
+    print_warning "SECURITY: Change the default password immediately after first login!"
+    echo ""
+    echo -e "${CYAN}Useful Commands:${NC}"
+    echo "  pm2 status              - Check application status"
+    echo "  pm2 logs digitalbevy    - View application logs"
+    echo "  pm2 restart all         - Restart application"
+    echo "  pm2 stop all            - Stop application"
+    echo ""
+    echo -e "${CYAN}Configuration Files:${NC}"
+    echo "  Environment: $BACKEND_DIR/.env"
+    echo "  Database:    $BACKEND_DIR/prisma/schema.prisma"
     echo ""
 }
 
@@ -488,11 +637,19 @@ main() {
     echo ""
     echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${CYAN}║                                                                   ║${NC}"
-    echo -e "${CYAN}║     ${GREEN}DigitalBevy Deployment Script${CYAN}                                ║${NC}"
+    echo -e "${CYAN}║     ${GREEN}DigitalBevy Deployment Script v2.0${CYAN}                            ║${NC}"
     echo -e "${CYAN}║     Business Management Platform                                 ║${NC}"
+    echo -e "${CYAN}║                                                                   ║${NC}"
+    echo -e "${CYAN}║     This wizard will guide you through:                          ║${NC}"
+    echo -e "${CYAN}║       1. Database configuration (MySQL/PostgreSQL)               ║${NC}"
+    echo -e "${CYAN}║       2. Application settings (URL, Port)                        ║${NC}"
+    echo -e "${CYAN}║       3. Security keys (JWT, Encryption)                         ║${NC}"
+    echo -e "${CYAN}║       4. Integration settings (SFTP, Schedulers)                 ║${NC}"
     echo -e "${CYAN}║                                                                   ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
+    
+    read -p "Press Enter to start deployment wizard..."
     
     # Check for quick mode
     if [ "$1" == "--quick" ] || [ "$1" == "-q" ]; then
@@ -518,7 +675,8 @@ main() {
 
 # Show help
 if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
-    echo "DigitalBevy Deployment Script"
+    echo ""
+    echo -e "${CYAN}DigitalBevy Deployment Script v2.0${NC}"
     echo ""
     echo "Usage: ./deploy.sh [OPTIONS]"
     echo ""
@@ -526,7 +684,25 @@ if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
     echo "  -h, --help    Show this help message"
     echo "  -q, --quick   Quick deploy using existing .env configuration"
     echo ""
-    echo "Without options, runs interactive setup wizard."
+    echo "Interactive Mode (default):"
+    echo "  The wizard will prompt you for:"
+    echo "    - Database type (MySQL/PostgreSQL) and credentials"
+    echo "    - Application URL and port"
+    echo "    - Security keys (auto-generated or manual)"
+    echo "    - DropCowboy SFTP settings (optional)"
+    echo "    - Scheduler configuration (optional)"
+    echo ""
+    echo "  All settings are written to backend/.env automatically."
+    echo ""
+    echo "Quick Mode (--quick):"
+    echo "  Uses existing backend/.env file without prompts."
+    echo "  Useful for redeployment or CI/CD pipelines."
+    echo ""
+    echo "Requirements:"
+    echo "  - Node.js 18+ and npm"
+    echo "  - Database server (MySQL or PostgreSQL) running and accessible"
+    echo "  - openssl (for key generation)"
+    echo ""
     exit 0
 fi
 
