@@ -274,10 +274,23 @@ const Dashboard = () => {
     return `${diffDays}d ago`
   }
 
+  const truncateName = (name, maxLen = 20) => {
+    if (!name || name.length <= maxLen) return name
+    const lastSpaceIdx = name.lastIndexOf(' ')
+    if (lastSpaceIdx > 0 && lastSpaceIdx > name.length - 10) {
+      const suffix = name.substring(lastSpaceIdx)
+      const prefixLen = maxLen - suffix.length - 3
+      if (prefixLen > 5) {
+        return name.substring(0, prefixLen) + '...' + suffix
+      }
+    }
+    return name.substring(0, maxLen - 3) + '...'
+  }
+
   const emailChartData = useMemo(() => {
     if (!emailMetrics?.topEmails) return []
     return emailMetrics.topEmails.slice(0, 7).map((email, idx) => ({
-      name: email.name?.substring(0, 15) || `Email ${idx + 1}`,
+      name: truncateName(email.name) || `Email ${idx + 1}`,
       fullName: email.name || `Email ${idx + 1}`,
       clientName: email.clientName || '',
       sent: email.sent || email.sentCount || 0,
@@ -462,8 +475,8 @@ const Dashboard = () => {
             </div>
 
             {emailChartData.length > 0 && (
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-48 w-full" style={{ minWidth: '300px', minHeight: '180px' }}>
+                <ResponsiveContainer width="100%" height="100%" debounce={50}>
                   <BarChart data={emailChartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                     <XAxis dataKey="name" tick={{ fontSize: 10 }} />
