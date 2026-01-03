@@ -119,6 +119,7 @@ model User {
   name         String
   email        String   @unique
   password     String
+  phone        String?
   role         UserRole @default(employee)
   customRoleId Int?
   customRole   Role?    @relation(fields: [customRoleId], references: [id], onDelete: SetNull)
