@@ -182,15 +182,18 @@ router.post('/sftp-credentials', async (req, res) => {
     password = password.trim();
     remotePath = remotePath.trim();
     // Save new credentials (replace old)
+    const credData = {
+      host,
+      port: Number(port),
+      username,
+      password,
+      remotePath
+    };
+    if (req.user?.id) {
+      credData.createdBy = { connect: { id: req.user.id } };
+    }
     const cred = await prisma.sFTPCredential.create({
-      data: {
-        host,
-        port: Number(port),
-        username,
-        password,
-        remotePath,
-        createdById: req.user?.id || null
-      }
+      data: credData
     });
     res.json({ success: true, data: { id: cred.id } });
   } catch (error) {
@@ -298,15 +301,18 @@ router.post('/smtp-credentials', async (req, res) => {
     fromAddress = fromAddress.trim();
     
     // Save new credentials
+    const smtpData = {
+      host,
+      port: Number(port),
+      username,
+      password,
+      fromAddress
+    };
+    if (req.user?.id) {
+      smtpData.createdBy = { connect: { id: req.user.id } };
+    }
     const cred = await prisma.sMTPCredential.create({
-      data: {
-        host,
-        port: Number(port),
-        username,
-        password,
-        fromAddress,
-        createdById: req.user?.id || null
-      }
+      data: smtpData
     });
     res.json({ success: true, data: { id: cred.id } });
   } catch (error) {
@@ -420,13 +426,16 @@ router.post('/vicidial-credentials', async (req, res) => {
     password = password.trim();
     
     // Save new credentials
+    const vicidialData = {
+      url,
+      username,
+      password
+    };
+    if (req.user?.id) {
+      vicidialData.createdBy = { connect: { id: req.user.id } };
+    }
     const cred = await prisma.vicidialCredential.create({
-      data: {
-        url,
-        username,
-        password,
-        createdById: req.user?.id || null
-      }
+      data: vicidialData
     });
     res.json({ success: true, data: { id: cred.id } });
   } catch (error) {
@@ -658,11 +667,11 @@ router.post('/users', async (req, res) => {
         email,
         password: hashedPassword,
         role,
-        createdById: req.user.id,
+        createdBy: { connect: { id: req.user.id } },
         isActive: true,
         // Connect to custom role if validated
         ...(validatedCustomRoleId ? {
-          customRoleId: validatedCustomRoleId
+          customRole: { connect: { id: validatedCustomRoleId } }
         } : {}),
         // Connect to manager if provided (for employees)
         ...(managerId && role === 'employee' ? {
@@ -1028,7 +1037,7 @@ router.post('/clients', async (req, res) => {
           description,
           clientType: 'general',
           isActive: true,
-          createdById: req.user.id
+          createdBy: { connect: { id: req.user.id } }
         }
       });
 
@@ -1040,9 +1049,9 @@ router.post('/clients', async (req, res) => {
         assignmentPromises.push(
           tx.clientAssignment.create({
             data: {
-              clientId: client.id,
-              userId: parseInt(managerId),
-              assignedById: req.user.id
+              client: { connect: { id: client.id } },
+              user: { connect: { id: parseInt(managerId) } },
+              assignedBy: { connect: { id: req.user.id } }
             }
           })
         );
@@ -1053,9 +1062,9 @@ router.post('/clients', async (req, res) => {
         assignmentPromises.push(
           tx.clientAssignment.create({
             data: {
-              clientId: client.id,
-              userId: parseInt(employeeId),
-              assignedById: req.user.id
+              client: { connect: { id: client.id } },
+              user: { connect: { id: parseInt(employeeId) } },
+              assignedBy: { connect: { id: req.user.id } }
             }
           })
         );
@@ -1686,18 +1695,21 @@ router.put('/site-config', async (req, res) => {
     }
 
     // create new
+    const siteData = {
+      siteTitle,
+      faviconPath,
+      logoPath,
+      loginBgType: loginBgType || 'image',
+      loginBgImagePath,
+      loginBgColor,
+      loginBgGradientFrom,
+      loginBgGradientTo
+    };
+    if (req.user?.id) {
+      siteData.createdBy = { connect: { id: req.user.id } };
+    }
     const created = await prisma.siteSettings.create({
-      data: {
-        siteTitle,
-        faviconPath,
-        logoPath,
-        loginBgType: loginBgType || 'image',
-        loginBgImagePath,
-        loginBgColor,
-        loginBgGradientFrom,
-        loginBgGradientTo,
-        createdById: req.user?.id || null
-      }
+      data: siteData
     });
     logger.debug('[site-config] created:', created);
     res.json({ success: true, data: created });
@@ -1788,18 +1800,21 @@ router.post('/site-customization', upload.fields([
       });
       res.json({ success: true, data: updated });
     } else {
+      const newSiteData = {
+        siteTitle,
+        faviconPath,
+        logoPath,
+        loginBgType: loginBgType || 'image',
+        loginBgImagePath,
+        loginBgColor,
+        loginBgGradientFrom,
+        loginBgGradientTo
+      };
+      if (req.user?.id) {
+        newSiteData.createdBy = { connect: { id: req.user.id } };
+      }
       const created = await prisma.siteSettings.create({
-        data: {
-          siteTitle,
-          faviconPath,
-          logoPath,
-          loginBgType: loginBgType || 'image',
-          loginBgImagePath,
-          loginBgColor,
-          loginBgGradientFrom,
-          loginBgGradientTo,
-          createdById: req.user?.id || null
-        }
+        data: newSiteData
       });
       res.json({ success: true, data: created });
     }

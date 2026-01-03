@@ -1,0 +1,106 @@
+hcdteam-dev@srv758389:~/htdocs/dev.hcdteam.com$ pm2 logs digitalbevy --lines 100
+[TAILING] Tailing last 100 lines for [digitalbevy] process (change the value with --lines option)
+/home/hcdteam-dev/htdocs/dev.hcdteam.com/backend/logs/error-0.log last 100 lines:
+/home/hcdteam-dev/htdocs/dev.hcdteam.com/backend/logs/out-0.log last 100 lines:
+0|digitalb | 2026-01-03T01:07:05:     customRoleId: true,
+0|digitalb | 2026-01-03T01:07:05:     customRole: {
+0|digitalb | 2026-01-03T01:07:05:       select: {
+0|digitalb | 2026-01-03T01:07:05:         id: true,
+0|digitalb | 2026-01-03T01:07:05:         name: true,
+0|digitalb | 2026-01-03T01:07:05:         fullAccess: true
+0|digitalb | 2026-01-03T01:07:05:       }
+0|digitalb | 2026-01-03T01:07:05:     },
+0|digitalb | 2026-01-03T01:07:05:     createdBy: {
+0|digitalb | 2026-01-03T01:07:05:       select: {
+0|digitalb | 2026-01-03T01:07:05:         id: true,
+0|digitalb | 2026-01-03T01:07:05:         name: true,
+0|digitalb | 2026-01-03T01:07:05:         email: true
+0|digitalb | 2026-01-03T01:07:05:       }
+0|digitalb | 2026-01-03T01:07:05:     },
+0|digitalb | 2026-01-03T01:07:05:     managers: {
+0|digitalb | 2026-01-03T01:07:05:       select: {
+0|digitalb | 2026-01-03T01:07:05:         id: true,
+0|digitalb | 2026-01-03T01:07:05:         name: true,
+0|digitalb | 2026-01-03T01:07:05:         email: true
+0|digitalb | 2026-01-03T01:07:05:       }
+0|digitalb | 2026-01-03T01:07:05:     }
+0|digitalb | 2026-01-03T01:07:05:   }
+0|digitalb | 2026-01-03T01:07:05: }
+0|digitalb | 2026-01-03T01:07:05: 
+0|digitalb | 2026-01-03T01:07:05: Unknown argument `createdById`. Did you mean `createdBy`? Available options are marked with ?.
+0|digitalb | 2026-01-03T01:08:58: prisma:error 
+0|digitalb | 2026-01-03T01:08:58: Invalid `prisma.syncLog.create()` invocation:
+0|digitalb | 2026-01-03T01:08:58: 
+0|digitalb | 2026-01-03T01:08:58: 
+0|digitalb | 2026-01-03T01:08:58: The provided value for the column is too long for the column's type. Column: errorMessage
+0|digitalb | 2026-01-03T01:10:42: prisma:error 
+0|digitalb | 2026-01-03T01:10:42: Invalid `prisma.user.create()` invocation:
+0|digitalb | 2026-01-03T01:10:42: 
+0|digitalb | 2026-01-03T01:10:42: {
+0|digitalb | 2026-01-03T01:10:42:   data: {
+0|digitalb | 2026-01-03T01:10:42:     name: "Ravi Kumar",
+0|digitalb | 2026-01-03T01:10:42:     email: "ravi@hcdevelopment.com",
+0|digitalb | 2026-01-03T01:10:42:     password: "$2a$10$HZgGwkGGErOMk0clrjHekOi9F8bvhL3IptEAX0R/dyhbXbTZ3rSLS",
+0|digitalb | 2026-01-03T01:10:42:     role: "employee",
+0|digitalb | 2026-01-03T01:10:42:     createdById: 1,
+0|digitalb | 2026-01-03T01:10:42:     ~~~~~~~~~~~
+0|digitalb | 2026-01-03T01:10:42:     customRoleId: 2,
+0|digitalb | 2026-01-03T01:10:42:     phone: "918099996333",
+0|digitalb | 2026-01-03T01:10:42: ?   isActive?: Boolean,
+0|digitalb | 2026-01-03T01:10:42: ?   tokenVersion?: Int,
+0|digitalb | 2026-01-03T01:10:42: ?   createdAt?: DateTime,
+0|digitalb | 2026-01-03T01:10:42: ?   updatedAt?: DateTime,
+0|digitalb | 2026-01-03T01:10:42: ?   customRole?: RoleCreateNestedOneWithoutUsersInput,
+0|digitalb | 2026-01-03T01:10:42: ?   createdBy?: UserCreateNestedOneWithoutCreatedUsersInput,
+0|digitalb | 2026-01-03T01:10:42: ?   createdUsers?: UserCreateNestedManyWithoutCreatedByInput,
+0|digitalb | 2026-01-03T01:10:42: ?   superAdmin?: UserCreateNestedOneWithoutManagedUsersInput,
+0|digitalb | 2026-01-03T01:10:42: ?   managedUsers?: UserCreateNestedManyWithoutSuperAdminInput,
+0|digitalb | 2026-01-03T01:10:42: ?   employees?: UserCreateNestedManyWithoutManagersInput,
+0|digitalb | 2026-01-03T01:10:42: ?   managers?: UserCreateNestedManyWithoutEmployeesInput,
+0|digitalb | 2026-01-03T01:10:42: ?   activities?: ActivityLogCreateNestedManyWithoutUserInput,
+0|digitalb | 2026-01-03T01:10:42: ?   createdClients?: ClientCreateNestedManyWithoutCreatedByInput,
+0|digitalb | 2026-01-03T01:10:42: ?   userAssignments?: ClientAssignmentCreateNestedManyWithoutUserInput,
+0|digitalb | 2026-01-03T01:10:42: ?   assignedClients?: ClientAssignmentCreateNestedManyWithoutAssignedByInput,
+0|digitalb | 2026-01-03T01:10:42: ?   campaigns?: CampaignCreateNestedManyWithoutCreatedByInput,
+0|digitalb | 2026-01-03T01:10:42: ?   sftpcredentials?: SFTPCredentialCreateNestedManyWithoutCreatedByInput,
+0|digitalb | 2026-01-03T01:10:42: ?   smtpcredentials?: SMTPCredentialCreateNestedManyWithoutCreatedByInput,
+0|digitalb | 2026-01-03T01:10:42: ?   vicidialcredentials?: VicidialCredentialCreateNestedManyWithoutCreatedByInput,
+0|digitalb | 2026-01-03T01:10:42: ?   siteSettings?: SiteSettingsCreateNestedManyWithoutCreatedByInput,
+0|digitalb | 2026-01-03T01:10:42: ?   otps?: OTPCreateNestedManyWithoutUserInput,
+0|digitalb | 2026-01-03T01:10:42: ?   adminSettingsPermissions?: AdminSettingsPermissionCreateNestedManyWithoutAdminInput
+0|digitalb | 2026-01-03T01:10:42:   },
+0|digitalb | 2026-01-03T01:10:42:   select: {
+0|digitalb | 2026-01-03T01:10:42:     id: true,
+0|digitalb | 2026-01-03T01:10:42:     name: true,
+0|digitalb | 2026-01-03T01:10:42:     email: true,
+0|digitalb | 2026-01-03T01:10:42:     role: true,
+0|digitalb | 2026-01-03T01:10:42:     isActive: true,
+0|digitalb | 2026-01-03T01:10:42:     createdAt: true,
+0|digitalb | 2026-01-03T01:10:42:     customRoleId: true,
+0|digitalb | 2026-01-03T01:10:42:     customRole: {
+0|digitalb | 2026-01-03T01:10:42:       select: {
+0|digitalb | 2026-01-03T01:10:42:         id: true,
+0|digitalb | 2026-01-03T01:10:42:         name: true,
+0|digitalb | 2026-01-03T01:10:42:         fullAccess: true
+0|digitalb | 2026-01-03T01:10:42:       }
+0|digitalb | 2026-01-03T01:10:42:     },
+0|digitalb | 2026-01-03T01:10:42:     createdBy: {
+0|digitalb | 2026-01-03T01:10:42:       select: {
+0|digitalb | 2026-01-03T01:10:42:         id: true,
+0|digitalb | 2026-01-03T01:10:42:         name: true,
+0|digitalb | 2026-01-03T01:10:42:         email: true
+0|digitalb | 2026-01-03T01:10:42:       }
+0|digitalb | 2026-01-03T01:10:42:     },
+0|digitalb | 2026-01-03T01:10:42:     managers: {
+0|digitalb | 2026-01-03T01:10:42:       select: {
+0|digitalb | 2026-01-03T01:10:42:         id: true,
+0|digitalb | 2026-01-03T01:10:42:         name: true,
+0|digitalb | 2026-01-03T01:10:42:         email: true
+0|digitalb | 2026-01-03T01:10:42:       }
+0|digitalb | 2026-01-03T01:10:42:     }
+0|digitalb | 2026-01-03T01:10:42:   }
+0|digitalb | 2026-01-03T01:10:42: }
+0|digitalb | 2026-01-03T01:10:42: 
+0|digitalb | 2026-01-03T01:10:42: Unknown argument `createdById`. Did you mean `createdBy`? Available options are marked with ?.
+
+

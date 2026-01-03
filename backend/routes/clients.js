@@ -202,7 +202,7 @@ router.post(
     try {
       const { name, type, contactEmail, contactPhone, assignedUsers } =
         req.body;
-      const { id: createdById } = req.user;
+      const createdById = req.user.id;
 
       const client = await prisma.client.create({
         data: {
@@ -210,7 +210,7 @@ router.post(
           clientType: type, // Map 'type' from request to 'clientType' in DB
           email: contactEmail,
           phone: contactPhone,
-          createdById,
+          createdBy: { connect: { id: createdById } },
         },
         include: {
           createdBy: {
@@ -222,13 +222,16 @@ router.post(
       // If assignedUsers are provided, create assignments
       if (assignedUsers && assignedUsers.length > 0) {
         try {
-          await prisma.clientAssignment.createMany({
-            data: assignedUsers.map((userId) => ({
-              clientId: client.id,
-              userId: userId,
-              assignedById: createdById,
-            })),
-          });
+          // Use individual creates with connect syntax for MySQL compatibility
+          for (const userId of assignedUsers) {
+            await prisma.clientAssignment.create({
+              data: {
+                client: { connect: { id: client.id } },
+                user: { connect: { id: userId } },
+                assignedBy: { connect: { id: createdById } },
+              },
+            });
+          }
         } catch (assignError) {
           logger.error("Error creating assignments", {
             error: assignError.message,
@@ -685,9 +688,9 @@ router.post("/:id/assign", authenticate, canManageClients, async (req, res) => {
 
     const assignment = await prisma.clientAssignment.create({
       data: {
-        clientId,
-        userId,
-        assignedById,
+        client: { connect: { id: clientId } },
+        user: { connect: { id: userId } },
+        assignedBy: { connect: { id: assignedById } },
       },
       include: {
         client: true,

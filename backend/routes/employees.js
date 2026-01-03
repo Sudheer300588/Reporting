@@ -99,8 +99,8 @@ router.post('/', authenticate, requirePermission('Users', 'Create'), validate(cr
       email,
       password: hashedPassword,
       role: customRole.fullAccess ? 'admin' : 'employee',
-      createdById: currentUser.id,
-      customRoleId: parsedRoleId
+      createdBy: { connect: { id: currentUser.id } },
+      customRole: { connect: { id: parsedRoleId } }
     };
 
     // Add phone if provided

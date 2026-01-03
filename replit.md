@@ -128,6 +128,14 @@ Supports both MySQL and PostgreSQL through Prisma, with a `switch-database.sh` s
 └── start.sh           # Quick start script
 ```
 
+#### Prisma Relation Syntax (Critical - Jan 2025)
+MySQL requires using Prisma's relation connect syntax instead of direct foreign key assignment:
+- **Wrong**: `createdById: userId` (causes "Unknown argument" error)
+- **Correct**: `createdBy: { connect: { id: userId } }`
+- **Affected Operations**: All `create()` operations with foreign key relations
+- **WHERE Clauses**: Can still use `createdById` for filtering (only affects create/update)
+- **Files Fixed**: `employees.js`, `superadmin.js`, `clients.js`
+
 #### Deployment (Updated Jan 2025)
 An interactive `deploy.sh` script (Hardened) facilitates multi-site server deployments:
 - **4-Step Wizard**: Database config, App settings, Super Admin creation, Scheduler config
