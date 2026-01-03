@@ -561,8 +561,11 @@ start_application() {
   # Stop existing PM2 processes
   pm2 delete digitalbevy 2>/dev/null || true
 
-  # Create PM2 ecosystem file
-  cat > ecosystem.config.js <<EOF
+  # Remove old .js ecosystem file if exists (ES module compatibility)
+  rm -f ecosystem.config.js
+
+  # Create PM2 ecosystem file with .cjs extension for ES module compatibility
+  cat > ecosystem.config.cjs <<EOF
 module.exports = {
   apps: [{
     name: 'digitalbevy',
@@ -587,7 +590,7 @@ EOF
 
   # Start with PM2
   print_step "Starting application with PM2..."
-  pm2 start ecosystem.config.js
+  pm2 start ecosystem.config.cjs
   pm2 save
 
   print_success "Application started!"
@@ -621,7 +624,7 @@ print_summary() {
   echo ""
   echo -e "${CYAN}Configuration Files:${NC}"
   echo "  Environment: $BACKEND_DIR/.env"
-  echo "  PM2 Config:  $BACKEND_DIR/ecosystem.config.js"
+  echo "  PM2 Config:  $BACKEND_DIR/ecosystem.config.cjs"
   echo ""
 }
 
