@@ -192,27 +192,39 @@ collect_config() {
     
     # Database connection
     if [ "$DB_PROVIDER" == "mysql" ]; then
+        echo ""
+        echo -e "${CYAN}Examples: localhost, 192.168.1.100, db.myserver.com${NC}"
         read -p "MySQL Host [localhost]: " DB_HOST
         DB_HOST=${DB_HOST:-localhost}
         
         read -p "MySQL Port [3306]: " DB_PORT
         DB_PORT=${DB_PORT:-3306}
         
+        echo -e "${CYAN}Example: digitalbevy_db${NC}"
         read -p "MySQL Database name: " DB_NAME
+        
+        echo -e "${CYAN}Example: db_user${NC}"
         read -p "MySQL Username: " DB_USER
+        
         read -sp "MySQL Password: " DB_PASS
         echo ""
         
         DATABASE_URL="mysql://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
     else
+        echo ""
+        echo -e "${CYAN}Examples: localhost, 192.168.1.100, db.myserver.com${NC}"
         read -p "PostgreSQL Host [localhost]: " DB_HOST
         DB_HOST=${DB_HOST:-localhost}
         
         read -p "PostgreSQL Port [5432]: " DB_PORT
         DB_PORT=${DB_PORT:-5432}
         
+        echo -e "${CYAN}Example: digitalbevy_db${NC}"
         read -p "PostgreSQL Database name: " DB_NAME
+        
+        echo -e "${CYAN}Example: db_user${NC}"
         read -p "PostgreSQL Username: " DB_USER
+        
         read -sp "PostgreSQL Password: " DB_PASS
         echo ""
         
@@ -223,7 +235,9 @@ collect_config() {
     print_header "Step 2: Application Settings"
     
     # Website URL
-    read -p "Website URL (e.g., https://yoursite.com): " SITE_URL
+    echo -e "${CYAN}This is the public URL where users will access your application.${NC}"
+    echo -e "${CYAN}Examples: https://crm.mycompany.com, https://app.example.com, http://192.168.1.100:3026${NC}"
+    read -p "Website URL: " SITE_URL
     if [ -z "$SITE_URL" ]; then
         print_error "Website URL is required"
         exit 1
@@ -234,6 +248,7 @@ collect_config() {
     echo ""
     
     # Application port
+    echo -e "${CYAN}The port your application will run on. Common ports: 3000, 3026, 8080${NC}"
     read -p "Application port [3026]: " APP_PORT
     APP_PORT=${APP_PORT:-3026}
     print_success "Application port: $APP_PORT"
@@ -261,12 +276,15 @@ collect_config() {
     
     print_header "Step 3: Super Admin Account"
     echo "Create the initial super admin account for system access."
+    echo "This will be the first user with full administrative privileges."
     echo ""
     
+    echo -e "${CYAN}Example: John Smith, Admin User${NC}"
     read -p "Super Admin Name [Super Admin]: " SUPERADMIN_NAME
     SUPERADMIN_NAME=${SUPERADMIN_NAME:-"Super Admin"}
     
     while true; do
+        echo -e "${CYAN}Example: admin@yourcompany.com, john@example.com${NC}"
         read -p "Super Admin Email: " SUPERADMIN_EMAIL
         if [ -z "$SUPERADMIN_EMAIL" ]; then
             print_error "Email is required"
@@ -278,6 +296,7 @@ collect_config() {
     done
     
     while true; do
+        echo -e "${CYAN}Choose a strong password (letters, numbers, symbols recommended)${NC}"
         read -sp "Super Admin Password (min 8 characters): " SUPERADMIN_PASSWORD
         echo ""
         if [ ${#SUPERADMIN_PASSWORD} -lt 8 ]; then
@@ -295,12 +314,21 @@ collect_config() {
     print_success "Super Admin account configured"
     
     print_header "Step 4: Scheduler Configuration"
-    echo "Configure automatic data sync schedules (cron format)."
+    echo "Configure automatic data sync schedules."
+    echo "Schedulers automatically sync data from Mautic and DropCowboy at specified times."
     echo ""
     
     read -p "Enable automatic schedulers? [Y/n]: " enable_sched
     if [ "$enable_sched" != "n" ] && [ "$enable_sched" != "N" ]; then
         ENABLE_SCHEDULER="true"
+        
+        echo ""
+        echo -e "${CYAN}Cron format: minute hour day month weekday${NC}"
+        echo -e "${CYAN}Examples:${NC}"
+        echo -e "${CYAN}  0 3 * * *   = Every day at 3:00 AM${NC}"
+        echo -e "${CYAN}  0 */6 * * * = Every 6 hours${NC}"
+        echo -e "${CYAN}  0 2 * * 0   = Every Sunday at 2:00 AM${NC}"
+        echo ""
         
         read -p "Mautic sync schedule [0 3 * * *] (3 AM daily): " MAUTIC_SYNC_SCHEDULE
         MAUTIC_SYNC_SCHEDULE=${MAUTIC_SYNC_SCHEDULE:-"0 3 * * *"}
@@ -313,7 +341,7 @@ collect_config() {
         ENABLE_SCHEDULER="false"
         MAUTIC_SYNC_SCHEDULE="0 3 * * *"
         DROPCOWBOY_SYNC_SCHEDULE="0 4 * * *"
-        print_info "Schedulers disabled (can sync manually from dashboard)"
+        print_info "Schedulers disabled (you can sync manually from the dashboard)"
     fi
     
     # Display configuration summary
