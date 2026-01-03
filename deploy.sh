@@ -28,11 +28,6 @@ APP_PORT=""
 SITE_URL=""
 JWT_SECRET=""
 ENCRYPTION_KEY=""
-SFTP_HOST=""
-SFTP_PORT=""
-SFTP_USER=""
-SFTP_PASS=""
-SFTP_PATH=""
 MAUTIC_SYNC_SCHEDULE=""
 DROPCOWBOY_SYNC_SCHEDULE=""
 ENABLE_SCHEDULER=""
@@ -261,25 +256,7 @@ collect_config() {
         echo ""
     fi
     
-    print_header "Step 3: DropCowboy SFTP Configuration (Optional)"
-    echo "Configure SFTP for DropCowboy voicemail data sync."
-    read -p "Configure DropCowboy SFTP now? [y/N]: " config_sftp
-    
-    if [ "$config_sftp" == "y" ] || [ "$config_sftp" == "Y" ]; then
-        read -p "SFTP Host: " SFTP_HOST
-        read -p "SFTP Port [22]: " SFTP_PORT
-        SFTP_PORT=${SFTP_PORT:-22}
-        read -p "SFTP Username: " SFTP_USER
-        read -sp "SFTP Password: " SFTP_PASS
-        echo ""
-        read -p "SFTP Remote Path [/]: " SFTP_PATH
-        SFTP_PATH=${SFTP_PATH:-/}
-        print_success "SFTP configured"
-    else
-        print_info "Skipping SFTP configuration (can be set later in Settings)"
-    fi
-    
-    print_header "Step 4: Scheduler Configuration"
+    print_header "Step 3: Scheduler Configuration"
     echo "Configure automatic data sync schedules (cron format)."
     echo ""
     
@@ -316,12 +293,6 @@ collect_config() {
     echo "  JWT Secret: [generated/provided]"
     echo "  Encryption Key: [generated/provided]"
     echo ""
-    if [ -n "$SFTP_HOST" ]; then
-        echo -e "${CYAN}DropCowboy SFTP:${NC}"
-        echo "  Host: $SFTP_HOST:$SFTP_PORT"
-        echo "  Path: $SFTP_PATH"
-        echo ""
-    fi
     echo -e "${CYAN}Schedulers:${NC}"
     echo "  Enabled: $ENABLE_SCHEDULER"
     if [ "$ENABLE_SCHEDULER" == "true" ]; then
@@ -395,21 +366,6 @@ CRON_SCHEDULE=0 2 * * *
 MAUTIC_HISTORICAL_MONTHS=12
 MAUTIC_CONCURRENT_SYNCS=5
 EOF
-
-    # Add SFTP configuration if provided
-    if [ -n "$SFTP_HOST" ]; then
-        cat >> "$ENV_FILE" << EOF
-
-# ─────────────────────────────────────────────────────────────────────
-# DropCowboy SFTP Configuration
-# ─────────────────────────────────────────────────────────────────────
-SFTP_HOST=$SFTP_HOST
-SFTP_PORT=$SFTP_PORT
-SFTP_USER=$SFTP_USER
-SFTP_PASSWORD=$SFTP_PASS
-SFTP_REMOTE_PATH=$SFTP_PATH
-EOF
-    fi
 
     print_success "Environment file created at $ENV_FILE"
     print_info "You can edit this file later to add additional settings"
@@ -642,9 +598,8 @@ main() {
     echo -e "${CYAN}║                                                                   ║${NC}"
     echo -e "${CYAN}║     This wizard will guide you through:                          ║${NC}"
     echo -e "${CYAN}║       1. Database configuration (MySQL/PostgreSQL)               ║${NC}"
-    echo -e "${CYAN}║       2. Application settings (URL, Port)                        ║${NC}"
-    echo -e "${CYAN}║       3. Security keys (JWT, Encryption)                         ║${NC}"
-    echo -e "${CYAN}║       4. Integration settings (SFTP, Schedulers)                 ║${NC}"
+    echo -e "${CYAN}║       2. Application settings (URL, Port, Security Keys)         ║${NC}"
+    echo -e "${CYAN}║       3. Scheduler configuration (Mautic, DropCowboy)            ║${NC}"
     echo -e "${CYAN}║                                                                   ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
@@ -689,8 +644,10 @@ if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
     echo "    - Database type (MySQL/PostgreSQL) and credentials"
     echo "    - Application URL and port"
     echo "    - Security keys (auto-generated or manual)"
-    echo "    - DropCowboy SFTP settings (optional)"
     echo "    - Scheduler configuration (optional)"
+    echo ""
+    echo "  Note: SFTP and other integration credentials are configured"
+    echo "  through the Settings page in the application after deployment."
     echo ""
     echo "  All settings are written to backend/.env automatically."
     echo ""
