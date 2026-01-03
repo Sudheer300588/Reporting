@@ -133,6 +133,15 @@ const EmailPerformanceWidget = ({ clientId, clientName }) => {
   const clientStats = stats?.stats || {}
   const sentCount = Number(clientStats.sent) || 0
   const hasData = sentCount > 0 || (stats?.topEmails?.length > 0)
+  
+  // Debug logging - remove after fixing
+  console.log('EmailPerformanceWidget Debug:', {
+    stats,
+    clientStats,
+    sentCount,
+    hasData,
+    topEmailsLength: stats?.topEmails?.length
+  })
 
   if (!hasData) {
     return (
