@@ -428,7 +428,7 @@ class MauticDataService {
       const topEmails = await prisma.mauticEmail.findMany({
         where: {
           ...where,
-          sentCount: { gt: 100 } // Only show emails with meaningful volume
+          sentCount: { gt: 0 } // Show all emails with any sends
         },
         orderBy: [
           { sentCount: 'desc' }, // Primary: highest volume

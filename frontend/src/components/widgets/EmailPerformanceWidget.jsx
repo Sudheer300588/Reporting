@@ -130,7 +130,10 @@ const EmailPerformanceWidget = ({ clientId, clientName }) => {
     )
   }
 
-  if (!stats?.stats) {
+  const clientStats = stats?.stats || {}
+  const hasData = clientStats.sent > 0 || (stats?.topEmails?.length > 0)
+
+  if (!hasData) {
     return (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="text-center py-4">
@@ -140,8 +143,6 @@ const EmailPerformanceWidget = ({ clientId, clientName }) => {
       </div>
     )
   }
-
-  const clientStats = stats.stats
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">

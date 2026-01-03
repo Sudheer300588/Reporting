@@ -102,7 +102,7 @@ class StatsService {
         prisma.mauticEmail.findMany({
           where: {
             ...dateFilter,
-            sentCount: { gt: 100 }
+            sentCount: { gt: 0 }
           },
           orderBy: [
             { sentCount: 'desc' },
