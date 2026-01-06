@@ -163,13 +163,24 @@ router.get("/clients/:clientId/emails", async (req, res) => {
 });
 
 // Get segments for a specific client
+// Get segments for a specific client with contact counts, sorted by contactCount descending
 router.get("/clients/:clientId/segments", async (req, res) => {
   try {
     const { clientId } = req.params;
     const segments = await prisma.mauticSegment.findMany({
       where: { clientId: parseInt(clientId) },
+      orderBy: { contactCount: 'desc' }, // Sort by contact count, highest first
     });
-    res.json({ success: true, data: segments });
+
+    // Calculate total contacts across all segments
+    const totalContacts = segments.reduce((sum, segment) => sum + (segment.contactCount || 0), 0);
+
+    res.json({ 
+      success: true, 
+      data: segments,
+      totalContacts: totalContacts,
+      segmentCount: segments.length
+    });
   } catch (error) {
     console.error(error);
     res
@@ -1147,7 +1158,7 @@ router.get("/emails", async (req, res) => {
 
 /**
  * GET /api/mautic/segments
- * Get segments
+ * Get segments with contact counts, sorted by contactCount descending
  */
 router.get("/segments", async (req, res) => {
   try {
@@ -1166,9 +1177,14 @@ router.get("/segments", async (req, res) => {
       },
     });
 
+    // Calculate total contacts across all segments
+    const totalContacts = segments.reduce((sum, segment) => sum + (segment.contactCount || 0), 0);
+
     res.json({
       success: true,
       data: segments,
+      totalContacts: totalContacts,
+      segmentCount: segments.length
     });
   } catch (error) {
     console.error("Error fetching segments:", error);

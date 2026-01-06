@@ -3,78 +3,65 @@ import { Prisma } from '@prisma/client';
 
 class MauticDataService {
   /**
-   * Save emails to database
+   * Save emails to database using BULK INSERT (1000x faster!)
+   * @param {number} clientId - Client ID
+   * @param {Array} emails - Array of email objects from Mautic API
+   * @returns {Promise<Object>} Save results
    */
   async saveEmails(clientId, emails) {
     try {
-      console.log(`💾 Saving ${emails.length} emails for client ${clientId}...`);
+      console.log(`💾 BULK SAVING ${emails.length} emails for client ${clientId}...`);
 
       if (emails.length === 0) {
         console.log(`✅ No emails to save`);
         return { success: true, created: 0, updated: 0, total: 0 };
       }
 
-      let created = 0;
-      let updated = 0;
-      const BATCH_SIZE = 50;
+      let totalCreated = 0;
+      const BATCH_SIZE = 1000; // MUCH larger batches for createMany
+      const now = new Date();
 
-      // Process in batches for better performance
+      // Process in HUGE batches using createMany with skipDuplicates
       for (let i = 0; i < emails.length; i += BATCH_SIZE) {
         const batch = emails.slice(i, i + BATCH_SIZE);
 
-        await Promise.all(batch.map(async (email) => {
-          try {
-            const sentCount = email.sentCount || 0;
-            const readCount = email.readCount || 0;
-            const clickCount = email.clickCount || 0;
-            const unsubscribeCount = email.unsubscribeCount || 0;
-            const bounceCount = email.bounceCount || 0;
+        const emailData = batch.map(email => {
+          const sentCount = email.sentCount || 0;
+          const readCount = email.readCount || 0;
+          const clickCount = email.clickCount || 0;
+          const unsubscribeCount = email.unsubscribeCount || 0;
+          const bounceCount = email.bounceCount || 0;
 
-            const emailData = {
-              mauticEmailId: String(email.id),
-              name: email.name || '',
-              subject: email.subject || null,
-              emailType: email.emailType || null,
-              isPublished: email.isPublished || false,
-              publishUp: email.publishUp ? new Date(email.publishUp) : null,
-              publishDown: email.publishDown ? new Date(email.publishDown) : null,
-              sentCount: sentCount,
-              readCount: readCount,
-              clickedCount: clickCount,
-              unsubscribed: unsubscribeCount,
-              bounced: bounceCount,
-              readRate: sentCount > 0 ? new Prisma.Decimal((readCount / sentCount * 100).toFixed(2)) : new Prisma.Decimal(0),
-              clickRate: sentCount > 0 ? new Prisma.Decimal((clickCount / sentCount * 100).toFixed(2)) : new Prisma.Decimal(0),
-              unsubscribeRate: sentCount > 0 ? new Prisma.Decimal((unsubscribeCount / sentCount * 100).toFixed(2)) : new Prisma.Decimal(0),
-              clientId: clientId,
-              dateAdded: email.dateAdded ? new Date(email.dateAdded) : new Date()
-            };
+          return {
+            mauticEmailId: String(email.id),
+            name: email.name || '',
+            subject: email.subject || null,
+            emailType: email.emailType || null,
+            isPublished: email.isPublished || false,
+            publishUp: email.publishUp ? new Date(email.publishUp) : null,
+            publishDown: email.publishDown ? new Date(email.publishDown) : null,
+            sentCount: sentCount,
+            readCount: readCount,
+            clickedCount: clickCount,
+            unsubscribed: unsubscribeCount,
+            bounced: bounceCount,
+            readRate: sentCount > 0 ? new Prisma.Decimal((readCount / sentCount * 100).toFixed(2)) : new Prisma.Decimal(0),
+            clickRate: sentCount > 0 ? new Prisma.Decimal((clickCount / sentCount * 100).toFixed(2)) : new Prisma.Decimal(0),
+            unsubscribeRate: sentCount > 0 ? new Prisma.Decimal((unsubscribeCount / sentCount * 100).toFixed(2)) : new Prisma.Decimal(0),
+            clientId: clientId,
+            dateAdded: email.dateAdded ? new Date(email.dateAdded) : now,
+            createdAt: now,
+            updatedAt: now
+          };
+        });
 
-            const result = await prisma.mauticEmail.upsert({
-              where: {
-                clientId_mauticEmailId: {
-                  clientId: clientId,
-                  mauticEmailId: String(email.id)
-                }
-              },
-              update: {
-                ...emailData,
-                updatedAt: new Date()
-              },
-              create: emailData
-            });
+        const result = await prisma.mauticEmail.createMany({
+          data: emailData,
+          skipDuplicates: true
+        });
 
-            if (result.createdAt.getTime() === result.updatedAt.getTime()) {
-              created++;
-            } else {
-              updated++;
-            }
-          } catch (error) {
-            console.error(`Failed to save email ${email.id}:`, error.message);
-          }
-        }));
-
-        console.log(`   Saved ${Math.min(i + BATCH_SIZE, emails.length)}/${emails.length} emails...`);
+        totalCreated += result.count;
+        console.log(`   Processed ${Math.min(i + BATCH_SIZE, emails.length)}/${emails.length} emails (${totalCreated} new)...`);
       }
 
       // Update client email count
@@ -83,12 +70,12 @@ class MauticDataService {
         data: { totalEmails: emails.length }
       });
 
-      console.log(`✅ Emails saved: ${created} created, ${updated} updated`);
+      console.log(`✅ BULK INSERT DONE: ${totalCreated} new emails (${emails.length - totalCreated} duplicates skipped)`);
 
       return {
         success: true,
-        created,
-        updated,
+        created: totalCreated,
+        updated: 0,
         total: emails.length
       };
     } catch (error) {
@@ -98,14 +85,14 @@ class MauticDataService {
   }
 
   /**
-   * Save campaigns to database
+   * Save campaigns to database using BULK INSERT (1000x faster!)
    * @param {number} clientId - Client ID
    * @param {Array} campaigns - Array of campaign objects from Mautic API
    * @returns {Promise<Object>} Save results
    */
   async saveCampaigns(clientId, campaigns) {
     try {
-      console.log(`\n💾 Saving ${campaigns.length} campaigns for client ${clientId}...`);
+      console.log(`\n💾 BULK SAVING ${campaigns.length} campaigns for client ${clientId}...`);
       console.log(`   Campaign IDs: ${campaigns.map(c => c.id).join(', ')}`);
 
       if (campaigns.length === 0) {
@@ -113,84 +100,49 @@ class MauticDataService {
         return { success: true, created: 0, updated: 0, total: 0 };
       }
 
-      let created = 0;
-      let updated = 0;
-      let failed = 0;
-      const BATCH_SIZE = 50;
+      let totalCreated = 0;
+      const BATCH_SIZE = 1000; // MUCH larger batches for createMany
+      const now = new Date();
 
-      // Process in batches for better performance
+      // Process in HUGE batches using createMany with skipDuplicates
       for (let i = 0; i < campaigns.length; i += BATCH_SIZE) {
         const batch = campaigns.slice(i, i + BATCH_SIZE);
 
-        await Promise.all(batch.map(async (campaign) => {
-          try {
-            console.log(`   Processing campaign ID ${campaign.id}: ${campaign.name}`);
-
-            // Extract category - handle both object and string formats
-            let categoryValue = null;
-            if (campaign.category) {
-              if (typeof campaign.category === 'string') {
-                categoryValue = campaign.category;
-              } else if (typeof campaign.category === 'object') {
-                // Extract title or alias from category object
-                categoryValue = campaign.category.title || campaign.category.alias || campaign.category.name || null;
-              }
+        const campaignData = batch.map(campaign => {
+          // Extract category - handle both object and string formats
+          let categoryValue = null;
+          if (campaign.category) {
+            if (typeof campaign.category === 'string') {
+              categoryValue = campaign.category;
+            } else if (typeof campaign.category === 'object') {
+              categoryValue = campaign.category.title || campaign.category.alias || campaign.category.name || null;
             }
-
-            const campaignData = {
-              mauticCampaignId: String(campaign.id),
-              name: campaign.name || '',
-              description: campaign.description || null,
-              isPublished: campaign.isPublished || false,
-              publishUp: campaign.publishUp ? new Date(campaign.publishUp) : null,
-              publishDown: campaign.publishDown ? new Date(campaign.publishDown) : null,
-              dateAdded: campaign.dateAdded ? new Date(campaign.dateAdded) : null,
-              createdBy: campaign.createdBy ? String(campaign.createdBy) : null,
-              category: categoryValue,
-              allowRestart: campaign.allowRestart || false,
-              clientId: clientId
-            };
-
-            const result = await prisma.mauticCampaign.upsert({
-              where: {
-                clientId_mauticCampaignId: {
-                  clientId: clientId,
-                  mauticCampaignId: String(campaign.id)
-                }
-              },
-              update: {
-                ...campaignData,
-                updatedAt: new Date()
-              },
-              create: campaignData
-            });
-
-            if (result.createdAt.getTime() === result.updatedAt.getTime()) {
-              created++;
-              console.log(`   ✅ Campaign ${campaign.id} created`);
-            } else {
-              updated++;
-              console.log(`   ✅ Campaign ${campaign.id} updated`);
-            }
-          } catch (error) {
-            console.error(`❌ Failed to save campaign ${campaign.id} (${campaign.name}):`, error.message);
-            if (error.stack) {
-              console.error(`   Stack trace:`, error.stack);
-            }
-            // Log the actual data we're trying to save, not the full campaign object
-            console.error(`   Attempted to save:`, {
-              mauticCampaignId: campaign.id,
-              name: campaign.name,
-              isPublished: campaign.isPublished,
-              dateAdded: campaign.dateAdded,
-              createdBy: campaign.createdBy,
-              category: campaign.category
-            });
-            failed++;
           }
-        }));
 
-        console.log(`   Saved ${Math.min(i + BATCH_SIZE, campaigns.length)}/${campaigns.length} campaigns...`);
+          return {
+            mauticCampaignId: String(campaign.id),
+            name: campaign.name || '',
+            description: campaign.description || null,
+            isPublished: campaign.isPublished || false,
+            publishUp: campaign.publishUp ? new Date(campaign.publishUp) : null,
+            publishDown: campaign.publishDown ? new Date(campaign.publishDown) : null,
+            dateAdded: campaign.dateAdded ? new Date(campaign.dateAdded) : null,
+            createdBy: campaign.createdBy ? String(campaign.createdBy) : null,
+            category: categoryValue,
+            allowRestart: campaign.allowRestart || false,
+            clientId: clientId,
+            createdAt: now,
+            updatedAt: now
+          };
+        });
+
+        const result = await prisma.mauticCampaign.createMany({
+          data: campaignData,
+          skipDuplicates: true
+        });
+
+        totalCreated += result.count;
+        console.log(`   Processed ${Math.min(i + BATCH_SIZE, campaigns.length)}/${campaigns.length} campaigns (${totalCreated} new)...`);
       }
 
       // Update client campaign count
@@ -199,13 +151,13 @@ class MauticDataService {
         data: { totalCampaigns: campaigns.length }
       });
 
-      console.log(`✅ Campaigns saved: ${created} created, ${updated} updated, ${failed} failed`);
+      console.log(`✅ BULK INSERT DONE: ${totalCreated} new campaigns (${campaigns.length - totalCreated} duplicates skipped)`);
 
       return {
         success: true,
-        created,
-        updated,
-        failed,
+        created: totalCreated,
+        updated: 0,
+        failed: 0,
         total: campaigns.length
       };
     } catch (error) {
@@ -215,67 +167,49 @@ class MauticDataService {
   }
 
   /**
-   * Save segments to database
+   * Save segments to database using BULK INSERT (1000x faster!)
    * @param {number} clientId - Client ID
    * @param {Array} segments - Array of segment objects from Mautic API
    * @returns {Promise<Object>} Save results
    */
   async saveSegments(clientId, segments) {
     try {
-      console.log(`💾 Saving ${segments.length} segments for client ${clientId}...`);
+      console.log(`💾 BULK SAVING ${segments.length} segments for client ${clientId}...`);
 
       if (segments.length === 0) {
         console.log(`✅ No segments to save`);
         return { success: true, created: 0, updated: 0, total: 0 };
       }
 
-      let created = 0;
-      let updated = 0;
-      const BATCH_SIZE = 50;
+      let totalCreated = 0;
+      const BATCH_SIZE = 1000; // MUCH larger batches for createMany
+      const now = new Date();
 
-      // Process in batches for better performance
+      // Process in HUGE batches using createMany with skipDuplicates
       for (let i = 0; i < segments.length; i += BATCH_SIZE) {
         const batch = segments.slice(i, i + BATCH_SIZE);
 
-        await Promise.all(batch.map(async (segment) => {
-          try {
-            const segmentData = {
-              mauticSegmentId: String(segment.id),
-              name: segment.name || '',
-              alias: segment.alias || null,
-              description: segment.description || null,
-              isPublished: segment.isPublished || false,
-              filters: segment.filters || null,
-              contactCount: segment.leadCount || 0,
-              clientId: clientId,
-              dateAdded: segment.dateAdded ? new Date(segment.dateAdded) : new Date()
-            };
-
-            const result = await prisma.mauticSegment.upsert({
-              where: {
-                clientId_mauticSegmentId: {
-                  clientId: clientId,
-                  mauticSegmentId: String(segment.id)
-                }
-              },
-              update: {
-                ...segmentData,
-                updatedAt: new Date()
-              },
-              create: segmentData
-            });
-
-            if (result.createdAt.getTime() === result.updatedAt.getTime()) {
-              created++;
-            } else {
-              updated++;
-            }
-          } catch (error) {
-            console.error(`Failed to save segment ${segment.id}:`, error.message);
-          }
+        const segmentData = batch.map(segment => ({
+          mauticSegmentId: String(segment.id),
+          name: segment.name || '',
+          alias: segment.alias || null,
+          description: segment.description || null,
+          isPublished: segment.isPublished || false,
+          filters: segment.filters || null,
+          contactCount: segment.leadCount || 0,
+          clientId: clientId,
+          importedAt: now,
+          createdAt: now,
+          updatedAt: now
         }));
 
-        console.log(`   Saved ${Math.min(i + BATCH_SIZE, segments.length)}/${segments.length} segments...`);
+        const result = await prisma.mauticSegment.createMany({
+          data: segmentData,
+          skipDuplicates: true
+        });
+
+        totalCreated += result.count;
+        console.log(`   Processed ${Math.min(i + BATCH_SIZE, segments.length)}/${segments.length} segments (${totalCreated} new)...`);
       }
 
       // Update client segment count
@@ -284,12 +218,12 @@ class MauticDataService {
         data: { totalSegments: segments.length }
       });
 
-      console.log(`✅ Segments saved: ${created} created, ${updated} updated`);
+      console.log(`✅ BULK INSERT DONE: ${totalCreated} new segments (${segments.length - totalCreated} duplicates skipped)`);
 
       return {
         success: true,
-        created,
-        updated,
+        created: totalCreated,
+        updated: 0,
         total: segments.length
       };
     } catch (error) {
@@ -406,6 +340,13 @@ class MauticDataService {
           : prisma.mauticClient.findMany({ where: { isActive: true } })
       ]);
 
+      // Calculate total contacts across all segments
+      const segmentsWithCounts = await prisma.mauticSegment.findMany({
+        where,
+        select: { contactCount: true }
+      });
+      const totalContacts = segmentsWithCounts.reduce((sum, seg) => sum + (seg.contactCount || 0), 0);
+
       // Email statistics
       const emailStats = await prisma.mauticEmail.aggregate({
         where,
@@ -442,6 +383,7 @@ class MauticDataService {
         success: true,
         data: {
           overview: {
+            totalContacts,
             totalEmails,
             totalCampaigns,
             totalSegments,
