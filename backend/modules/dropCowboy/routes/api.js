@@ -1,11 +1,11 @@
 import express from "express";
 import SftpService from "../services/sftpService.js";
 import DataService from "../services/dataService.js";
+import logger from "../../../utils/logger.js";
 import {
   notifySftpFetchCompleted,
   notifySftpFetchFailed,
 } from "../../../utils/emailHelper.js";
-import logger from "../../../utils/logger.js";
 
 const router = express.Router();
 const sftpService = new SftpService();
@@ -179,10 +179,21 @@ router.post("/fetch", async (req, res) => {
 });
 
 // Get sync status
-router.get("/sync-status", (req, res) => {
+router.get("/sync-status", async (req, res) => {
   const elapsedSeconds = isSyncInProgress
     ? Math.floor((Date.now() - currentSyncStartTime) / 1000)
     : 0;
+
+  // Get last successful sync from database
+  let lastSyncAt = null;
+  try {
+    const lastSync = await dataService.getSyncLogs(1);
+    if (lastSync && lastSync.length > 0 && lastSync[0].timestamp) {
+      lastSyncAt = lastSync[0].timestamp;
+    }
+  } catch (error) {
+    logger.error("Error fetching last sync time:", error);
+  }
 
   res.json({
     success: true,
@@ -190,6 +201,8 @@ router.get("/sync-status", (req, res) => {
       isSyncing: isSyncInProgress,
       elapsedTime: elapsedSeconds,
       startTime: currentSyncStartTime,
+      lastSyncAt: lastSyncAt,
+      lastUpdated: lastSyncAt, // Alias for frontend compatibility
     },
   });
 });
@@ -325,7 +338,7 @@ router.get("/campaigns", async (req, res) => {
       campaigns,
     });
   } catch (error) {
-    console.error("Error fetching campaigns:", error);
+    logger.error("Error fetching campaigns:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch campaigns",
@@ -355,7 +368,7 @@ router.post("/campaigns/:campaignId/link-client", async (req, res) => {
       data: result,
     });
   } catch (error) {
-    console.error("Error linking campaign to client:", error);
+    logger.error("Error linking campaign to client:", error);
     res.status(500).json({
       success: false,
       message: "Failed to link campaign to client",
@@ -377,7 +390,7 @@ router.post("/campaigns/:campaignId/unlink-client", async (req, res) => {
       data: result,
     });
   } catch (error) {
-    console.error("Error unlinking campaign from client:", error);
+    logger.error("Error unlinking campaign from client:", error);
     res.status(500).json({
       success: false,
       message: "Failed to unlink campaign from client",
@@ -469,6 +482,28 @@ router.post("/clear-and-resync", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to start clear and re-sync",
+      error: error.message,
+    });
+  }
+});
+
+// Rebuild campaigns from existing records (repairs missing campaign entries)
+router.post("/rebuild-campaigns", async (req, res) => {
+  try {
+    logger.info("Rebuilding campaigns from existing records...");
+    
+    const result = await dataService.rebuildCampaignsFromRecords();
+    
+    res.json({
+      success: true,
+      message: `Rebuilt ${result.campaignsCreated} campaigns, linked ${result.campaignsLinked} to clients`,
+      data: result,
+    });
+  } catch (error) {
+    logger.error("Error rebuilding campaigns:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to rebuild campaigns",
       error: error.message,
     });
   }

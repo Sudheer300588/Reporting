@@ -89,14 +89,102 @@ class MauticAPIService {
   }
 
   /**
-   * Fetch all email campaigns from Mautic
-   * @param {Object} client - Client configuration
-   * @returns {Promise<Array>} Array of email objects with stats
+   * Retry helper with exponential backoff
    */
-  async fetchEmails(client) {
+  async retryWithBackoff(fn, maxRetries = 3, initialDelay = 1000) {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        return await fn();
+      } catch (error) {
+        const isRetryable = 
+          error.code === 'ETIMEDOUT' ||
+          error.code === 'ECONNRESET' ||
+          error.message.includes('socket hang up') ||
+          error.response?.status === 429 ||
+          error.response?.status === 502 ||
+          error.response?.status === 503;
+        
+        if (!isRetryable || i === maxRetries - 1) {
+          throw error;
+        }
+        
+        const delay = initialDelay * Math.pow(2, i);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  /**
+   * Fetch individual email statistics (clicks, bounces, unsubscribes)
+   * @param {Object} client - Client configuration
+   * @param {number} emailId - Mautic email ID
+   * @returns {Promise<Object>} Email statistics
+   */
+  async fetchEmailStats(client, emailId) {
     try {
       const apiClient = this.createClient(client);
-      const emails = [];
+      const limit = 200000;
+
+      // Fetch with retry logic
+      const [emailStatsResp, pageHitsResp] = await this.retryWithBackoff(async () => {
+        return Promise.all([
+          apiClient.get('/stats/email_stats', {
+            params: {
+              start: 0,
+              limit: limit,
+              'where[0][col]': 'email_id',
+              'where[0][expr]': 'eq',
+              'where[0][val]': emailId
+            }
+          }),
+          apiClient.get('/stats/page_hits', {
+            params: {
+              start: 0,
+              limit: limit,
+              'where[0][col]': 'email_id',
+              'where[0][expr]': 'eq',
+              'where[0][val]': emailId
+            }
+          })
+        ]);
+      });
+
+      const emailStats = emailStatsResp.data.stats || [];
+      const clickStats = pageHitsResp.data.stats || [];
+
+      const totalSent = emailStats.length;
+      const totalOpened = emailStats.filter(s => s.is_read === 1 || s.is_read === true).length;
+      const totalBounced = emailStats.filter(s => s.is_failed === 1 || s.is_failed === true).length;
+      const totalUnsubscribed = emailStats.filter(s => s.is_unsubscribed === 1 || s.is_unsubscribed === true).length;
+      const totalClicks = clickStats.length;
+
+      return {
+        EmailID: emailId,
+        TotalSent: totalSent,
+        TotalOpened: totalOpened,
+        TotalBounced: totalBounced,
+        TotalUnsubscribed: totalUnsubscribed,
+        TotalClicks: totalClicks,
+        OpenRate: totalSent > 0 ? ((totalOpened / totalSent) * 100).toFixed(2) : '0.00',
+        ClickRate: totalSent > 0 ? ((totalClicks / totalSent) * 100).toFixed(2) : '0.00',
+        BounceRate: totalSent > 0 ? ((totalBounced / totalSent) * 100).toFixed(2) : '0.00'
+      };
+    } catch (error) {
+      // Silently skip failed emails - they'll be retried on next sync
+      return null;
+    }
+  }
+
+  /**
+   * Fetch all email campaigns from Mautic with enhanced stats
+   * @param {Object} client - Client configuration
+   * @param {boolean} fetchStats - Whether to fetch individual email stats (default: true)
+   * @returns {Promise<Array>} Array of email objects with stats
+   */
+  async fetchEmails(client, fetchStats = true) {
+    try {
+      const apiClient = this.createClient(client);
+      let emails = [];
       let start = 0;
       const limit = 1000000; // increase page size to request more items per page
       let hasMore = true;
@@ -141,6 +229,83 @@ class MauticAPIService {
       }
 
       console.log(`✅ Total emails fetched: ${emails.length}`);
+
+      // Fetch individual stats for each email if requested
+      if (fetchStats && emails.length > 0) {
+        console.log(`\n📊 Fetching individual stats for ${emails.length} emails...`);
+        
+        // Check cache first
+        const { default: dataService } = await import('./dataService.js');
+        const cachedStats = await dataService.getCachedEmailStats(client.id, emails.map(e => e.id));
+        
+        const emailsToFetch = emails.filter(email => !cachedStats[email.id]);
+        console.log(`💾 Found ${Object.keys(cachedStats).length} cached, need to fetch ${emailsToFetch.length} emails`);
+
+        if (emailsToFetch.length === 0) {
+          console.log(`✅ All stats already cached!`);
+        } else {
+          // Fetch stats in smaller batches with delays to avoid rate limits
+          const BATCH_SIZE = 5; // Reduced from 10 to 5 for stability
+          const BATCH_DELAY = 2000; // 2 second delay between batches
+          const fetchedStats = {};
+          
+          for (let i = 0; i < emailsToFetch.length; i += BATCH_SIZE) {
+            const batch = emailsToFetch.slice(i, i + BATCH_SIZE);
+            const batchNum = Math.floor(i/BATCH_SIZE) + 1;
+            const totalBatches = Math.ceil(emailsToFetch.length/BATCH_SIZE);
+            console.log(`   Processing batch ${batchNum}/${totalBatches} (${i + batch.length}/${emailsToFetch.length})...`);
+            
+            const batchResults = await Promise.all(
+              batch.map(email => this.fetchEmailStats(client, email.id))
+            );
+            
+            batch.forEach((email, idx) => {
+              if (batchResults[idx]) {
+                fetchedStats[email.id] = batchResults[idx];
+              }
+            });
+            
+            // Save progress after each batch (prevents data loss on crash)
+            if (Object.keys(fetchedStats).length > 0) {
+              const saved = await dataService.cacheEmailStats(client.id, fetchedStats);
+              if (saved > 0) {
+                console.log(`      💾 Saved ${saved} stats to cache`);
+              }
+              // Clear fetchedStats to avoid re-saving
+              Object.keys(fetchedStats).forEach(key => delete fetchedStats[key]);
+            }
+            
+            // Delay between batches to avoid overwhelming API
+            if (i + BATCH_SIZE < emailsToFetch.length) {
+              await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+            }
+          }
+          
+          console.log(`✅ Finished fetching email stats`);
+        }
+
+        // Reload ALL cached stats (including newly fetched ones)
+        const allCachedStats = await dataService.getCachedEmailStats(client.id, emails.map(e => e.id));
+        
+        // Merge all cached stats with email data
+        emails = emails.map(email => {
+          const stats = allCachedStats[email.id];
+          if (stats) {
+            return {
+              ...email,
+              sentCount: stats.TotalSent || email.sentCount || 0,
+              readCount: stats.TotalOpened || email.readCount || 0,
+              clickCount: stats.TotalClicks || email.clickCount || 0,
+              unsubscribeCount: stats.TotalUnsubscribed || email.unsubscribeCount || 0,
+              bounceCount: stats.TotalBounced || email.bounceCount || 0
+            };
+          }
+          return email;
+        });
+
+        console.log(`✅ Email stats integration complete`);
+      }
+
       return emails;
     } catch (error) {
       console.error('Error fetching emails:', error.message);
@@ -593,9 +758,9 @@ class MauticAPIService {
     try {
       console.log(`🔄 Starting full sync for ${client.name}...`);
 
-      // Fetch emails, campaigns, and segments in parallel (fast metadata)
+      // Fetch emails WITH STATS, campaigns, and segments in parallel
       const [emails, campaigns, segments] = await Promise.all([
-        this.fetchEmails(client),
+        this.fetchEmails(client, true), // TRUE = fetch individual stats
         this.fetchCampaigns(client),
         this.fetchSegments(client)
       ]);

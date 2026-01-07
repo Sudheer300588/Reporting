@@ -1,12 +1,15 @@
+// Standalone hasFullAccess function that accepts a user parameter
+export const hasFullAccess = (user) => {
+  if (user?.customRole?.fullAccess === true) return true
+  if (!user?.customRoleId && ['superadmin', 'admin'].includes(user?.role)) return true
+  return false
+}
+
 export const createPermissionHelpers = (user) => {
-  const hasFullAccess = () => {
-    if (user?.customRole?.fullAccess === true) return true
-    if (!user?.customRoleId && ['superadmin', 'admin'].includes(user?.role)) return true
-    return false
-  }
+  const hasFullAccessFn = () => hasFullAccess(user)
 
   const hasPermission = (module, action) => {
-    if (hasFullAccess()) return true
+    if (hasFullAccessFn()) return true
     const modulePerms = user?.customRole?.permissions?.[module]
     if (Array.isArray(modulePerms)) {
       if (modulePerms.includes(action)) return true
@@ -23,26 +26,26 @@ export const createPermissionHelpers = (user) => {
   }
 
   const isTeamManager = () => {
-    if (hasFullAccess()) return true
+    if (hasFullAccessFn()) return true
     if (user?.customRole?.isTeamManager === true) return true
     if (!user?.customRoleId && user?.role === 'manager') return true
     return false
   }
 
-  const canViewClients = () => hasFullAccess() || hasPermission('Clients', 'Read')
-  const canViewUsers = () => hasFullAccess() || hasPermission('Users', 'Read')
-  const canEditClients = () => hasFullAccess() || hasPermission('Clients', 'Update')
-  const canCreateClients = () => hasFullAccess() || hasPermission('Clients', 'Create')
-  const canDeleteClients = () => hasFullAccess() || hasPermission('Clients', 'Delete')
-  const canEditUsers = () => hasFullAccess() || hasPermission('Users', 'Update')
-  const canCreateUsers = () => hasFullAccess() || hasPermission('Users', 'Create')
-  const canDeleteUsers = () => hasFullAccess() || hasPermission('Users', 'Delete')
-  const canViewActivities = () => hasFullAccess() || hasPermission('Activities', 'Read')
-  const canViewSettings = () => hasFullAccess() || hasPermission('Settings', 'Read')
-  const canEditSettings = () => hasFullAccess() || hasPermission('Settings', 'Update')
+  const canViewClients = () => hasFullAccessFn() || hasPermission('Clients', 'Read')
+  const canViewUsers = () => hasFullAccessFn() || hasPermission('Users', 'Read')
+  const canEditClients = () => hasFullAccessFn() || hasPermission('Clients', 'Update')
+  const canCreateClients = () => hasFullAccessFn() || hasPermission('Clients', 'Create')
+  const canDeleteClients = () => hasFullAccessFn() || hasPermission('Clients', 'Delete')
+  const canEditUsers = () => hasFullAccessFn() || hasPermission('Users', 'Update')
+  const canCreateUsers = () => hasFullAccessFn() || hasPermission('Users', 'Create')
+  const canDeleteUsers = () => hasFullAccessFn() || hasPermission('Users', 'Delete')
+  const canViewActivities = () => hasFullAccessFn() || hasPermission('Activities', 'Read')
+  const canViewSettings = () => hasFullAccessFn() || hasPermission('Settings', 'Read')
+  const canEditSettings = () => hasFullAccessFn() || hasPermission('Settings', 'Update')
 
   return {
-    hasFullAccess,
+    hasFullAccess: hasFullAccessFn,
     hasPermission,
     isTeamManager,
     canViewClients,

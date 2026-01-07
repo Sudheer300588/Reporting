@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import { format, parseISO, isWithinInterval } from "date-fns";
 import prisma from "../../../prisma/client.js";
 import { Prisma } from "@prisma/client";
@@ -7,7 +8,7 @@ import { cli } from "winston/lib/winston/config/index.js";
 class DataService {
   async saveCampaignData(campaignData) {
     try {
-      console.log(`💾 Saving ${campaignData.length} campaigns to database...`);
+      logger.debug(`💾 Saving ${campaignData.length} campaigns to database...`);
       let totalRecordsInserted = 0;
 
       // Get already imported files
@@ -19,7 +20,7 @@ class DataService {
       for (const campaign of campaignData) {
         // If this file was already imported, skip
         if (importedFilenames.has(campaign.filename)) {
-          console.log(
+          logger.debug(
             `   ⏩ Skipping already imported file: ${campaign.filename}`
           );
           continue;
@@ -45,28 +46,47 @@ class DataService {
               where: { clientType: "mautic" },
             });
 
-            // Sort by name length (longest first) to avoid "JAE" matching before "JAE Automation"
+            // Sort by name length (longest first) to prioritize more specific matches
             const sortedClients = mauticClients.sort((a, b) => b.name.length - a.name.length);
 
-            // Find the first Mautic client that matches the campaign name prefix
+            const campaignNameLower = campaign.campaignName.toLowerCase();
+
+            // Strategy 1: Try exact prefix match (case-insensitive)
             let matchedClient = sortedClients.find((client) =>
-              campaign.campaignName.startsWith(client.name)
+              campaignNameLower.startsWith(client.name.toLowerCase())
             );
+
+            // Strategy 2: Try matching first word/token of client name
+            if (!matchedClient) {
+              matchedClient = sortedClients.find((client) => {
+                const firstWord = client.name.split(/\s+/)[0].toLowerCase();
+                return firstWord.length >= 3 && campaignNameLower.startsWith(firstWord);
+              });
+            }
+
+            // Strategy 3: Check if any significant part of client name appears in campaign name
+            if (!matchedClient) {
+              matchedClient = sortedClients.find((client) => {
+                const clientWords = client.name.toLowerCase().split(/\s+/);
+                const significantWord = clientWords.find(word => word.length >= 3);
+                return significantWord && campaignNameLower.includes(significantWord);
+              });
+            }
 
             if (matchedClient) {
               clientId = matchedClient.id;
-              console.log(
-                `ℹ️ Matched Mautic client: ${matchedClient.name} (ID: ${clientId})`
+              logger.debug(
+                `ℹ️ Matched Mautic client: ${matchedClient.name} (ID: ${clientId}) for campaign: ${campaign.campaignName}`
               );
             } else {
               // No Mautic client matched - set clientId to null (do NOT create dropcowboy client)
-              console.log(
+              logger.debug(
                 `⚠️  No Mautic client matched for campaign: ${campaign.campaignName}`
               );
             }
           }
         } catch (clientError) {
-          console.error(
+          logger.error(
             `   ⚠️  Error matching campaign to client: ${clientError.message}`
           );
         }
@@ -86,7 +106,7 @@ class DataService {
           },
         });
 
-        console.log(
+        logger.debug(
           `   ✓ Campaign: ${campaign.campaignName} (${campaign.recordCount} records)`
         );
 
@@ -103,7 +123,7 @@ class DataService {
           ),
         ];
 
-        console.log(
+        logger.debug(
           `     - Checking ${uniquePhoneNumbers.length} unique phones × ${uniqueDates.length} unique dates`
         );
 
@@ -151,7 +171,7 @@ class DataService {
           return !existingKeys.has(key);
         });
 
-        console.log(
+        logger.debug(
           `     - Found ${existingRecords.length} existing records, inserting ${newRecords.length} new records`
         );
 
@@ -205,7 +225,7 @@ class DataService {
             totalRecordsInserted += batch.length;
 
             if (newRecords.length > batchSize) {
-              console.log(
+              logger.debug(
                 `     - Inserted ${Math.min(
                   i + batchSize,
                   newRecords.length
@@ -223,13 +243,13 @@ class DataService {
         });
       }
 
-      console.log(`✅ Total records inserted: ${totalRecordsInserted}`);
+      logger.debug(`✅ Total records inserted: ${totalRecordsInserted}`);
 
       // Get aggregated metrics from database
       const metrics = await this.getMetrics();
       return metrics;
     } catch (error) {
-      console.error("Error saving campaign data:", error);
+      logger.error("Error saving campaign data:", error);
       throw error;
     }
   }
@@ -250,6 +270,28 @@ class DataService {
         whereClause.campaignId = {
           in: filters.campaignIds,
         };
+      } else {
+        // ALWAYS filter to only show campaigns linked to Mautic clients (unless specific campaignIds provided)
+        // Get all Mautic client IDs
+        const mauticClients = await prisma.client.findMany({
+          where: { clientType: "mautic" },
+          select: { id: true },
+        });
+
+        const mauticClientIds = mauticClients.map((c) => c.id);
+
+        // Get campaigns linked ONLY to Mautic clients
+        const mauticLinkedCampaigns = await prisma.dropCowboyCampaign.findMany({
+          where: {
+            clientId: { in: mauticClientIds },
+          },
+          select: { campaignId: true },
+        });
+
+        const mauticCampaignIds = mauticLinkedCampaigns.map((c) => c.campaignId);
+
+        // Filter campaigns to only those linked to Mautic clients
+        whereClause.campaignId = { in: mauticCampaignIds };
       }
 
       // Get campaigns with client information
@@ -424,8 +466,16 @@ class DataService {
       );
 
       // Calculate overall metrics
+      // Build record-level where clause that matches the campaign filter
+      const recordWhereClause = {};
+      
+      if (whereClause.campaignId) {
+        // If campaigns are filtered by IDs, filter records by those campaign IDs
+        recordWhereClause.campaignId = whereClause.campaignId;
+      }
+
       const overallAgg = await prisma.dropCowboyCampaignRecord.aggregate({
-        where: whereClause,
+        where: recordWhereClause,
         _count: true,
         _sum: {
           cost: true,
@@ -443,7 +493,7 @@ class DataService {
       // Get success/failure counts
       const successCount = await prisma.dropCowboyCampaignRecord.count({
         where: {
-          ...whereClause,
+          ...recordWhereClause,
           status: {
             in: [
               "sent",
@@ -459,7 +509,7 @@ class DataService {
 
       const failureCount = await prisma.dropCowboyCampaignRecord.count({
         where: {
-          ...whereClause,
+          ...recordWhereClause,
           status: {
             in: ["failed", "failure", "error", "FAILED", "FAILURE", "ERROR"],
           },
@@ -490,7 +540,7 @@ class DataService {
           lastSync?.syncCompletedAt?.toISOString() || new Date().toISOString(),
       };
     } catch (error) {
-      console.error("Error getting metrics:", error);
+      logger.error("Error getting metrics:", error);
       // Return empty data structure on error
       return {
         campaigns: [],
@@ -529,7 +579,7 @@ class DataService {
         },
       });
     } catch (error) {
-      console.error("Error logging sync:", error);
+      logger.error("Error logging sync:", error);
     }
   }
 
@@ -551,7 +601,7 @@ class DataService {
         error: log.errorMessage,
       }));
     } catch (error) {
-      console.error("Error fetching sync logs:", error);
+      logger.error("Error fetching sync logs:", error);
       return [];
     }
   }
@@ -581,7 +631,7 @@ class DataService {
         // Convert YYYY-MM-DD string to Date object (start of day in UTC)
         const startDate = new Date(filters.startDate + "T00:00:00.000Z");
         where.date = { gte: startDate };
-        console.log(
+        logger.debug(
           `🔍 Date filter - startDate: ${
             filters.startDate
           } → ${startDate.toISOString()}`
@@ -591,7 +641,7 @@ class DataService {
         // Convert YYYY-MM-DD string to Date object (end of day in UTC)
         const endDate = new Date(filters.endDate + "T23:59:59.999Z");
         where.date = { ...where.date, lte: endDate };
-        console.log(
+        logger.debug(
           `🔍 Date filter - endDate: ${
             filters.endDate
           } → ${endDate.toISOString()}`
@@ -682,11 +732,11 @@ class DataService {
 
       // Get total count
       const total = await prisma.dropCowboyCampaignRecord.count({ where });
-      console.log(
+      logger.debug(
         `📊 Filtered records count: ${total} records matching criteria`
       );
       if (filters.startDate || filters.endDate) {
-        console.log(
+        logger.debug(
           `📅 Date range applied: ${filters.startDate || "any"} to ${
             filters.endDate || "any"
           }`
@@ -803,7 +853,7 @@ class DataService {
         })),
       };
     } catch (error) {
-      console.error("Error getting paginated records:", error);
+      logger.error("Error getting paginated records:", error);
       return {
         total: 0,
         metrics: {
@@ -847,7 +897,7 @@ class DataService {
 
       return campaigns;
     } catch (error) {
-      console.error("Error fetching all campaigns:", error);
+      logger.error("Error fetching all campaigns:", error);
       throw error;
     }
   }
@@ -879,13 +929,13 @@ class DataService {
         },
       });
 
-      console.log(
+      logger.debug(
         `✅ Campaign "${updatedCampaign.campaignName}" linked to client "${client.name}"`
       );
 
       return updatedCampaign;
     } catch (error) {
-      console.error("Error linking campaign to client:", error);
+      logger.error("Error linking campaign to client:", error);
       throw error;
     }
   }
@@ -899,13 +949,118 @@ class DataService {
         },
       });
 
-      console.log(
+      logger.debug(
         `✅ Campaign "${updatedCampaign.campaignName}" unlinked from client`
       );
 
       return updatedCampaign;
     } catch (error) {
-      console.error("Error unlinking campaign from client:", error);
+      logger.error("Error unlinking campaign from client:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Rebuild missing campaigns from existing records and re-link to clients
+   * This repairs data when campaigns weren't created during sync
+   */
+  async rebuildCampaignsFromRecords() {
+    try {
+      logger.info("🔧 Rebuilding campaigns from existing records...");
+
+      // Get all distinct campaigns from records that don't have a campaign entry
+      const distinctCampaigns = await prisma.dropCowboyCampaignRecord.findMany({
+        distinct: ["campaignId"],
+        select: {
+          campaignId: true,
+          campaignName: true,
+        },
+      });
+
+      // Get Mautic clients for matching
+      const mauticClients = await prisma.client.findMany({
+        where: { clientType: "mautic" },
+      });
+      const sortedClients = mauticClients.sort((a, b) => b.name.length - a.name.length);
+
+      let created = 0;
+      let linked = 0;
+
+      for (const campaign of distinctCampaigns) {
+        // Check if campaign already exists
+        const existing = await prisma.dropCowboyCampaign.findUnique({
+          where: { campaignId: campaign.campaignId },
+        });
+
+        const campaignNameLower = campaign.campaignName.toLowerCase();
+
+        // Match client using same logic as saveCampaignData
+        let matchedClient = sortedClients.find((client) =>
+          campaignNameLower.startsWith(client.name.toLowerCase())
+        );
+
+        if (!matchedClient) {
+          matchedClient = sortedClients.find((client) => {
+            const firstWord = client.name.split(/\s+/)[0].toLowerCase();
+            return firstWord.length >= 3 && campaignNameLower.startsWith(firstWord);
+          });
+        }
+
+        if (!matchedClient) {
+          matchedClient = sortedClients.find((client) => {
+            const clientWords = client.name.toLowerCase().split(/\s+/);
+            const significantWord = clientWords.find(word => word.length >= 3);
+            return significantWord && campaignNameLower.includes(significantWord);
+          });
+        }
+
+        const clientId = matchedClient ? matchedClient.id : null;
+
+        // Get record count
+        const recordCount = await prisma.dropCowboyCampaignRecord.count({
+          where: { campaignId: campaign.campaignId },
+        });
+
+        if (!existing) {
+          // Create new campaign
+          await prisma.dropCowboyCampaign.create({
+            data: {
+              campaignId: campaign.campaignId,
+              campaignName: campaign.campaignName,
+              clientId: clientId,
+              recordCount: recordCount,
+            },
+          });
+          created++;
+          if (clientId) linked++;
+          logger.debug(`   ✅ Created campaign: ${campaign.campaignName} (${recordCount} records) → ${matchedClient?.name || "unlinked"}`);
+        } else if (!existing.clientId && clientId) {
+          // Update existing campaign with client link
+          await prisma.dropCowboyCampaign.update({
+            where: { campaignId: campaign.campaignId },
+            data: { clientId: clientId, recordCount: recordCount },
+          });
+          linked++;
+          logger.debug(`   🔗 Linked existing campaign: ${campaign.campaignName} → ${matchedClient.name}`);
+        } else {
+          // Just update record count
+          await prisma.dropCowboyCampaign.update({
+            where: { campaignId: campaign.campaignId },
+            data: { recordCount: recordCount },
+          });
+        }
+      }
+
+      logger.info(`✅ Rebuild complete: ${created} campaigns created, ${linked} campaigns linked to clients`);
+
+      return {
+        success: true,
+        campaignsCreated: created,
+        campaignsLinked: linked,
+        totalCampaigns: distinctCampaigns.length,
+      };
+    } catch (error) {
+      logger.error("❌ Error rebuilding campaigns:", error);
       throw error;
     }
   }
@@ -916,23 +1071,23 @@ class DataService {
    */
   async clearAllDropCowboyData() {
     try {
-      console.log("🗑️  Clearing all DropCowboy data from database...");
+      logger.debug("🗑️  Clearing all DropCowboy data from database...");
 
       // Delete in correct order due to foreign key constraints
       // 1. Delete campaign records first (child table)
       const deletedRecords = await prisma.dropCowboyCampaignRecord.deleteMany(
         {}
       );
-      console.log(`   ✅ Deleted ${deletedRecords.count} campaign records`);
+      logger.debug(`   ✅ Deleted ${deletedRecords.count} campaign records`);
 
       // 2. Delete campaigns
       const deletedCampaigns = await prisma.dropCowboyCampaign.deleteMany({});
-      console.log(`   ✅ Deleted ${deletedCampaigns.count} campaigns`);
+      logger.debug(`   ✅ Deleted ${deletedCampaigns.count} campaigns`);
 
       // 3. Delete imported files tracking
       const deletedImportedFiles = await prisma.importedFile.deleteMany({});
 
-      console.log("✅ All DropCowboy data cleared successfully");
+      logger.debug("✅ All DropCowboy data cleared successfully");
 
       return {
         success: true,
@@ -941,7 +1096,7 @@ class DataService {
         importedFilesDeleted: deletedImportedFiles.count,
       };
     } catch (error) {
-      console.error("❌ Error clearing DropCowboy data:", error);
+      logger.error("❌ Error clearing DropCowboy data:", error);
       throw error;
     }
   }

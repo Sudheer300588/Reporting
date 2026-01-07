@@ -41,10 +41,11 @@ const Clients = () => {
 
     const fetchClients = async () => {
         try {
-            // Fetch both Mautic and all clients (with assignments)
-            const [mauticRes, clientsRes] = await Promise.all([
+            // Fetch Mautic clients, all clients, and DropCowboy metrics
+            const [mauticRes, clientsRes, dropCowboyRes] = await Promise.all([
                 axios.get("/api/mautic/clients"),
                 axios.get("/api/clients"),
+                axios.get("/api/dropcowboy/metrics").catch(() => ({ data: { data: { campaigns: [] } } })),
             ]);
 
             const mauticClients = (mauticRes.data?.data || []).map((c) => ({
@@ -55,19 +56,17 @@ const Clients = () => {
                 services: ["mautic"],
             }));
 
+            // Extract clients from DropCowboy campaigns
+            const dropCowboyCampaigns = dropCowboyRes.data?.data?.campaigns || [];
+            const dropCowboyClientNames = new Set(
+                dropCowboyCampaigns
+                    .map(camp => camp.client)
+                    .filter(Boolean)
+            );
 
             const allClients = clientsRes.data || [];
 
-            // Extract dropcowboy clients (existing logic)
-            const dropCowboyClients = allClients
-                .filter((cl) => cl.clientType === "dropcowboy")
-                .map((c) => ({
-                    ...c,
-                    // `id` here is already the main Client id
-                    uniqueId: `dropcowboy-${c.id}`,
-                    services: ["dropcowboy"],
-                }));
-
+            // Build assignment maps for later lookup
             const assignmentsByName = new Map();
             const assignmentsByClientId = new Map();
 
@@ -92,8 +91,13 @@ const Clients = () => {
                 }
             }
 
-            // Attach assignments to Mautic clients if found
+            // Attach assignments to Mautic clients and add dropcowboy service if they have campaigns
             mauticClients.forEach((client) => {
+                // Check if this client has DropCowboy campaigns
+                if (dropCowboyClientNames.has(client.name)) {
+                    client.services.push('dropcowboy');
+                }
+                
                 // Prefer assignments linked by main client id (more reliable), fallback to name matching
                 let assignments = null;
                 if (client.clientId) {
@@ -110,51 +114,8 @@ const Clients = () => {
                 }
             });
 
-            // Merge both services by normalized name
-            const mergedMap = new Map();
-
-            [...mauticClients, ...dropCowboyClients].forEach((client) => {
-                const key = client.name.trim().toLowerCase();
-
-                if (!mergedMap.has(key)) {
-                    mergedMap.set(key, {
-                        ...client,
-                    });
-                } else {
-                    const existing = mergedMap.get(key);
-
-                    // Combine unique assignments by userId
-                    const indexAssignments = (arr) =>
-                        (arr || []).map((a) => [a.userId || a.user?.id || a.id, a]);
-
-                    const combinedAssignmentsMap = new Map([
-                        ...indexAssignments(existing.assignments),
-                        ...indexAssignments(client.assignments),
-                    ]);
-
-                    const merged = {
-                        ...existing,
-                        id: existing.id || client.id,
-                        mauticApiId: existing.mauticApiId || client.mauticApiId || null,
-                        mauticUrl: existing.mauticUrl || client.mauticUrl,
-                        isActive: existing.isActive ?? client.isActive ?? true,
-                        services: Array.from(
-                            new Set([...(existing.services || []), ...(client.services || [])])
-                        ),
-                        assignments: Array.from(combinedAssignmentsMap.values()),
-                        hasMautic:
-                            (existing.services || []).includes("mautic") ||
-                            (client.services || []).includes("mautic"),
-                        hasDropcowboy:
-                            (existing.services || []).includes("dropcowboy") ||
-                            (client.services || []).includes("dropcowboy"),
-                    };
-                    mergedMap.set(key, merged);
-                }
-            });
-
-            // 5️⃣ Final combined list
-            let combinedClients = Array.from(mergedMap.values());
+            // Use only Mautic clients (which now include dropcowboy service when applicable)
+            let combinedClients = mauticClients;
 
             // For non-full-access users, restrict visibility based on permissions
             if (!hasFullAccess()) {
@@ -171,10 +132,8 @@ const Clients = () => {
                 }
             }
 
-            // Only display clients that have Mautic/automation service
-            combinedClients = combinedClients.filter(c =>
-                (c.services || []).includes('mautic') || c.hasMautic
-            );
+            // Display clients that have Mautic or DropCowboy service (all clients have at least mautic)
+            // No need to filter anymore since we only fetch Mautic clients and add dropcowboy service when applicable
 
             setClients(combinedClients);
         } catch (error) {

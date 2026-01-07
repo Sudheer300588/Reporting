@@ -29,7 +29,7 @@ const CRITICAL_ACTIONS = [
  */
 const logActivity = async (user, action, entityType, entityId, description, metadata = {}, req = null) => {
   try {
-    console.log('📝 logActivity called:', { action, entityType, entityId, userId: user.id || user });
+    logger.debug('📝 logActivity called:', { action, entityType, entityId, userId: user.id || user });
     
     const logData = {
       userId: user.id || user,
@@ -40,16 +40,16 @@ const logActivity = async (user, action, entityType, entityId, description, meta
     };
 
     const activity = await prisma.activityLog.create({ data: logData });
-    console.log('✅ Activity logged to database, ID:', activity.id);
+    logger.debug('✅ Activity logged to database, ID:', activity.id);
 
     // Notify all superadmins about the activity
-    console.log('🔔 Calling notifySuperadminsOfActivity...');
+    logger.debug('🔔 Calling notifySuperadminsOfActivity...');
     await notifySuperadminsOfActivity(activity, user, description);
-    console.log('✅ notifySuperadminsOfActivity completed');
+    logger.debug('✅ notifySuperadminsOfActivity completed');
 
   } catch (error) {
     // Log error but don't throw to avoid breaking main functionality
-    console.error('❌ Activity logging failed:', error.message);
+    logger.error('❌ Activity logging failed:', error.message);
     logger.error('Activity logging failed', {
       error: error.message,
       userId: user.id || user,
@@ -65,7 +65,7 @@ const logActivity = async (user, action, entityType, entityId, description, meta
  */
 async function notifySuperadminsOfActivity(activity, user, description) {
   try {
-    console.log('👥 notifySuperadminsOfActivity called for action:', activity.action);
+    logger.debug('👥 notifySuperadminsOfActivity called for action:', activity.action);
     
     // Get all active superadmins
     const superadmins = await prisma.user.findMany({
@@ -76,10 +76,10 @@ async function notifySuperadminsOfActivity(activity, user, description) {
       select: { id: true, name: true, email: true }
     });
 
-    console.log('👥 Found', superadmins.length, 'active superadmins');
+    logger.debug('👥 Found', superadmins.length, 'active superadmins');
     
     if (superadmins.length === 0) {
-      console.log('⚠️  No superadmins found, skipping notifications');
+      logger.debug('⚠️  No superadmins found, skipping notifications');
       return;
     }
 
@@ -98,7 +98,7 @@ async function notifySuperadminsOfActivity(activity, user, description) {
     `.then(result => result.length > 0).catch(() => false);
 
     if (hasNotificationTable) {
-      console.log('✅ Notification table exists, creating in-app notifications');
+      logger.debug('✅ Notification table exists, creating in-app notifications');
       
       // Create notification title based on action
       const notificationTitle = getNotificationTitle(activity.action, activity.entityType);
@@ -125,9 +125,9 @@ async function notifySuperadminsOfActivity(activity, user, description) {
         data: notifications
       });
 
-      console.log('✅ In-app notifications created for superadmins');
+      logger.debug('✅ In-app notifications created for superadmins');
     } else {
-      console.log('⚠️  Notification table not found, skipping in-app notifications (will still send emails)');
+      logger.debug('⚠️  Notification table not found, skipping in-app notifications (will still send emails)');
       logger.debug('Notification table not found, skipping in-app notifications');
     }
     
@@ -137,13 +137,13 @@ async function notifySuperadminsOfActivity(activity, user, description) {
     });
 
     // Send email notifications to all superadmins
-    console.log('📧 About to call sendActivityEmailToSuperadmins...');
+    logger.debug('📧 About to call sendActivityEmailToSuperadmins...');
     await sendActivityEmailToSuperadmins(superadmins, activity, actorUser, description);
-    console.log('✅ sendActivityEmailToSuperadmins returned');
+    logger.debug('✅ sendActivityEmailToSuperadmins returned');
 
   } catch (error) {
     // Don't throw - notification failure shouldn't break activity logging
-    console.error('❌ Error in notifySuperadminsOfActivity:', error.message);
+    logger.error('❌ Error in notifySuperadminsOfActivity:', error.message);
     logger.error('Failed to notify superadmins of activity', {
       error: error.message,
       activityId: activity.id
@@ -179,22 +179,22 @@ function getNotificationTitle(action, entityType) {
  */
 async function sendActivityEmailToSuperadmins(superadmins, activity, actorUser, description) {
   try {
-    console.log('🔔 sendActivityEmailToSuperadmins called for activity:', activity.action);
-    console.log('👥 Superadmins to notify:', superadmins.length);
+    logger.debug('🔔 sendActivityEmailToSuperadmins called for activity:', activity.action);
+    logger.debug('👥 Superadmins to notify:', superadmins.length);
     
     // Check if activity email notifications are enabled
-    console.log('🔍 Fetching settings from database...');
+    logger.debug('🔍 Fetching settings from database...');
     const settings = await prisma.settings.findFirst() || {};
-    console.log('⚙️  Settings fetched:', settings);
-    console.log('⚙️  Activity email setting (notifActivityEmails):', settings.notifActivityEmails);
+    logger.debug('⚙️  Settings fetched:', settings);
+    logger.debug('⚙️  Activity email setting (notifActivityEmails):', settings.notifActivityEmails);
     
     if (!settings.notifActivityEmails) {
-      console.log('❌ Activity email notifications are disabled');
+      logger.debug('❌ Activity email notifications are disabled');
       logger.debug('Activity email notifications are disabled');
       return;
     }
 
-    console.log('✅ Activity email notifications are enabled, preparing to send...');
+    logger.debug('✅ Activity email notifications are enabled, preparing to send...');
 
     // Prepare email variables
     const actionLabel = getNotificationTitle(activity.action, activity.entityType);
@@ -217,15 +217,15 @@ async function sendActivityEmailToSuperadmins(superadmins, activity, actorUser, 
     };
 
     // Send email to each superadmin
-    console.log('📧 Sending activity emails to', superadmins.length, 'superadmins...');
+    logger.debug('📧 Sending activity emails to', superadmins.length, 'superadmins...');
     const emailPromises = superadmins.map(admin => {
-      console.log('  → Sending to:', admin.email);
+      logger.debug('  → Sending to:', admin.email);
       return emailNotificationService.sendActionEmail('activity_logged', {
         recipientEmail: admin.email,
         recipientName: admin.name,
         variables
       }).catch(err => {
-        console.error('❌ Failed to send activity email to', admin.email, ':', err.message);
+        logger.error('❌ Failed to send activity email to', admin.email, ':', err.message);
         logger.error('Failed to send activity email to superadmin', {
           superadminEmail: admin.email,
           error: err.message
@@ -235,7 +235,7 @@ async function sendActivityEmailToSuperadmins(superadmins, activity, actorUser, 
 
     await Promise.allSettled(emailPromises);
     
-    console.log('✅ Activity emails processing completed');
+    logger.debug('✅ Activity emails processing completed');
     logger.debug('Activity emails sent to superadmins', {
       action: activity.action,
       emailsSent: superadmins.length
@@ -243,8 +243,8 @@ async function sendActivityEmailToSuperadmins(superadmins, activity, actorUser, 
 
   } catch (error) {
     // Don't throw - email failure shouldn't break activity logging
-    console.error('❌ Failed to send activity emails to superadmins:', error);
-    console.error('Error stack:', error.stack);
+    logger.error('❌ Failed to send activity emails to superadmins:', error);
+    logger.error('Error stack:', error.stack);
     logger.error('Failed to send activity emails to superadmins', {
       error: error.message,
       activityId: activity.id,

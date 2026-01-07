@@ -369,14 +369,15 @@ model MauticClient {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  clientId      Int?                 @unique
-  client        Client?              @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId      Int?                       @unique
+  client        Client?                    @relation(fields: [clientId], references: [id], onDelete: SetNull)
   emails        MauticEmail[]
   segments      MauticSegment[]
   campaigns     MauticCampaign[]
   syncLogs      MauticSyncLog[]
   fetchedMonths MauticFetchedMonth[]
-  emailReports  MauticEmailReport[]  @relation("ClientEmailReports")
+  emailReports  MauticEmailReport[]        @relation("ClientEmailReports")
+  emailStatsCache MauticEmailStatsCache[]  @relation("ClientEmailStatsCache")
 
   @@unique([name])
   @@index([isActive])
@@ -436,6 +437,29 @@ model MauticEmailReport {
   @@index([eId])
   @@index([clientId])
   @@index([dateSent])
+}
+
+model MauticEmailStatsCache {
+  id                 Int      @id @default(autoincrement())
+  clientId           Int
+  mauticEmailId      Int
+  totalSent          Int      @default(0)
+  totalOpened        Int      @default(0)
+  totalBounced       Int      @default(0)
+  totalUnsubscribed  Int      @default(0)
+  totalClicks        Int      @default(0)
+  openRate           Decimal  @default(0) @db.Decimal(5, 2)
+  clickRate          Decimal  @default(0) @db.Decimal(5, 2)
+  bounceRate         Decimal  @default(0) @db.Decimal(5, 2)
+  cachedAt           DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  client MauticClient @relation("ClientEmailStatsCache", fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, mauticEmailId])
+  @@index([clientId])
+  @@index([mauticEmailId])
 }
 
 model MauticSegment {

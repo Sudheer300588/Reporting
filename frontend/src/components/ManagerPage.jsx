@@ -4,20 +4,22 @@ import { useAuth } from "../contexts/AuthContext.jsx";
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Users, FolderOpen } from "lucide-react";
 import useViewLevel from "../zustand/useViewLevel.js";
+import { usePermissions } from "../utils/permissions.js";
 
 export default function ManagerPage({ onBack, onEmployees, onClients }) {
   const [manager, setManager] = useState(null);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { hasFullAccess, isTeamManager } = usePermissions(user);
 
   const { employeesStates } = useViewLevel();
   const { managerId } = employeesStates;
 
   useEffect(() => {
     if (!user) return;
-    // Role guard
-    if (!['manager', 'superadmin'].includes(user.role)) {
+    // Permission guard
+    if (!hasFullAccess() && !isTeamManager()) {
       navigate('/dashboard');
       return;
     }
@@ -44,7 +46,7 @@ export default function ManagerPage({ onBack, onEmployees, onClients }) {
         className="flex items-center text-primary-600 hover:text-primary-700 mb-4"
       >
         <ArrowLeft size={20} className="mr-2" />
-        {user.role === 'superadmin' ? 'Back to Managers' : 'Back to Dashboard'}
+        {hasFullAccess() ? 'Back to Managers' : 'Back to Dashboard'}
       </button>
 
       <div className="flex items-center gap-3 mb-2">

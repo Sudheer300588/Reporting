@@ -257,8 +257,19 @@ router.post("/chat", authenticate, async (req, res) => {
     }
 
     const settings = await prisma.aISettings.findFirst();
+    
+    let apiKey = null;
+    let provider = settings?.llmProvider || 'openai';
+    
+    if (settings?.llmApiKey) {
+      apiKey = encryptionService.decrypt(settings.llmApiKey);
+    } else if (provider === 'openai' && process.env.OPENAI_API_KEY) {
+      apiKey = process.env.OPENAI_API_KEY;
+    } else if (provider === 'anthropic' && process.env.ANTHROPIC_API_KEY) {
+      apiKey = process.env.ANTHROPIC_API_KEY;
+    }
 
-    if (!settings?.isEnabled || !settings?.llmApiKey) {
+    if (!settings?.isEnabled || !apiKey) {
       return res.status(400).json({
         success: false,
         message: "AI assistant is not configured. Please contact your administrator.",
@@ -277,8 +288,7 @@ router.post("/chat", authenticate, async (req, res) => {
       })
       .join("\n");
 
-    const systemPrompt = buildSystemPrompt(settings.assistantName, clientsContext);
-    const apiKey = encryptionService.decrypt(settings.llmApiKey);
+    const systemPrompt = buildSystemPrompt(settings?.assistantName || 'Bevy', clientsContext);
 
     const messages = [
       { role: "system", content: systemPrompt },
@@ -287,16 +297,18 @@ router.post("/chat", authenticate, async (req, res) => {
     ];
 
     let response;
-    if (settings.llmProvider === "anthropic") {
-      response = await callAnthropic(apiKey, settings.llmModel, messages);
+    const model = settings?.llmModel || (provider === 'openai' ? 'gpt-4o-mini' : 'claude-3-5-sonnet-20241022');
+    
+    if (provider === "anthropic") {
+      response = await callAnthropic(apiKey, model, messages);
     } else {
-      response = await callOpenAI(apiKey, settings.llmModel, messages);
+      response = await callOpenAI(apiKey, model, messages);
     }
 
     res.json({
       success: true,
       response,
-      assistantName: settings.assistantName,
+      assistantName: settings?.assistantName || 'Bevy',
     });
   } catch (error) {
     logger.error("AI chat error", { error: error.message, stack: error.stack });
@@ -354,11 +366,13 @@ router.post("/speak", authenticate, async (req, res) => {
 router.get("/status", authenticate, async (req, res) => {
   try {
     const settings = await prisma.aISettings.findFirst();
+    const hasEnvKey = !!(process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY);
+    const hasDbKey = !!(settings?.llmApiKey);
 
     res.json({
       success: true,
       enabled: settings?.isEnabled ?? false,
-      configured: !!(settings?.llmApiKey),
+      configured: hasDbKey || hasEnvKey,
       voiceEnabled: !!(settings?.voiceApiKey && settings?.voiceId),
       assistantName: settings?.assistantName || "Bevy",
     });

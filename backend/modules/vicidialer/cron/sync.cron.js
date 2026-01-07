@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 // backend/cron/sync.cron.js
 import cron from "node-cron";
 import { callVicidial } from "../services/vicidial.service.js";
@@ -38,7 +39,7 @@ async function fetchCampaignName(cid) {
 }
 
 async function syncAllAgents() {
-    console.log("🔄 Running full agents → campaigns sync...");
+    logger.debug("🔄 Running full agents → campaigns sync...");
 
     try {
         // 1) fetch all agents
@@ -139,7 +140,7 @@ async function syncAllAgents() {
                 }
 
             } catch (agentErr) {
-                console.error(`⚠️ Error syncing agent ${agent.user}:`, agentErr.message);
+                logger.error(`⚠️ Error syncing agent ${agent.user}:`, agentErr.message);
             }
         }
 
@@ -148,30 +149,30 @@ async function syncAllAgents() {
         fs.writeFileSync(consolidatedPath, JSON.stringify(allResults, null, 2));
 
         const totalCampaigns = Object.values(allResults).reduce((sum, r) => sum + (r.count_campaigns||0), 0);
-        console.log(`✅ Synced ${processed}/${agents.length} agents. Total campaigns: ${totalCampaigns}`);
+        logger.debug(`✅ Synced ${processed}/${agents.length} agents. Total campaigns: ${totalCampaigns}`);
 
         // 5) Sync to database
-        console.log('📦 Syncing to database...');
+        logger.debug('📦 Syncing to database...');
         const dbSync = await syncAgentsCampaignsToDb(allResults);
         
         if (dbSync.success) {
-            console.log(`✅ Database sync complete:`, dbSync.stats);
+            logger.debug(`✅ Database sync complete:`, dbSync.stats);
         } else {
-            console.error('❌ Database sync failed:', dbSync.error);
+            logger.error('❌ Database sync failed:', dbSync.error);
         }
 
     } catch (err) {
-        console.error("❌ Error in syncAllAgents:", err);
+        logger.error("❌ Error in syncAllAgents:", err);
     }
 }
 
 cron.schedule(
     "0 0,15 * * *",
     async () => {
-        console.log("⏰ Cron triggered: 12:00 AM or 3:00 PM (LA Time)");
+        logger.debug("⏰ Cron triggered: 12:00 AM or 3:00 PM (LA Time)");
         await syncAllAgents();
     },
     { timezone: "America/Los_Angeles" }
 );
 
-console.log("✅ Cron scheduled: everyday at 12 AM & 3 PM (LA timezone)");
+logger.debug("✅ Cron scheduled: everyday at 12 AM & 3 PM (LA timezone)");

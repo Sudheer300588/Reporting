@@ -8,6 +8,7 @@ import ManagerClients from "./ManagerClients";
 import EmployeeClients from "./EmployeeClients";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import useViewLevel from "../zustand/useViewLevel.js";
+import { usePermissions } from "../utils/permissions.js";
 
 export default function HierarchyPage() {
   // const [view, setEmpView] = useState("list"); // list, manager, managerEmployees, managerClients, employeeClients
@@ -20,21 +21,22 @@ export default function HierarchyPage() {
 
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { hasFullAccess, isTeamManager, canViewUsers } = usePermissions(user);
   const { employeesStates, setEmpView, setCurrentRoute, setActiveManagerId, setActiveEmployeeId } = useViewLevel();
   const { view, currentRoute } = employeesStates;
 
   useEffect(() => {
     if (view === "list") {
-      // If logged-in user is an employee/telecaller, show their clients only
-      if (user && (user.role === 'employee' || user.role === 'telecaller')) {
+      // If logged-in user is NOT a team manager and doesn't have full access, show their clients only
+      if (user && !hasFullAccess() && !isTeamManager()) {
         setActiveEmployeeId(user.id);
         setEmpView('employeeClients');
         setLoading(false);
         return;
       }
 
-      // If logged-in user is a manager, show their own manager page (hierarchy)
-      if (user && user.role === 'manager') {
+      // If logged-in user is a team manager (but not full access), show their own manager page
+      if (user && isTeamManager() && !hasFullAccess()) {
         setActiveManagerId(user.id);
         setEmpView('manager');
         setLoading(false);
@@ -198,7 +200,7 @@ export default function HierarchyPage() {
       {view === "manager" && (
         <ManagerPage
           // managerId={activeManagerId}
-          onBack={user.role === 'superadmin' ? () => setEmpView("list") : goHome}
+          onBack={hasFullAccess() ? () => setEmpView("list") : goHome}
           onEmployees={() => setEmpView("managerEmployees")}
           onClients={() => setEmpView("managerClients")}
         />

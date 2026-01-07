@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import { callVicidial } from "../services/vicidial.service.js";
 import { fixDateFormat } from "../utils/date.js";
 import { parsePipeData } from "../utils/formatter.js";
@@ -116,7 +117,7 @@ export const getSingleAgentStats = async (req, res) => {
         return res.json({ success: true, data: formatted });
 
     } catch (err) {
-        console.error("ERROR in getSingleAgentStats:", err);
+        logger.error("ERROR in getSingleAgentStats:", err);
         // If no records found, return empty data instead of error
         if (err.message && err.message.includes('NO RECORDS FOUND')) {
             return res.json({ success: true, data: [], message: 'No stats found for the selected date range' });
@@ -161,7 +162,7 @@ export const getAllAgentStats = async (req, res) => {
         return res.json({ success: true, data: formatted });
 
     } catch (err) {
-        console.error("ERROR in getAllAgentStats:", err);
+        logger.error("ERROR in getAllAgentStats:", err);
         return res.status(500).json({ success: false, error: err.toString() });
     }
 };
@@ -365,7 +366,7 @@ export const getAgentCampaigns = async (req, res) => {
         return res.json({ success: true, data: formatted });
 
     } catch (err) {
-        console.error("ERROR in getAgentCampaigns:", err);
+        logger.error("ERROR in getAgentCampaigns:", err);
         res.status(500).json({ success: false, error: err.toString() });
     }
 };
@@ -422,7 +423,7 @@ export const getCampaignsDetailsBatch = async (req, res) => {
         return res.json({ success: true, data: result });
 
     } catch (err) {
-        console.error('ERROR in getCampaignsDetailsBatch:', err);
+        logger.error('ERROR in getCampaignsDetailsBatch:', err);
         return res.status(500).json({ success: false, error: err.toString() });
     }
 };
@@ -437,7 +438,7 @@ export const syncAllAgentsCampaigns = async (req, res) => {
         // Send initial response to prevent timeout
         res.setTimeout(0); // Disable timeout for this long-running operation
 
-        console.log('🔄 Starting sync all agents campaigns...');
+        logger.debug('🔄 Starting sync all agents campaigns...');
 
         // Get all agents first
         const now = new Date();
@@ -465,20 +466,20 @@ export const syncAllAgentsCampaigns = async (req, res) => {
 
         let raw, agentsList, agents;
         try {
-            console.log('📞 Calling VICIdial agent_stats_export...');
+            logger.debug('📞 Calling VICIdial agent_stats_export...');
             raw = await callVicidial(payload);
             agentsList = parsePipeData(raw);
             agents = Array.isArray(agentsList) ? agentsList : [agentsList];
-            console.log(`✅ Received ${agents.length} agents from VICIdial`);
+            logger.debug(`✅ Received ${agents.length} agents from VICIdial`);
         } catch (viciErr) {
-            console.error('❌ Failed to fetch agents from VICIdial:', viciErr.message);
+            logger.error('❌ Failed to fetch agents from VICIdial:', viciErr.message);
             return res.status(500).json({ 
                 success: false, 
                 error: `VICIdial API error: ${viciErr.message}` 
             });
         }
 
-        console.log(`Syncing campaigns for ${agents.length} agents...`);
+        logger.debug(`Syncing campaigns for ${agents.length} agents...`);
 
         // Load local campaign map once for all agents (support multiple possible key names)
         const campaignMap = {};
@@ -508,16 +509,16 @@ export const syncAllAgentsCampaigns = async (req, res) => {
                     // if file is an object map
                     Object.keys(mJson).forEach(k => { campaignMap[k] = mJson[k]; });
                 }
-                console.log(`📋 Loaded ${Object.keys(campaignMap).length} campaign names from local map: ${mapPath}`);
+                logger.debug(`📋 Loaded ${Object.keys(campaignMap).length} campaign names from local map: ${mapPath}`);
                 campaignMapLoaded = true;
                 break;
             } catch (e) {
-                console.warn(`⚠️ Could not load campaign map from ${mapPath}:`, e.message);
+                logger.warn(`⚠️ Could not load campaign map from ${mapPath}:`, e.message);
             }
         }
 
         if (!campaignMapLoaded) {
-            console.log('⚠️ No local campaign map found - will fetch names from VICIdial API');
+            logger.debug('⚠️ No local campaign map found - will fetch names from VICIdial API');
         }
 
         // Pre-populate campaignNameCache with local map entries (if not already cached)
@@ -530,7 +531,7 @@ export const syncAllAgentsCampaigns = async (req, res) => {
         // Fetch ALL campaign names from VICIdial in one call to populate cache
         if (!campaignMapLoaded) {
             try {
-                console.log('📞 Fetching all campaign names from VICIdial campaigns_list...');
+                logger.debug('📞 Fetching all campaign names from VICIdial campaigns_list...');
                 const campRaw = await callVicidial({
                     function: 'campaigns_list',
                     source: 'node-api',
@@ -548,18 +549,18 @@ export const syncAllAgentsCampaigns = async (req, res) => {
                             fetchedCount++;
                         }
                     });
-                    console.log(`✅ Fetched ${fetchedCount} campaign names from VICIdial`);
+                    logger.debug(`✅ Fetched ${fetchedCount} campaign names from VICIdial`);
                 } else if (parsed && typeof parsed === 'object') {
                     const id = parsed.campaign_id || parsed.Outbound;
                     const name = parsed.campaign_name || parsed['Outbound Process'] || parsed['Campaign Name'];
                     if (id && name) {
                         campaignNameCache.set(String(id).trim(), String(name).trim());
-                        console.log(`✅ Fetched 1 campaign name from VICIdial`);
+                        logger.debug(`✅ Fetched 1 campaign name from VICIdial`);
                     }
                 }
             } catch (bulkErr) {
-                console.warn('⚠️ Could not fetch bulk campaign names from VICIdial:', bulkErr.message);
-                console.log('   Will use campaign IDs as fallback names');
+                logger.warn('⚠️ Could not fetch bulk campaign names from VICIdial:', bulkErr.message);
+                logger.debug('   Will use campaign IDs as fallback names');
             }
         }
 
@@ -633,7 +634,7 @@ export const syncAllAgentsCampaigns = async (req, res) => {
                 }
 
             } catch (err) {
-                console.error(`Error syncing campaigns for agent ${agent_user}:`, err.message);
+                logger.error(`Error syncing campaigns for agent ${agent_user}:`, err.message);
                 results[agent_user] = { agent_user, campaigns: [], count_campaigns: 0, error: err.message };
             }
         }
@@ -644,16 +645,16 @@ export const syncAllAgentsCampaigns = async (req, res) => {
 
         const totalCampaigns = Object.values(results).reduce((sum, r) => sum + (r.count_campaigns || 0), 0);
 
-        console.log(`✓ Synced campaigns for ${processed}/${agents.length} agents. Total campaigns: ${totalCampaigns}`);
+        logger.debug(`✓ Synced campaigns for ${processed}/${agents.length} agents. Total campaigns: ${totalCampaigns}`);
 
         // Sync to database
-        console.log('📦 Syncing to database...');
+        logger.debug('📦 Syncing to database...');
         const dbSync = await syncAgentsCampaignsToDb(results);
         
         if (dbSync.success) {
-            console.log(`✅ Database sync complete:`, dbSync.stats);
+            logger.debug(`✅ Database sync complete:`, dbSync.stats);
         } else {
-            console.error('❌ Database sync failed:', dbSync.error);
+            logger.error('❌ Database sync failed:', dbSync.error);
         }
 
         return res.json({
@@ -668,7 +669,7 @@ export const syncAllAgentsCampaigns = async (req, res) => {
         });
 
     } catch (err) {
-        console.error("ERROR in syncAllAgentsCampaigns:", err);
+        logger.error("ERROR in syncAllAgentsCampaigns:", err);
         return res.status(500).json({ success: false, error: err.toString() });
     }
 };
@@ -706,7 +707,7 @@ export const getAgentsCampaignCounts = async (req, res) => {
         }
         return res.json({ success: true, data: map, source: 'individual_files' });
     } catch (err) {
-        console.error('ERROR in getAgentsCampaignCounts:', err);
+        logger.error('ERROR in getAgentsCampaignCounts:', err);
         return res.status(500).json({ success: false, error: err.toString() });
     }
 };
@@ -733,21 +734,21 @@ export const getAgentsPaginated = async (req, res) => {
                 ? formatted.map(a => String(a.user || a.agent_user || a.agent || a.User || a.USER || '').trim()).filter(Boolean)
                 : (formatted?.user || formatted?.User ? [String(formatted.user || formatted.User).trim()] : []);
             
-            console.log('📊 Active agents in getAgentsPaginated:', activeAgents.length, activeAgents);
+            logger.debug('📊 Active agents in getAgentsPaginated:', activeAgents.length, activeAgents);
         } catch (err) {
             // Silently handle "no logged in agents" - just means no one is active
             if (!err.message || !err.message.includes('NO LOGGED IN AGENTS')) {
-                console.warn('⚠️ Failed to fetch active agents:', err.message);
+                logger.warn('⚠️ Failed to fetch active agents:', err.message);
             }
         }
         
         const result = await getAgentsWithCampaigns({ page, perPage, search, activeAgents });
         
-        console.log('📈 Result stats:', result.stats);
+        logger.debug('📈 Result stats:', result.stats);
 
         return res.json({ success: true, data: result });
     } catch (err) {
-        console.error('❌ ERROR in getAgentsPaginated:', err);
+        logger.error('❌ ERROR in getAgentsPaginated:', err);
         return res.status(500).json({ success: false, error: err.toString() });
     }
 };
@@ -765,15 +766,15 @@ export const getLoggedInAgents = async (req, res) => {
         const raw = await callVicidial(payload);
         const formatted = parsePipeData(raw);
 
-        console.log('🔍 Logged-in agents raw response:', raw);
-        console.log('📊 Formatted logged-in agents:', formatted);
+        logger.debug('🔍 Logged-in agents raw response:', raw);
+        logger.debug('📊 Formatted logged-in agents:', formatted);
 
         // Return list of active agent users
         const activeAgents = Array.isArray(formatted) 
             ? formatted.map(a => String(a.user || a.agent_user || a.agent || a.User || a.USER || '').trim()).filter(Boolean)
             : (formatted?.user || formatted?.User ? [String(formatted.user || formatted.User).trim()] : []);
 
-        console.log('✅ Active agents count:', activeAgents.length, 'Users:', activeAgents);
+        logger.debug('✅ Active agents count:', activeAgents.length, 'Users:', activeAgents);
 
         return res.json({ 
             success: true, 
@@ -787,10 +788,10 @@ export const getLoggedInAgents = async (req, res) => {
     } catch (err) {
         // If no logged in agents, return empty array instead of error
         if (err.message && err.message.includes('NO LOGGED IN AGENTS')) {
-            console.log('ℹ️ No agents currently logged in');
+            logger.debug('ℹ️ No agents currently logged in');
             return res.json({ success: true, data: { active_agents: [], count: 0 }, message: 'No agents currently logged in' });
         }
-        console.error('❌ ERROR in getLoggedInAgents:', err);
+        logger.error('❌ ERROR in getLoggedInAgents:', err);
         return res.status(500).json({ success: false, error: err.toString() });
     }
 };
@@ -814,7 +815,7 @@ export const getAgentCampaignsPagination = async (req, res) => {
 
         return res.json({ success: true, data: result });
     } catch (err) {
-        console.error('ERROR in getAgentCampaignsPagination:', err);
+        logger.error('ERROR in getAgentCampaignsPagination:', err);
         return res.status(500).json({ success: false, error: err.toString() });
     }
 };

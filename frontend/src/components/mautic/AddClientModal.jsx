@@ -10,6 +10,7 @@ import { useClientManagement } from '../../hooks/mautic';
 import { isValidUrl } from '../../utils/mautic';
 import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
+import { hasFullAccess } from '../../utils/permissions';
 import Select from 'react-select';
 
 export default function AddClientModal({ isOpen, onClose, onSuccess, editClient = null }) {
@@ -43,7 +44,7 @@ export default function AddClientModal({ isOpen, onClose, onSuccess, editClient 
 
     // Fetch users (managers and employees) when modal opens
     useEffect(() => {
-        if (isOpen && user?.role === 'superadmin') {
+        if (isOpen && hasFullAccess(user)) {
             fetchUsers();
         }
     }, [isOpen, user]);
@@ -53,9 +54,17 @@ export default function AddClientModal({ isOpen, onClose, onSuccess, editClient 
             const response = await axios.get('/api/users');
             const allUsers = response.data.users || response.data;
 
-            // Separate managers and employees
-            const managersList = allUsers.filter(u => u.role === 'manager' && u.isActive);
-            const employeesList = allUsers.filter(u => ['employee', 'telecaller'].includes(u.role) && u.isActive);
+            // Filter managers: users with isTeamManager flag in their customRole
+            const managersList = allUsers.filter(u => 
+                u.isActive && u.customRole?.isTeamManager
+            );
+            
+            // Filter employees: active users who are NOT team managers and do NOT have full access
+            const employeesList = allUsers.filter(u => 
+                u.isActive && 
+                !u.customRole?.isTeamManager && 
+                !u.customRole?.fullAccess
+            );
 
             setManagers(managersList);
             setEmployees(employeesList);
@@ -67,21 +76,17 @@ export default function AddClientModal({ isOpen, onClose, onSuccess, editClient 
     // Filter employees based on selected manager
     useEffect(() => {
         if (formData.assignToManager) {
-            const selectedManager = managers.find(m => m.id === parseInt(formData.assignToManager));
-            if (selectedManager) {
-                // Get employees managed by this manager
-                const managedEmployees = employees.filter(emp =>
-                    emp.createdById === selectedManager.id ||
-                    emp.managers?.some(m => m.id === selectedManager.id)
-                );
-                setFilteredEmployees(managedEmployees);
-            } else {
-                setFilteredEmployees([]);
-            }
+            const selectedManagerId = parseInt(formData.assignToManager);
+            // Get employees managed by this manager (via managers relation)
+            const managedEmployees = employees.filter(emp =>
+                emp.managers?.some(m => m.id === selectedManagerId)
+            );
+            setFilteredEmployees(managedEmployees);
         } else {
+            // Show all employees when no manager is selected
             setFilteredEmployees(employees);
         }
-    }, [formData.assignToManager, managers, employees]);
+    }, [formData.assignToManager, employees]);
 
     useEffect(() => {
         const fetchPasswordForEdit = async () => {
@@ -444,7 +449,7 @@ export default function AddClientModal({ isOpen, onClose, onSuccess, editClient 
                     </div>
 
                     {/* Assignment Section */}
-                    {user?.role === 'superadmin' && !editClient && (
+                    {hasFullAccess(user) && !editClient && (
                         <div className="border-t border-gray-200 pt-4 mt-4">
                             <div className="flex items-center gap-2 mb-3">
                                 <Users size={18} className="text-gray-600" />

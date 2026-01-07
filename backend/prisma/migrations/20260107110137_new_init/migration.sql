@@ -298,6 +298,29 @@ CREATE TABLE `MauticEmailReport` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
+CREATE TABLE `MauticEmailStatsCache` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `clientId` INTEGER NOT NULL,
+    `mauticEmailId` INTEGER NOT NULL,
+    `totalSent` INTEGER NOT NULL DEFAULT 0,
+    `totalOpened` INTEGER NOT NULL DEFAULT 0,
+    `totalBounced` INTEGER NOT NULL DEFAULT 0,
+    `totalUnsubscribed` INTEGER NOT NULL DEFAULT 0,
+    `totalClicks` INTEGER NOT NULL DEFAULT 0,
+    `openRate` DECIMAL(5, 2) NOT NULL DEFAULT 0,
+    `clickRate` DECIMAL(5, 2) NOT NULL DEFAULT 0,
+    `bounceRate` DECIMAL(5, 2) NOT NULL DEFAULT 0,
+    `cachedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    INDEX `MauticEmailStatsCache_clientId_idx`(`clientId`),
+    INDEX `MauticEmailStatsCache_mauticEmailId_idx`(`mauticEmailId`),
+    UNIQUE INDEX `MauticEmailStatsCache_clientId_mauticEmailId_key`(`clientId`, `mauticEmailId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
 CREATE TABLE `MauticSegment` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `mauticSegmentId` VARCHAR(255) NOT NULL,
@@ -642,6 +665,9 @@ ALTER TABLE `MauticEmail` ADD CONSTRAINT `MauticEmail_clientId_fkey` FOREIGN KEY
 
 -- AddForeignKey
 ALTER TABLE `MauticEmailReport` ADD CONSTRAINT `MauticEmailReport_clientId_fkey` FOREIGN KEY (`clientId`) REFERENCES `MauticClient`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `MauticEmailStatsCache` ADD CONSTRAINT `MauticEmailStatsCache_clientId_fkey` FOREIGN KEY (`clientId`) REFERENCES `MauticClient`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `MauticSegment` ADD CONSTRAINT `MauticSegment_clientId_fkey` FOREIGN KEY (`clientId`) REFERENCES `MauticClient`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;

@@ -32,16 +32,23 @@ export default function MetricsCards({ metrics }) {
       color: 'bg-green-500',
       subtitle: `Across ${overview.clients} client${overview.clients !== 1 ? 's' : ''}`
     }
+    ,{
+      title: 'Total Contacts',
+      value: formatNumber(overview.totalContacts || 0),
+      icon: Users,
+      color: 'bg-teal-500',
+      subtitle: `${formatNumber(overview.totalContacts || 0)} contacts across segments`
+    }
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       {cards.map((card, index) => {
         const Icon = card.icon;
         return (
           <div
             key={index}
-            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
+            className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 hover:shadow-md transition-shadow"
           >
             <div className="flex items-start justify-between">
               <div className="flex-1">
@@ -56,7 +63,7 @@ export default function MetricsCards({ metrics }) {
                 </p>
               </div>
               <div className={`${card.color} p-3 rounded-lg`}>
-                <Icon className="text-white" size={24} />
+                <Icon className="text-white" size={20} />
               </div>
             </div>
           </div>

@@ -6,6 +6,7 @@ import { logActivity } from '../middleware/activityLogger.js';
 import { notifyUserCreated } from '../utils/emailHelper.js';
 import { validate, validateParams, createUserSchema, updateUserSchema, clientIdSchema } from '../validators/schemas.js';
 import logger from '../utils/logger.js';
+import { getOwner, isOwner, ensureOwnerGuard, ensureOwnerRolePreserved, protectOwnerMutation, invalidateOwnerCache } from '../services/ownerProtectionService.js';
 
 const router = express.Router();
 
@@ -14,7 +15,7 @@ const router = express.Router();
 // @access  Private (Users with Users.Create permission)
 router.post('/', authenticate, requirePermission('Users', 'Create'), validate(createUserSchema), async (req, res) => {
   try {
-    const { name, email, password, customRoleId } = req.body;
+    const { name, email, password, customRoleId, phone, managerIds, sendWelcomeEmail = true } = req.body;
     const currentUser = req.user;
 
     // Check if user already exists
@@ -102,8 +103,24 @@ router.post('/', authenticate, requirePermission('Users', 'Create'), validate(cr
       customRoleId: parsedRoleId
     };
 
-    // Connect the creator as manager if they don't have full access
-    if (!hasFullAccess(currentUser)) {
+    // Add phone if provided
+    if (phone) {
+      userData.phone = phone;
+    }
+
+    // Handle manager assignment - validate each ID
+    if (managerIds && Array.isArray(managerIds) && managerIds.length > 0) {
+      const validManagerIds = managerIds
+        .map(id => parseInt(id))
+        .filter(id => !isNaN(id) && id > 0);
+      
+      if (validManagerIds.length > 0) {
+        userData.managers = {
+          connect: validManagerIds.map(id => ({ id }))
+        };
+      }
+    } else if (!hasFullAccess(currentUser)) {
+      // Connect the creator as manager if they don't have full access and no managers specified
       userData.managers = {
         connect: { id: currentUser.id }
       };
@@ -142,19 +159,23 @@ router.post('/', authenticate, requirePermission('Users', 'Create'), validate(cr
       req
     );
 
-    // Send welcome email with credentials to the new user
-    notifyUserCreated(user, currentUser, password)
-      .then(result => {
-        logger.info('User welcome email sent', { result, userId: user.id, userEmail: user.email });
-      })
-      .catch(err => {
-        logger.error('Failed to send user welcome email', { 
-          error: err.message, 
-          stack: err.stack,
-          userId: user.id,
-          userEmail: user.email 
+    // Send welcome email with credentials to the new user (if enabled)
+    if (sendWelcomeEmail) {
+      notifyUserCreated(user, currentUser, password)
+        .then(result => {
+          logger.info('User welcome email sent', { result, userId: user.id, userEmail: user.email });
+        })
+        .catch(err => {
+          logger.error('Failed to send user welcome email', { 
+            error: err.message, 
+            stack: err.stack,
+            userId: user.id,
+            userEmail: user.email 
+          });
         });
-      });
+    } else {
+      logger.info('Welcome email skipped by user request', { userId: user.id, userEmail: user.email });
+    }
 
     res.status(201).json({
       message: 'User created successfully',
@@ -396,9 +417,9 @@ router.get('/:id', authenticate, canManageUser, async (req, res) => {
 // @route   PUT /api/users/:id
 // @desc    Update employee
 // @access  Private
-router.put('/:id', authenticate, canManageUser, async (req, res) => {
+router.put('/:id', authenticate, canManageUser, ensureOwnerGuard(), async (req, res) => {
   try {
-    const { name, email, isActive, customRoleId } = req.body;
+    const { name, email, isActive, customRoleId, managerIds } = req.body;
     const currentUser = req.user;
     const userId = parseInt(req.params.id);
 
@@ -451,6 +472,21 @@ router.put('/:id', authenticate, canManageUser, async (req, res) => {
         updateData.role = customRole.fullAccess ? 'admin' : 'employee';
       }
     }
+
+    // Handle manager assignment updates
+    if (managerIds !== undefined && Array.isArray(managerIds) && hasFullAccess(currentUser)) {
+      // Replace managers with new list - validate each ID
+      const validManagerIds = managerIds
+        .map(id => parseInt(id))
+        .filter(id => !isNaN(id) && id > 0);
+      
+      updateData.managers = {
+        set: validManagerIds.map(id => ({ id }))
+      };
+    }
+
+    // Ensure owner's superadmin role is always preserved
+    await ensureOwnerRolePreserved(userId, updateData);
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
@@ -522,7 +558,11 @@ router.put('/:id', authenticate, canManageUser, async (req, res) => {
     });
   } catch (error) {
     logger.error('Error updating user', { error: error.message, stack: error.stack, userId: req.params.id });
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error',
+      error: error.message 
+    });
   }
 });
 
@@ -592,7 +632,7 @@ router.put('/:id/password', authenticate, async (req, res) => {
 // @route   DELETE /api/users/:id
 // @desc    Delete employee (hard delete with proper cleanup)
 // @access  Private
-router.delete('/:id', authenticate, canManageUser, async (req, res) => {
+router.delete('/:id', authenticate, canManageUser, ensureOwnerGuard({ isDelete: true }), async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
     const user = await prisma.user.findUnique({

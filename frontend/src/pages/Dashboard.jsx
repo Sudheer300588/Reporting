@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import axios from 'axios'
 import { 
   Users, FolderOpen, Activity, Mail, Phone, TrendingUp, TrendingDown,
   AlertTriangle, CheckCircle, Clock, RefreshCw, BarChart3, Zap,
-  ArrowRight, Loader2
+  ArrowRight, Loader2, Server, CheckCircle2, XCircle, Pause
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { 
@@ -28,11 +28,42 @@ const Dashboard = () => {
   const [emailMetrics, setEmailMetrics] = useState(null)
   const [voicemailMetrics, setVoicemailMetrics] = useState(null)
   const [syncStatus, setSyncStatus] = useState({ mautic: null, dropCowboy: null })
+  const [syncProgress, setSyncProgress] = useState(null)
   const [insights, setInsights] = useState([])
+  const progressIntervalRef = useRef(null)
+
+  const fetchSyncProgress = useCallback(async () => {
+    try {
+      const response = await axios.get('/api/mautic/sync/progress')
+      if (response.data?.success) {
+        setSyncProgress(response.data.data)
+        if (!response.data.data.isActive && progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current)
+          progressIntervalRef.current = null
+          fetchAllData()
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching sync progress:', error)
+    }
+  }, [])
 
   useEffect(() => {
     fetchAllData()
+    fetchSyncProgress()
   }, [])
+
+  useEffect(() => {
+    if (syncProgress?.isActive && !progressIntervalRef.current) {
+      progressIntervalRef.current = setInterval(fetchSyncProgress, 3000)
+    }
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current)
+        progressIntervalRef.current = null
+      }
+    }
+  }, [syncProgress?.isActive, fetchSyncProgress])
 
   const fetchAllData = async () => {
     setLoading(true)
@@ -102,10 +133,28 @@ const Dashboard = () => {
 
   const fetchEmailMetrics = async () => {
     try {
-      const response = await axios.get('/api/mautic/dashboard')
-      if (response.data) {
-        setEmailMetrics(response.data)
-        generateInsights(response.data, 'email')
+      const response = await axios.get('/api/mautic/stats/overview')
+      if (response.data?.success && response.data?.data) {
+        const data = response.data.data
+        const metrics = {
+          totalSent: data.stats?.sent || 0,
+          totalRead: data.stats?.read || 0,
+          totalClicked: data.stats?.clicked || 0,
+          totalBounced: data.stats?.bounced || 0,
+          totalUnsubscribed: data.stats?.unsubscribed || 0,
+          avgReadRate: data.stats?.avgOpenRate || 0,
+          avgClickRate: data.stats?.avgClickRate || 0,
+          avgUnsubscribeRate: data.stats?.avgUnsubscribeRate || 0,
+          openRate: data.stats?.openRate || 0,
+          clickRate: data.stats?.clickRate || 0,
+          bounceRate: data.stats?.bounceRate || 0,
+          unsubscribeRate: data.stats?.unsubscribeRate || 0,
+          topEmails: data.topEmails || [],
+          overview: data.overview,
+          clients: data.clients || []
+        }
+        setEmailMetrics(metrics)
+        generateInsights(metrics, 'email')
       }
     } catch (error) {
       console.error('Error fetching email metrics:', error)
@@ -197,8 +246,8 @@ const Dashboard = () => {
   }
 
   const formatNumber = (num) => {
-    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
-    if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
+    if (num >= 1000000) return (Math.floor(num / 100000) / 10).toFixed(1) + 'M'
+    if (num >= 1000) return (Math.floor(num / 100) / 10).toFixed(1) + 'K'
     return num?.toString() || '0'
   }
 
@@ -227,12 +276,38 @@ const Dashboard = () => {
 
   const emailChartData = useMemo(() => {
     if (!emailMetrics?.topEmails) return []
-    return emailMetrics.topEmails.slice(0, 7).map((email, idx) => ({
-      name: email.name?.substring(0, 15) || `Email ${idx + 1}`,
-      sent: email.sentCount || 0,
-      opened: email.readCount || 0,
-      rate: parseFloat(email.readRate || 0)
-    }))
+    
+    // Track used names to ensure uniqueness
+    const usedNames = new Set()
+    
+    return emailMetrics.topEmails.slice(0, 6).map((email, idx) => {
+      const fullName = email.name || `Email ${idx + 1}`
+      let displayName = fullName.length > 15 ? fullName.substring(0, 12) + '...' : fullName
+      
+      // Ensure unique display names by appending number if needed
+      let uniqueName = displayName
+      let counter = 1
+      while (usedNames.has(uniqueName)) {
+        uniqueName = `${displayName} (${counter})`
+        counter++
+      }
+      usedNames.add(uniqueName)
+      
+      return {
+        id: `email-${idx}-${email.id || email.emailId || idx}`, // Unique key for chart
+        name: uniqueName,
+        fullName: fullName,
+        clientName: email.clientName || '',
+        sent: email.sent || email.sentCount || 0,
+        opened: email.read || email.readCount || 0,
+        clicked: email.clicked || email.clickedCount || 0,
+        bounced: email.bounced || 0,
+        unsubscribed: email.unsubscribed || 0,
+        openRate: parseFloat(email.openRate || email.readRate || 0),
+        clickRate: parseFloat(email.clickRate || 0),
+        unsubRate: parseFloat(email.unsubscribeRate || 0)
+      }
+    })
   }, [emailMetrics])
 
   const voicemailChartData = useMemo(() => {
@@ -288,18 +363,24 @@ const Dashboard = () => {
       </div>
 
       {hasFullAccess() && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          <SyncIndicator 
-            label="Mautic" 
-            status={syncStatus.mautic} 
-            lastSync={syncStatus.mautic?.lastSyncAt || syncStatus.mautic?.lastSync}
-          />
-          <SyncIndicator 
-            label="DropCowboy" 
-            status={syncStatus.dropCowboy} 
-            lastSync={syncStatus.dropCowboy?.lastSyncAt || voicemailMetrics?.lastUpdated}
-          />
-        </div>
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+            <SyncIndicator 
+              label="Autovation" 
+              status={syncStatus.mautic?.data} 
+              lastSync={syncStatus.mautic?.data?.lastUpdated || syncStatus.mautic?.data?.lastSync || syncStatus.mautic?.data?.lastSyncAt}
+              isActive={syncProgress?.isActive}
+            />
+            <SyncIndicator 
+              label="Ringless Voicemail" 
+              status={syncStatus.dropCowboy?.data} 
+              lastSync={syncStatus.dropCowboy?.data?.lastSyncAt || syncStatus.dropCowboy?.data?.lastUpdated || voicemailMetrics?.lastUpdated}
+            />
+          </div>
+          {syncProgress?.isActive && syncProgress?.clientList?.length > 0 && (
+            <SyncProgressPanel progress={syncProgress} />
+          )}
+        </>
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -357,7 +438,10 @@ const Dashboard = () => {
                 Email Performance
               </h2>
               <button 
-                onClick={() => navigate('/services')}
+                onClick={() => {
+                  localStorage.setItem('selectedService', 'mautic');
+                  navigate('/services');
+                }}
                 className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1"
               >
                 View All <ArrowRight size={14} />
@@ -401,11 +485,38 @@ const Dashboard = () => {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={emailChartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                    <XAxis 
+                      dataKey="name" 
+                      tick={{ fontSize: 10 }} 
+                      angle={-15}
+                      textAnchor="end"
+                      height={50}
+                    />
                     <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip />
+                    <Tooltip 
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload
+                          return (
+                            <div className="bg-white p-3 rounded-lg shadow-lg border text-xs max-w-xs">
+                              <p className="font-semibold text-gray-900 mb-1">{data.fullName}</p>
+                              {data.clientName && <p className="text-gray-500 text-xs mb-2">{data.clientName}</p>}
+                              <div className="space-y-1">
+                                <p><span className="text-gray-500">Sent:</span> <span className="font-medium">{formatNumber(data.sent)}</span></p>
+                                <p><span className="text-gray-500">Opened:</span> <span className="font-medium text-blue-600">{formatNumber(data.opened)}</span> ({data.openRate}%)</p>
+                                <p><span className="text-gray-500">Clicked:</span> <span className="font-medium text-green-600">{formatNumber(data.clicked)}</span> ({data.clickRate}%)</p>
+                                <p><span className="text-gray-500">Bounced:</span> <span className="font-medium text-red-600">{formatNumber(data.bounced)}</span></p>
+                                <p><span className="text-gray-500">Unsubs:</span> <span className="font-medium text-orange-600">{formatNumber(data.unsubscribed)}</span> ({data.unsubRate}%)</p>
+                              </div>
+                            </div>
+                          )
+                        }
+                        return null
+                      }}
+                    />
                     <Bar dataKey="sent" fill="#94A3B8" name="Sent" radius={[4, 4, 0, 0]} />
                     <Bar dataKey="opened" fill="#3B82F6" name="Opened" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="clicked" fill="#10B981" name="Clicked" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -421,7 +532,10 @@ const Dashboard = () => {
                 Voicemail Performance
               </h2>
               <button 
-                onClick={() => navigate('/services')}
+                onClick={() => {
+                  localStorage.setItem('selectedService', 'dropcowboy');
+                  navigate('/services');
+                }}
                 className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1"
               >
                 View All <ArrowRight size={14} />
@@ -507,6 +621,7 @@ const Dashboard = () => {
               onClick={() => {
                 axios.post('/api/mautic/sync/all').catch(() => {})
                 axios.post('/api/dropcowboy/fetch').catch(() => {})
+                setTimeout(fetchSyncProgress, 500)
                 fetchAllData()
               }}
             />
@@ -586,18 +701,109 @@ const RateBox = ({ label, value, isNegative = false }) => {
   )
 }
 
-const SyncIndicator = ({ label, status, lastSync }) => {
+const SyncIndicator = ({ label, status, lastSync, isActive }) => {
   const isRecent = lastSync && (new Date() - new Date(lastSync)) < 3600000
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-3 flex items-center gap-3">
-      <div className={`w-2 h-2 rounded-full ${isRecent ? 'bg-green-500' : 'bg-yellow-500'}`} />
+    <div className={`bg-white rounded-lg border ${isActive ? 'border-blue-300 bg-blue-50' : 'border-gray-200'} p-3 flex items-center gap-3`}>
+      {isActive ? (
+        <Loader2 size={14} className="animate-spin text-blue-600" />
+      ) : (
+        <div className={`w-2 h-2 rounded-full ${isRecent ? 'bg-green-500' : 'bg-yellow-500'}`} />
+      )}
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-gray-900">{label}</div>
+        <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
+          {label}
+          {isActive && <span className="text-xs text-blue-600 font-normal">Syncing...</span>}
+        </div>
         <div className="text-xs text-gray-500 flex items-center gap-1">
           <Clock size={10} />
           {lastSync ? new Date(lastSync).toLocaleString() : 'Never synced'}
         </div>
+      </div>
+    </div>
+  )
+}
+
+const SyncProgressPanel = ({ progress }) => {
+  const { clientList, totalClients, completedClients, elapsedSeconds, currentBatch, totalBatches } = progress
+  
+  const formatDuration = (seconds) => {
+    if (seconds < 60) return `${seconds}s`
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}m ${secs}s`
+  }
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'syncing':
+        return <Loader2 size={14} className="animate-spin text-blue-600" />
+      case 'completed':
+        return <CheckCircle2 size={14} className="text-green-600" />
+      case 'failed':
+        return <XCircle size={14} className="text-red-600" />
+      case 'pending':
+      default:
+        return <Pause size={14} className="text-gray-400" />
+    }
+  }
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'syncing': return 'bg-blue-50 border-blue-200'
+      case 'completed': return 'bg-green-50 border-green-200'
+      case 'failed': return 'bg-red-50 border-red-200'
+      default: return 'bg-gray-50 border-gray-200'
+    }
+  }
+
+  const progressPercent = totalClients > 0 ? Math.round((completedClients / totalClients) * 100) : 0
+
+  return (
+    <div className="card mb-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <Server size={20} className="text-blue-600" />
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Sync Progress</h3>
+            <p className="text-sm text-gray-500">
+              Batch {currentBatch}/{totalBatches} - {completedClients}/{totalClients} clients - {formatDuration(elapsedSeconds)}
+            </p>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-bold text-blue-600">{progressPercent}%</div>
+        </div>
+      </div>
+
+      <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+        <div 
+          className="bg-blue-600 h-2 rounded-full transition-all duration-500" 
+          style={{ width: `${progressPercent}%` }}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto">
+        {clientList.map((client) => (
+          <div 
+            key={client.clientId} 
+            className={`border rounded-lg p-3 ${getStatusColor(client.status)}`}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              {getStatusIcon(client.status)}
+              <span className="font-medium text-gray-900 text-sm truncate">{client.clientName}</span>
+            </div>
+            <div className="text-xs text-gray-600 truncate">
+              {client.message || (client.status === 'pending' ? 'Waiting...' : '')}
+            </div>
+            {client.status === 'completed' && (
+              <div className="text-xs text-green-700 mt-1">
+                {client.emails || 0} emails, {client.campaigns || 0} campaigns, {client.emailReports || 0} reports
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   )

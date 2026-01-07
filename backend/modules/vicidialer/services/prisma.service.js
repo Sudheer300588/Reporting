@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import prisma from '../../../prisma/client.js';
 
 export default prisma;
@@ -123,7 +124,7 @@ export async function syncAgentsCampaignsToDb(agentsData) {
         return { success: true, stats };
 
     } catch (err) {
-        console.error("❌ Error syncing to database:", err);
+        logger.error("❌ Error syncing to database:", err);
         return { success: false, error: err.message };
     }
 }
@@ -170,14 +171,14 @@ export async function getAgentsWithCampaigns({
         select: { user: true }
     });
     
-    console.log('Total agents in DB:', total);
-    console.log('All agent users:', allAgents.map(a => a.user));
-    console.log('Active agents list:', activeAgents);
+    logger.debug('Total agents in DB:', total);
+    logger.debug('All agent users:', allAgents.map(a => a.user));
+    logger.debug('Active agents list:', activeAgents);
     
     const totalActive = allAgents.filter(a => activeAgents.includes(a.user)).length;
     const totalInactive = total - totalActive;
     
-    console.log('Calculated totalActive:', totalActive, 'totalInactive:', totalInactive);
+    logger.debug('Calculated totalActive:', totalActive, 'totalInactive:', totalInactive);
 
     return {
         data: agents.map(agent => ({

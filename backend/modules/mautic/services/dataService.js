@@ -1,7 +1,78 @@
+import logger from '../../../utils/logger.js';
 import prisma from '../../../prisma/client.js';
 import { Prisma } from '@prisma/client';
 
 class MauticDataService {
+  /**
+ * Get cached email stats for multiple emails
+ * @param {number} clientId - Client ID
+ * @param {Array<number>} emailIds - Array of Mautic email IDs
+ * @returns {Promise<Object>} Object mapping emailId to stats
+ */
+  async getCachedEmailStats(clientId, emailIds) {
+    try {
+      const cached = await prisma.mauticEmailStatsCache.findMany({
+        where: {
+          clientId: clientId,
+          mauticEmailId: { in: emailIds }
+        }
+      });
+
+      const result = {};
+      cached.forEach(stat => {
+        result[stat.mauticEmailId] = {
+          EmailID: stat.mauticEmailId,
+          TotalSent: stat.totalSent,
+          TotalOpened: stat.totalOpened,
+          TotalBounced: stat.totalBounced,
+          TotalUnsubscribed: stat.totalUnsubscribed,
+          TotalClicks: stat.totalClicks,
+          OpenRate: parseFloat(stat.openRate).toFixed(2),
+          ClickRate: parseFloat(stat.clickRate).toFixed(2),
+          BounceRate: parseFloat(stat.bounceRate).toFixed(2)
+        };
+      });
+
+      return result;
+    } catch (error) {
+      console.error('Error getting cached email stats:', error);
+      return {};
+    }
+  }
+
+  /**
+   * Cache email stats for multiple emails
+   * @param {number} clientId - Client ID
+   * @param {Object} statsData - Object mapping emailId to stats object
+   * @returns {Promise<number>} Number of cached records
+   */
+  async cacheEmailStats(clientId, statsData) {
+    try {
+      const records = Object.entries(statsData).map(([emailId, stats]) => ({
+        clientId: clientId,
+        mauticEmailId: parseInt(emailId),
+        totalSent: stats.TotalSent || 0,
+        totalOpened: stats.TotalOpened || 0,
+        totalBounced: stats.TotalBounced || 0,
+        totalUnsubscribed: stats.TotalUnsubscribed || 0,
+        totalClicks: stats.TotalClicks || 0,
+        openRate: new Prisma.Decimal(stats.OpenRate || 0),
+        clickRate: new Prisma.Decimal(stats.ClickRate || 0),
+        bounceRate: new Prisma.Decimal(stats.BounceRate || 0),
+        cachedAt: new Date()
+      }));
+
+      const result = await prisma.mauticEmailStatsCache.createMany({
+        data: records,
+        skipDuplicates: true
+      });
+
+      return result.count;
+    } catch (error) {
+      console.error('Error caching email stats:', error);
+      return 0;
+    }
+  }
   /**
    * Save emails to database using BULK INSERT (1000x faster!)
    * @param {number} clientId - Client ID
@@ -13,7 +84,7 @@ class MauticDataService {
       console.log(`💾 BULK SAVING ${emails.length} emails for client ${clientId}...`);
 
       if (emails.length === 0) {
-        console.log(`✅ No emails to save`);
+        logger.debug(`✅ No emails to save`);
         return { success: true, created: 0, updated: 0, total: 0 };
       }
 
@@ -79,7 +150,7 @@ class MauticDataService {
         total: emails.length
       };
     } catch (error) {
-      console.error('Error saving emails:', error);
+      logger.error('Error saving emails:', error);
       throw new Error(`Failed to save emails: ${error.message}`);
     }
   }
@@ -96,7 +167,7 @@ class MauticDataService {
       console.log(`   Campaign IDs: ${campaigns.map(c => c.id).join(', ')}`);
 
       if (campaigns.length === 0) {
-        console.log(`✅ No campaigns to save`);
+        logger.debug(`✅ No campaigns to save`);
         return { success: true, created: 0, updated: 0, total: 0 };
       }
 
@@ -161,7 +232,7 @@ class MauticDataService {
         total: campaigns.length
       };
     } catch (error) {
-      console.error('Error saving campaigns:', error);
+      logger.error('Error saving campaigns:', error);
       throw new Error(`Failed to save campaigns: ${error.message}`);
     }
   }
@@ -177,7 +248,7 @@ class MauticDataService {
       console.log(`💾 BULK SAVING ${segments.length} segments for client ${clientId}...`);
 
       if (segments.length === 0) {
-        console.log(`✅ No segments to save`);
+        logger.debug(`✅ No segments to save`);
         return { success: true, created: 0, updated: 0, total: 0 };
       }
 
@@ -227,7 +298,7 @@ class MauticDataService {
         total: segments.length
       };
     } catch (error) {
-      console.error('Error saving segments:', error);
+      logger.error('Error saving segments:', error);
       throw new Error(`Failed to save segments: ${error.message}`);
     }
   }
@@ -240,10 +311,10 @@ class MauticDataService {
    */
   async saveEmailReports(clientId, reportRows) {
     try {
-      console.log(`📊 Saving ${reportRows.length} email report records for client ${clientId}...`);
+      logger.debug(`📊 Saving ${reportRows.length} email report records for client ${clientId}...`);
 
       if (reportRows.length === 0) {
-        console.log(`✅ No email reports to save`);
+        logger.debug(`✅ No email reports to save`);
         return { success: true, created: 0, updated: 0, total: 0 };
       }
 
@@ -257,7 +328,7 @@ class MauticDataService {
 
         // Prepare valid records for batch insert
         const validRecords = [];
-        
+
         for (const row of batch) {
           // Skip invalid rows
           if (!row.e_id || !row.date_sent || !row.email_address || !row.subject1) {
@@ -299,15 +370,15 @@ class MauticDataService {
             created += result.count;
             skipped += (validRecords.length - result.count);
           } catch (error) {
-            console.error(`Batch insert error:`, error.message);
+            logger.error(`Batch insert error:`, error.message);
             skipped += validRecords.length;
           }
         }
 
-        console.log(`   Processed ${Math.min(i + BATCH_SIZE, reportRows.length)}/${reportRows.length} email reports (${created} new, ${skipped} skipped)...`);
+        logger.debug(`   Processed ${Math.min(i + BATCH_SIZE, reportRows.length)}/${reportRows.length} email reports (${created} new, ${skipped} skipped)...`);
       }
 
-      console.log(`✅ Email reports saved: ${created} created, ${skipped} skipped`);
+      logger.debug(`✅ Email reports saved: ${created} created, ${skipped} skipped`);
 
       return {
         success: true,
@@ -316,7 +387,7 @@ class MauticDataService {
         total: reportRows.length
       };
     } catch (error) {
-      console.error('Error saving email reports:', error);
+      logger.error('Error saving email reports:', error);
       throw new Error(`Failed to save email reports: ${error.message}`);
     }
   }
@@ -364,15 +435,29 @@ class MauticDataService {
         }
       });
 
-      // Top performing emails
+      // Top performing emails - sorted by sent count to show most impactful emails
       const topEmails = await prisma.mauticEmail.findMany({
         where: {
           ...where,
-          sentCount: { gt: 0 }
+          sentCount: { gt: 100 } // Only show emails with meaningful volume
         },
-        orderBy: { readRate: 'desc' },
-        take: 5,
-        include: {
+        orderBy: [
+          { sentCount: 'desc' }, // Primary: highest volume
+          { readRate: 'desc' }   // Secondary: best performance
+        ],
+        take: 7,
+        select: {
+          id: true,
+          name: true,
+          subject: true,
+          sentCount: true,
+          readCount: true,
+          clickedCount: true,
+          unsubscribed: true,
+          bounced: true,
+          readRate: true,
+          clickRate: true,
+          unsubscribeRate: true,
           client: {
             select: { name: true }
           }
@@ -405,13 +490,18 @@ class MauticDataService {
             subject: email.subject,
             client: email.client.name,
             sentCount: email.sentCount,
-            readRate: parseFloat(email.readRate).toFixed(2),
-            clickRate: parseFloat(email.clickRate).toFixed(2)
+            readCount: email.readCount || 0,
+            clickedCount: email.clickedCount || 0,
+            unsubscribed: email.unsubscribed || 0,
+            bounced: email.bounced || 0,
+            readRate: parseFloat(email.readRate || 0).toFixed(2),
+            clickRate: parseFloat(email.clickRate || 0).toFixed(2),
+            unsubscribeRate: parseFloat(email.unsubscribeRate || 0).toFixed(2)
           }))
         }
       };
     } catch (error) {
-      console.error('Error getting dashboard metrics:', error);
+      logger.error('Error getting dashboard metrics:', error);
       throw new Error(`Failed to get dashboard metrics: ${error.message}`);
     }
   }
@@ -461,7 +551,7 @@ class MauticDataService {
 
       return mapped;
     } catch (error) {
-      console.error('Error fetching clients:', error);
+      logger.error('Error fetching clients:', error);
       throw new Error(`Failed to fetch clients: ${error.message}`);
     }
   }
@@ -478,7 +568,7 @@ class MauticDataService {
         data: { lastSyncAt: new Date() }
       });
     } catch (error) {
-      console.error('Error updating client sync time:', error);
+      logger.error('Error updating client sync time:', error);
       throw error;
     }
   }

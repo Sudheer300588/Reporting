@@ -1,3 +1,4 @@
+import logger from '../utils/logger.js';
 import prisma from '../prisma/client.js';
 import emailService from '../services/emailNotificationService.js';
 
@@ -121,7 +122,7 @@ export async function sendActionNotification(action, data = {}) {
     );
     
     if (uniqueRecipients.length === 0) {
-      console.log(`No recipients found for action: ${action}`);
+      logger.debug(`No recipients found for action: ${action}`);
       return { success: false, message: 'No recipients' };
     }
     
@@ -139,7 +140,7 @@ export async function sendActionNotification(action, data = {}) {
     const successCount = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
     const failCount = results.length - successCount;
     
-    console.log(`📧 Sent '${action}' notifications: ${successCount} successful, ${failCount} failed`);
+    logger.debug(`📧 Sent '${action}' notifications: ${successCount} successful, ${failCount} failed`);
     
     return {
       success: true,
@@ -149,7 +150,7 @@ export async function sendActionNotification(action, data = {}) {
     };
     
   } catch (error) {
-    console.error(`Error sending action notification for '${action}':`, error);
+    logger.error(`Error sending action notification for '${action}':`, error);
     return { success: false, error: error.message };
   }
 }
@@ -159,7 +160,7 @@ export async function sendActionNotification(action, data = {}) {
  * Sends welcome email with credentials to the newly created user
  */
 export async function notifyUserCreated(user, creator, temporaryPassword) {
-  console.log('📧 Attempting to send welcome email:', { 
+  logger.debug('📧 Attempting to send welcome email:', { 
     userEmail: user.email, 
     userName: user.name,
     hasPassword: !!temporaryPassword 
@@ -183,7 +184,7 @@ export async function notifyUserCreated(user, creator, temporaryPassword) {
     ]
   });
   
-  console.log('📧 Welcome email result:', result);
+  logger.debug('📧 Welcome email result:', result);
   return result;
 }
 

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import useViewLevel from "../zustand/useViewLevel.js";
+import { usePermissions } from "../utils/permissions.js";
 
 export default function ManagerEmployees({ onBack, onEmployeeClick }) {
   const [employees, setEmployees] = useState([]);
@@ -11,6 +12,7 @@ export default function ManagerEmployees({ onBack, onEmployeeClick }) {
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { hasFullAccess, isTeamManager } = usePermissions(user);
 
   const { employeesStates } = useViewLevel();
   const { managerId } = employeesStates;
@@ -38,9 +40,8 @@ export default function ManagerEmployees({ onBack, onEmployeeClick }) {
       }
     };
 
-    // Restrict access: if non-manager & not superadmin, redirect or abort
-    if (user?.role !== 'manager' && user?.role !== 'superadmin') {
-      console.warn('Access denied: not a manager or superadmin');
+    // Restrict access: only team managers or users with full access
+    if (!hasFullAccess() && !isTeamManager()) {
       navigate('/dashboard');
       return;
     }

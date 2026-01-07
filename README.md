@@ -70,50 +70,78 @@ dev/
 - MySQL 8.0+
 - npm or yarn
 
-### **Development Setup**
+### **Quick Deployment (Production)**
+
+**Single-command deployment with interactive setup:**
+
+```bash
+chmod +x deploy.sh
+./deploy.sh
+```
+
+The script will:
+- ✅ Check prerequisites (Node.js, npm, PM2)
+- ✅ Ask for database configuration (MySQL/PostgreSQL)
+- ✅ Generate secure JWT and encryption keys
+- ✅ Install all dependencies
+- ✅ Validate database connection
+- ✅ Build frontend for production
+- ✅ Setup database schema
+- ✅ Start application with PM2
+
+**Quick redeploy with existing configuration:**
+
+```bash
+./deploy.sh --quick
+```
+
+**View deployment options:**
+
+```bash
+./deploy.sh --help
+```
+
+---
+
+### **Development Setup (Manual)**
+
+For local development without full deployment:
 
 1. **Clone the repository:**
 
    ```bash
    git clone <repository-url>
-   cd dev
+   cd Reporting
    ```
 
-2. **Run setup script:**
+2. **Configure environment variables:**
+
+   Copy the example file and update values:
 
    ```bash
-   ./setup.sh
+   cp backend/.env.example backend/.env
    ```
 
-   This will:
-
-   - Install backend dependencies
-   - Install frontend dependencies
-   - Copy `.env.example` to `.env` (if not exists)
-
-3. **Configure environment variables:**
-
-   **Backend** (`backend/.env`):
+   **Edit** `backend/.env`:
 
    ```env
-   PORT=3027
+   PORT=3026
    DATABASE_URL="mysql://user:password@localhost:3306/database"
-   JWT_SECRET=<generate-random-secret>
-   ENCRYPTION_KEY=<generate-random-key>
+   JWT_SECRET=<generate-with-openssl-rand-hex-32>
+   ENCRYPTION_KEY=<generate-with-openssl-rand-hex-32>
    NODE_ENV=development
    FRONTEND_URL=http://localhost:5173
 
-   # Optional: Schedulers
+   # Disable schedulers in development
    ENABLE_SCHEDULER=false
-   CRON_SCHEDULE=0 2 * * *
    ENABLE_MAUTIC_SCHEDULER=false
-   MAUTIC_SYNC_SCHEDULE=0 3 * * *
    ```
 
-   **Frontend** (`frontend/.env`):
+3. **Install dependencies:**
 
-   ```env
-   VITE_API_URL=http://localhost:3027
+   ```bash
+   cd backend && npm install
+   cd ../frontend && npm install
    ```
 
 4. **Setup database:**
@@ -121,16 +149,29 @@ dev/
    ```bash
    cd backend
    npx prisma generate
-   npx prisma migrate dev
+   npx prisma db push  # Or: npx prisma migrate dev
+   node prisma/seed-notifications.js  # Seed notification templates
    cd ..
    ```
 
 5. **Start development servers:**
+
+   **Backend:**
    ```bash
-   ./start.sh
+   cd backend
+   npm run dev  # Runs with nodemon for auto-reload
    ```
-   - Backend: http://localhost:3027
-   - Frontend: http://localhost:5173
+
+   **Frontend (in separate terminal):**
+   ```bash
+   cd frontend
+   npm run dev  # Vite dev server with HMR
+   ```
+
+   - Backend API: http://localhost:3026
+   - Frontend: http://localhost:5173 (auto-proxies API calls)
+
+---
 
 ## 📦 Features
 
@@ -274,7 +315,7 @@ pm2 monit
 
 ```env
 NODE_ENV=production
-PORT=3027
+PORT=3026
 DATABASE_URL="mysql://user:password@production-host:3306/prod_db?connection_limit=10"
 JWT_SECRET=<strong-random-secret>
 FRONTEND_URL=https://your-domain.com
@@ -409,7 +450,7 @@ mysql -u user -p
 **Frontend Can't Reach Backend:**
 
 ```bash
-# Verify backend is running on port 3027
+# Verify backend is running on port 3026
 # Check VITE_API_URL in frontend/.env
 # Check CORS configuration in backend/app.js
 ```

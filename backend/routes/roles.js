@@ -1,6 +1,7 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticate, requireAdmin, hasFullAccess, userHasPermission } from '../middleware/auth.js';
+import logger from '../utils/logger.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -52,7 +53,7 @@ router.get('/', authenticate, canAccessRoles, async (req, res) => {
       data: roles
     });
   } catch (error) {
-    console.error('Error fetching roles:', error);
+    logger.error('Error fetching roles:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch roles',
@@ -93,7 +94,7 @@ router.get('/:id', authenticate, requireAdmin, async (req, res) => {
       data: role
     });
   } catch (error) {
-    console.error('Error fetching role:', error);
+    logger.error('Error fetching role:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch role',
@@ -104,7 +105,7 @@ router.get('/:id', authenticate, requireAdmin, async (req, res) => {
 
 router.post('/', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { name, description, fullAccess, permissions } = req.body;
+    const { name, description, fullAccess, isTeamManager, permissions } = req.body;
 
     if (!name || name.trim() === '') {
       return res.status(400).json({
@@ -133,12 +134,13 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
         name: name.trim(),
         description: description || null,
         fullAccess: fullAccess || false,
+        isTeamManager: isTeamManager || false,
         permissions: validatedPermissions,
         isSystem: false
       }
     });
 
-    console.log(`Created new role: ${role.name} (ID: ${role.id})`);
+    logger.debug(`Created new role: ${role.name} (ID: ${role.id})`);
 
     res.status(201).json({
       success: true,
@@ -146,7 +148,7 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
       data: role
     });
   } catch (error) {
-    console.error('Error creating role:', error);
+    logger.error('Error creating role:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to create role',
@@ -158,7 +160,7 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
 router.put('/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, fullAccess, permissions } = req.body;
+    const { name, description, fullAccess, isTeamManager, permissions } = req.body;
     const roleId = parseInt(id);
 
     const existing = await prisma.role.findUnique({
@@ -201,11 +203,12 @@ router.put('/:id', authenticate, requireAdmin, async (req, res) => {
         name: name ? name.trim() : existing.name,
         description: description !== undefined ? description : existing.description,
         fullAccess: fullAccess !== undefined ? fullAccess : existing.fullAccess,
+        isTeamManager: isTeamManager !== undefined ? isTeamManager : existing.isTeamManager,
         permissions: validatedPermissions
       }
     });
 
-    console.log(`Updated role: ${role.name} (ID: ${role.id})`);
+    logger.debug(`Updated role: ${role.name} (ID: ${role.id})`);
 
     res.json({
       success: true,
@@ -213,7 +216,7 @@ router.put('/:id', authenticate, requireAdmin, async (req, res) => {
       data: role
     });
   } catch (error) {
-    console.error('Error updating role:', error);
+    logger.error('Error updating role:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update role',
@@ -261,14 +264,14 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
       where: { id: roleId }
     });
 
-    console.log(`Deleted role: ${existing.name} (ID: ${roleId})`);
+    logger.debug(`Deleted role: ${existing.name} (ID: ${roleId})`);
 
     res.json({
       success: true,
       message: 'Role deleted successfully'
     });
   } catch (error) {
-    console.error('Error deleting role:', error);
+    logger.error('Error deleting role:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete role',
@@ -311,7 +314,7 @@ router.patch('/:id/toggle', authenticate, requireAdmin, async (req, res) => {
       data: role
     });
   } catch (error) {
-    console.error('Error toggling role:', error);
+    logger.error('Error toggling role:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to toggle role status',

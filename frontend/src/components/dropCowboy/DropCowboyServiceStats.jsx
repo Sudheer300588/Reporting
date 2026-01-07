@@ -86,6 +86,10 @@ const DropCowboyServiceStats = ({ selectedClient }) => {
         const otherStatus = filteredRecordsForMetrics.filter(
             (r) => !["success", "failure"].includes(r.status)
         ).length;
+        const totalCost = filteredRecordsForMetrics.reduce(
+            (sum, r) => sum + (parseFloat(r.cost) || 0),
+            0
+        );
 
         return {
             overall: {
@@ -93,6 +97,7 @@ const DropCowboyServiceStats = ({ selectedClient }) => {
                 successfulDeliveries,
                 failedSends,
                 otherStatus,
+                totalCost,
                 averageSuccessRate:
                     totalSent > 0 ? (successfulDeliveries / totalSent) * 100 : 0,
             },

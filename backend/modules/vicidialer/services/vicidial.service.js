@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import https from "https";
 import prisma from "../../../prisma/client.js";
 
@@ -73,7 +74,7 @@ export async function callVicidial(functionOrParams, params = {}) {
         
         // Log URL for debugging (mask credentials)
         const maskedUrl = url.replace(/user=[^&]+/, 'user=***').replace(/pass=[^&]+/, 'pass=***');
-        console.log(`🔗 Calling VICIdial API: ${maskedUrl}`);
+        logger.debug(`🔗 Calling VICIdial API: ${maskedUrl}`);
 
 
         https.get(url, res => {
@@ -92,7 +93,7 @@ export async function callVicidial(functionOrParams, params = {}) {
                     }
                     
                     // Only reject on actual API errors
-                    console.error('VICIdial API error:', errorMsg);
+                    logger.error('VICIdial API error:', errorMsg);
                     return reject(new Error(errorMsg));
                 }
                 resolve(data);
