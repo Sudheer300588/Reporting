@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import axios from 'axios'
 import { toast } from 'react-toastify'
@@ -241,8 +241,25 @@ const Employees = () => {
   const ManagerMultiSelect = ({ availableManagers, selectedIds, onChange, editingUser }) => {
     const [open, setOpen] = useState(false)
     const [query, setQuery] = useState('')
+    const containerRef = useRef(null)
 
     const selected = selectedIds.map(id => availableManagers.find(m => m.id === id)).filter(Boolean)
+
+    useEffect(() => {
+      const handleClickOutside = (event) => {
+        if (containerRef.current && !containerRef.current.contains(event.target)) {
+          setOpen(false)
+        }
+      }
+
+      if (open) {
+        document.addEventListener('mousedown', handleClickOutside)
+      }
+
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }, [open])
 
     const options = availableManagers.filter(m =>
       (!editingUser || m.id !== editingUser.id) &&
@@ -251,7 +268,7 @@ const Employees = () => {
     )
 
     return (
-      <div className="relative">
+      <div className="relative" ref={containerRef}>
         <div className="border rounded p-2 min-h-[56px] flex items-center gap-2 flex-wrap">
           {selected.map(m => (
             <span key={m.id} className="inline-flex items-center bg-gray-100 px-2 py-1 rounded text-sm">
