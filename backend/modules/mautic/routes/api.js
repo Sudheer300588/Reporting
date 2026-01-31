@@ -1821,4 +1821,186 @@ router.post("/sync/:clientId", async (req, res) => {
   }
 });
 
+// ============================================
+// SMS CAMPAIGN ROUTES
+// ============================================
+
+/**
+ * GET /api/smses
+ * Get all SMS campaigns from all accessible clients
+ */
+router.get("/smses", async (req, res) => {
+  try {
+    const smses = await prisma.MauticSms.findMany({
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({
+      success: true,
+      data: smses.map(sms => ({
+        id: sms.id,
+        mauticId: sms.mauticId,
+        name: sms.name,
+        category: sms.category ? JSON.parse(sms.category) : null,
+        sentCount: sms.sentCount,
+        clientId: sms.clientId,
+        clientName: sms.client?.name,
+        createdAt: sms.createdAt,
+        updatedAt: sms.updatedAt
+      }))
+    });
+  } catch (error) {
+    logger.error("Error fetching SMS campaigns:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch SMS campaigns",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/sms/:id/stats
+ * Get SMS campaign statistics with pagination
+ */
+router.get("/sms/:id/stats", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { page = 1, limit = 100 } = req.query;
+
+    const smsId = parseInt(id);
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(1000, Math.max(1, parseInt(limit) || 100));
+
+    // Get SMS campaign
+    const smsCampaign = await prisma.mauticSms.findUnique({
+      where: { id: smsId },
+      select: {
+        id: true,
+        name: true,
+        sentCount: true
+      }
+    });
+
+    if (!smsCampaign) {
+      return res.status(404).json({
+        success: false,
+        message: "SMS campaign not found"
+      });
+    }
+
+    // Get paginated stats
+    const stats = await prisma.mauticSmsStat.findMany({
+      where: { mauticSmsId: smsId },
+      select: {
+        id: true,
+        leadId: true,
+        dateSent: true,
+        isFailed: true
+      },
+      orderBy: { dateSent: 'desc' },
+      skip: (pageNum - 1) * limitNum,
+      take: limitNum
+    });
+
+    // Get totals
+    const totalRecords = await prisma.mauticSmsStat.count({
+      where: { mauticSmsId: smsId }
+    });
+
+    const totalFailed = await prisma.mauticSmsStat.count({
+      where: { mauticSmsId: smsId, isFailed: true }
+    });
+
+    res.json({
+      success: true,
+      campaignName: smsCampaign.name,
+      campaignId: smsCampaign.id,
+      stats: stats.map(s => ({
+        id: s.id,
+        lead_id: s.leadId,
+        date_sent: s.dateSent.toISOString(),
+        is_failed: s.isFailed ? '1' : '0'
+      })),
+      totalRecords,
+      totalSuccessful: totalRecords - totalFailed,
+      totalFailed,
+      page: pageNum,
+      limit: limitNum
+    });
+  } catch (error) {
+    logger.error("Error fetching SMS stats:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch SMS statistics",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/contact/:id
+ * Get contact activity (SMS messages and replies) from database
+ * Query params: smsId (optional) - filter to specific SMS campaign
+ */
+router.get("/contact/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { smsId } = req.query;
+
+    const contactId = parseInt(id);
+    const smsIdFilter = smsId ? parseInt(smsId) : null;
+
+    // Fetch from database - get all SMS messages and replies for this contact
+    const where = { contactId };
+    if (smsIdFilter) {
+      where.mauticSmsId = smsIdFilter;
+    }
+
+    const messages = await prisma.mauticSmsMessage.findMany({
+      where,
+      include: { mauticSms: true },
+      orderBy: { dateSent: 'desc' }
+    });
+
+    // Transform to event format expected by frontend
+    const events = messages.map(msg => ({
+      event: msg.type === 'sent' ? 'sms.sent' : 'sms_reply',
+      eventId: msg.id,
+      timestamp: msg.dateSent.toISOString(),
+      details: {
+        message: msg.message,
+        stat: msg.mauticSms ? {
+          sms_id: msg.mauticSms.mauticId,
+          name: msg.mauticSms.name
+        } : null
+      },
+      isFailed: msg.isFailed
+    }));
+
+    res.json({
+      success: true,
+      id: contactId,
+      name: `Contact #${contactId}`,
+      events
+    });
+
+  } catch (error) {
+    logger.error("Error fetching contact activity:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch contact activity",
+      error: error.message
+    });
+  }
+});
+
 export default router;

@@ -5,6 +5,9 @@ import { ArrowLeft } from "lucide-react";
 import ClientsDropCowboyDashboard from "../components/dropCowboy/ClientsDropCowboyDashboard";
 import MauticEmailsSection from "../components/mautic/MauticEmailsSection";
 import MauticCampaignsSection from "../components/mautic/MauticCampaignsSection";
+import SmsList from "../components/mautic/SmsList";
+import SmsStats from "../components/mautic/SmsStats";
+import ContactView from "../components/mautic/ContactView";
 import useViewLevel from "../zustand/useViewLevel";
 import ClientServicesSection from "../components/ClientServicesSection";
 import { usePermissions } from "../utils/permissions";
@@ -236,6 +239,30 @@ const Clients = () => {
 
     const openDropcowboyCampaigns = () => {
         setView("dropcowboy");
+    };
+
+    const openSmsCampaigns = () => {
+        setView("smscampaigns");
+    };
+
+    const openSmsDetails = (campaign) => {
+        setSelectedSmsCampaign(campaign);
+        setView("smsdetails");
+    };
+
+    const openContactModal = (contactId) => {
+        setSelectedContactId(contactId);
+        setView("contact");
+    };
+
+    const goBackToSmsCampaigns = () => {
+        setSelectedContactId(null);
+        setView("smscampaigns");
+    };
+
+    const goBackToSmsDetails = () => {
+        setSelectedSmsCampaign(null);
+        setView("smscampaigns");
     };
 
     const openCampaignDetails = (campaign) => {
@@ -641,6 +668,7 @@ const Clients = () => {
                     goBackToClients={goBackToClients}
                     openMauticCampaigns={openMauticCampaigns}
                     openDropcowboyCampaigns={openDropcowboyCampaigns}
+                    openSmsCampaigns={openSmsCampaigns}
                 />
             )}
 
@@ -681,6 +709,62 @@ const Clients = () => {
                     </h2>
 
                     <ClientsDropCowboyDashboard clientName={selectedClient.name} />
+                </div>
+            )}
+
+            {/* VIEW 6: SMS CAMPAIGNS LIST */}
+            {view === "smscampaigns" && selectedClient && (
+                <div className="animate-fade-in">
+                    <button
+                        onClick={goBackToServices}
+                        className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
+                    >
+                        <ArrowLeft className="w-5 h-5" />
+                        <span className="font-medium">Back to {selectedClient.name} Services</span>
+                    </button>
+
+                    <SmsList 
+                        clientId={selectedClient.id}
+                        onOpenStats={openSmsDetails}
+                    />
+                </div>
+            )}
+
+            {/* VIEW 7: SMS CAMPAIGN STATS */}
+            {view === "smsdetails" && selectedSmsCampaign && (
+                <div className="animate-fade-in">
+                    <button
+                        onClick={goBackToSmsDetails}
+                        className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
+                    >
+                        <ArrowLeft className="w-5 h-5" />
+                        <span className="font-medium">Back to SMS Campaigns</span>
+                    </button>
+
+                    <SmsStats 
+                        campaign={selectedSmsCampaign}
+                        isModal={false}
+                        onOpenContact={openContactModal}
+                    />
+                </div>
+            )}
+
+            {/* VIEW 8: CONTACT ACTIVITY */}
+            {view === "contact" && selectedContactId && (
+                <div className="animate-fade-in">
+                    <button
+                        onClick={goBackToSmsCampaigns}
+                        className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
+                    >
+                        <ArrowLeft className="w-5 h-5" />
+                        <span className="font-medium">Back to SMS Stats</span>
+                    </button>
+
+                    <ContactView 
+                        contactId={selectedContactId}
+                        smsId={selectedSmsCampaign?.id}
+                        isModal={false}
+                    />
                 </div>
             )}
 

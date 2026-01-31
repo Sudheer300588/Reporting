@@ -375,6 +375,7 @@ model MauticClient {
   emails        MauticEmail[]
   segments      MauticSegment[]
   campaigns     MauticCampaign[]
+  smses         MauticSms[]
   syncLogs      MauticSyncLog[]
   fetchedMonths MauticFetchedMonth[]
   emailReports  MauticEmailReport[]        @relation("ClientEmailReports")
@@ -509,6 +510,64 @@ model MauticCampaign {
   @@index([isPublished])
 }
 
+// ==========================================================
+// MAUTIC SMS INTEGRATION
+// ==========================================================
+model MauticSms {
+  id          Int     @id @default(autoincrement())
+  mauticId    String  @db.VarChar(255)
+  name        String  @db.VarChar(500)
+  category    Json?   // Store category as JSON { title: "...", id: ... }
+  sentCount   Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  clientId    Int
+  client      MauticClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  stats       MauticSmsStat[] @relation("SmsCampaignStats")
+  messages    MauticSmsMessage[] @relation("SmsMessages")
+
+  @@unique([clientId, mauticId])
+  @@index([clientId])
+  @@index([createdAt])
+}
+
+model MauticSmsStat {
+  id          Int       @id @default(autoincrement())
+  mauticSmsId Int
+  leadId      Int
+  dateSent    DateTime
+  isFailed    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  mauticSms   MauticSms @relation("SmsCampaignStats", fields: [mauticSmsId], references: [id], onDelete: Cascade)
+
+  @@index([mauticSmsId])
+  @@index([leadId])
+  @@index([dateSent])
+  @@index([isFailed])
+}
+// SMS Message Activity (sent and replies)
+model MauticSmsMessage {
+  id          Int       @id @default(autoincrement())
+  contactId   Int
+  mauticSmsId Int?
+  type        String    @db.VarChar(50) // "sent" or "reply"
+  message     String    @db.LongText
+  dateSent    DateTime
+  isFailed    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  mauticSms   MauticSms? @relation("SmsMessages", fields: [mauticSmsId], references: [id], onDelete: SetNull)
+
+  @@index([contactId])
+  @@index([mauticSmsId])
+  @@index([type])
+  @@index([dateSent])
+  @@unique([contactId, mauticSmsId, type, dateSent])
+}
 model MauticSyncLog {
   id              Int              @id @default(autoincrement())
   mauticClientId  Int

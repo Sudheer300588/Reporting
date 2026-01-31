@@ -741,6 +741,192 @@ class MauticAPIService {
   }
 
   /**
+   * Fetch all SMS campaigns from Mautic
+   * @param {Object} client - Client configuration
+   * @returns {Promise<Array>} Array of SMS campaign objects
+   */
+  async fetchSmses(client) {
+    try {
+      const apiClient = this.createClient(client);
+      const smses = [];
+      let start = 0;
+      const limit = 5000;
+      let hasMore = true;
+
+      console.log(`📱 Fetching SMS campaigns from ${client.name}...`);
+
+      while (hasMore) {
+        const response = await apiClient.get('/smses', {
+          params: {
+            start: start,
+            limit: limit,
+            orderBy: 'name',
+            orderByDir: 'ASC'
+          }
+        });
+
+        const data = response.data;
+
+        if (data.smses) {
+          const smsArray = Object.values(data.smses);
+          smses.push(...smsArray);
+          start += smsArray.length;
+
+          if (smsArray.length < limit) {
+            hasMore = false;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+
+      console.log(`✅ Fetched ${smses.length} SMS campaigns`);
+      return smses;
+    } catch (error) {
+      console.error(`Error fetching SMS campaigns: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch SMS delivery statistics for a specific campaign
+   * @param {Object} client - Client configuration
+   * @param {number} smsId - Mautic SMS campaign ID
+   * @param {number} limit - Records per request
+   * @returns {Promise<Object>} SMS stats with pagination
+   */
+  async fetchSmsStats(client, smsId, limit = 500) {
+    try {
+      const apiClient = this.createClient(client);
+      const stats = [];
+      let start = 0;
+      let total = limit; // Start with limit, will be updated from API response
+
+      console.log(`📊 Fetching SMS stats for campaign ${smsId} using /api/stats/sms_message_stats...`);
+
+      // Fetch SMS stats using the correct endpoint pattern from Mautic
+      while (start < total) {
+        const params = {
+          'where[0][col]': 'sms_id',
+          'where[0][expr]': 'eq',
+          'where[0][val]': smsId,
+          limit: limit,
+          start: start
+        };
+
+        try {
+          const response = await apiClient.get('/stats/sms_message_stats', { params });
+          const data = response.data;
+
+          // Mautic stats endpoint returns stats array directly
+          if (data.stats && Array.isArray(data.stats)) {
+            stats.push(...data.stats);
+            total = data.total || stats.length;
+            start += data.stats.length;
+
+            console.log(`  - Fetched ${data.stats.length} records (total so far: ${stats.length}/${total})`);
+
+            // If we got fewer records than limit, we've reached the end
+            if (data.stats.length < limit) {
+              break;
+            }
+          } else {
+            console.warn(`⚠️  Unexpected response structure for SMS stats`);
+            break;
+          }
+        } catch (err) {
+          console.error(`Error fetching SMS stats batch starting at ${start}: ${err.message}`);
+          // Non-fatal error - return what we've fetched so far
+          break;
+        }
+      }
+
+      console.log(`✅ Fetched ${stats.length} total SMS stats for campaign ${smsId}`);
+
+      return {
+        success: true,
+        smsId,
+        stats,
+        totalFetched: stats.length
+      };
+    } catch (error) {
+      console.error(`Error fetching SMS stats for campaign ${smsId}: ${error.message}`);
+      // Return empty stats instead of throwing (non-fatal)
+      return {
+        success: true,
+        smsId,
+        stats: [],
+        totalFetched: 0
+      };
+    }
+  }
+
+  /**
+   * Fetch and store SMS messages for all contacts with SMS activity
+   * This is called during sync to populate the database with full message content
+   * @param {Object} client - Client configuration
+   * @returns {Promise<Object>} Sync results for SMS messages
+   */
+  async fetchAndStoreSmsMessages(client) {
+    const { default: smsService } = await import('./smsService.js');
+    
+    try {
+      console.log(`💬 Fetching SMS messages for ${client.name}...`);
+      
+      const apiClient = this.createClient(client);
+      
+      // Get all SMS stats (contacts that received SMS)
+      const stats = await prisma.mauticSmsStat.findMany({
+        where: {
+          mauticSms: { clientId: client.id }
+        },
+        select: { leadId: true },
+        distinct: ['leadId']
+      });
+
+      const uniqueContactIds = [...new Set(stats.map(s => s.leadId))];
+      console.log(`   Found ${uniqueContactIds.length} contacts with SMS activity`);
+
+      let totalMessages = 0;
+      let contactsFailed = 0;
+
+      // Fetch activity for each contact
+      for (const contactId of uniqueContactIds) {
+        try {
+          // Fetch activity from Mautic API
+          const events = await smsService.fetchContactActivity(apiClient, contactId);
+          
+          if (events.length > 0) {
+            // Store messages in database
+            const result = await smsService.storeSmsMessages(client.id, contactId, events);
+            totalMessages += result.created;
+            console.log(`   ✅ Contact ${contactId}: stored ${result.created} messages`);
+          }
+        } catch (err) {
+          contactsFailed++;
+          console.warn(`   ⚠️  Failed to fetch messages for contact ${contactId}: ${err.message}`);
+        }
+      }
+
+      console.log(`✅ SMS messages sync complete: ${totalMessages} messages stored, ${contactsFailed} contacts failed`);
+      
+      return {
+        success: true,
+        totalMessages,
+        contactsProcessed: uniqueContactIds.length,
+        contactsFailed
+      };
+    } catch (error) {
+      console.error(`Error fetching SMS messages for client ${client.name}:`, error.message);
+      return {
+        success: false,
+        error: error.message,
+        totalMessages: 0
+      };
+    }
+  }
+
+  /**
    * Sync all data for a client (emails, campaigns, segments, reports)
    * Email reports are saved to database during fetch (streaming)
    * ⚡ ULTRA OPTIMIZED: Skips metadata on incremental sync for 1000x speed!
@@ -759,20 +945,33 @@ class MauticAPIService {
       let emails = [];
       let campaigns = [];
       let segments = [];
+      let smses = [];
 
       if (!hasExistingData) {
         // Full initial sync: fetch metadata (but skip slow individual stats!)
-        console.log(`🚀 INITIAL SYNC - Fetching metadata (emails/campaigns/segments)...`);
+        console.log(`🚀 INITIAL SYNC - Fetching metadata (emails/campaigns/segments/smses)...`);
         const results = await Promise.all([
           this.fetchEmails(client, false), // ⚡ FALSE = NO individual stats fetch!
           this.fetchCampaigns(client),
-          this.fetchSegments(client)
+          this.fetchSegments(client),
+          this.fetchSmses(client).catch(err => {
+            console.warn('SMS fetch failed (non-fatal):', err.message);
+            return [];
+          })
         ]);
         emails = results[0] || [];
         campaigns = results[1] || [];
         segments = results[2] || [];
+        smses = results[3] || [];
       } else {
         console.log(`⚡⚡⚡ INCREMENTAL SYNC for ${client.name} — SKIPPING metadata fetch for MAXIMUM SPEED! ⚡⚡⚡`);
+        // Still try to fetch SMS campaigns in incremental sync
+        try {
+          smses = await this.fetchSmses(client);
+        } catch (err) {
+          console.warn('SMS fetch failed in incremental sync (non-fatal):', err.message);
+          smses = [];
+        }
       }
 
       // Retrieve unique contact count from Mautic (avoid summing segment counts which may double-count)
@@ -803,16 +1002,25 @@ class MauticAPIService {
       // This is a long-running operation that saves directly to DB
       const emailReportResult = await this.fetchReport(client);
 
+      // Fetch and store SMS messages after stats are synced
+      const smsMessagesResult = await this.fetchAndStoreSmsMessages(client);
+
       return {
         success: true,
         data: {
           emails,
           campaigns,
           segments,
+          smses,
           emailReports: {
             totalRows: emailReportResult.totalRows,
             created: emailReportResult.created,
             skipped: emailReportResult.skipped
+          },
+          smsMessages: {
+            totalMessages: smsMessagesResult.totalMessages,
+            contactsProcessed: smsMessagesResult.contactsProcessed,
+            contactsFailed: smsMessagesResult.contactsFailed
           }
         }
       };

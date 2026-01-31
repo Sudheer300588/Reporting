@@ -368,6 +368,40 @@ CREATE TABLE `MauticCampaign` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
+CREATE TABLE `MauticSms` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `mauticId` VARCHAR(255) NOT NULL,
+    `name` VARCHAR(500) NOT NULL,
+    `category` JSON NULL,
+    `sentCount` INTEGER NOT NULL DEFAULT 0,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+    `clientId` INTEGER NOT NULL,
+
+    INDEX `MauticSms_clientId_idx`(`clientId`),
+    INDEX `MauticSms_createdAt_idx`(`createdAt`),
+    UNIQUE INDEX `MauticSms_clientId_mauticId_key`(`clientId`, `mauticId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `MauticSmsStat` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `mauticSmsId` INTEGER NOT NULL,
+    `leadId` INTEGER NOT NULL,
+    `dateSent` DATETIME(3) NOT NULL,
+    `isFailed` BOOLEAN NOT NULL DEFAULT false,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    INDEX `MauticSmsStat_mauticSmsId_idx`(`mauticSmsId`),
+    INDEX `MauticSmsStat_leadId_idx`(`leadId`),
+    INDEX `MauticSmsStat_dateSent_idx`(`dateSent`),
+    INDEX `MauticSmsStat_isFailed_idx`(`isFailed`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
 CREATE TABLE `MauticSyncLog` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `mauticClientId` INTEGER NOT NULL,
@@ -675,6 +709,12 @@ ALTER TABLE `MauticSegment` ADD CONSTRAINT `MauticSegment_clientId_fkey` FOREIGN
 
 -- AddForeignKey
 ALTER TABLE `MauticCampaign` ADD CONSTRAINT `MauticCampaign_clientId_fkey` FOREIGN KEY (`clientId`) REFERENCES `MauticClient`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `MauticSms` ADD CONSTRAINT `MauticSms_clientId_fkey` FOREIGN KEY (`clientId`) REFERENCES `MauticClient`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `MauticSmsStat` ADD CONSTRAINT `MauticSmsStat_mauticSmsId_fkey` FOREIGN KEY (`mauticSmsId`) REFERENCES `MauticSms`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `MauticSyncLog` ADD CONSTRAINT `MauticSyncLog_mauticClientId_fkey` FOREIGN KEY (`mauticClientId`) REFERENCES `MauticClient`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;

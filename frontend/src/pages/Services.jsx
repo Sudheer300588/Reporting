@@ -14,6 +14,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { DropCowboyDashboard } from '../components/dropCowboy';
 import { MauticDashboard } from '../components/mautic';
+import SmsList from '../components/mautic/SmsList';
 import VicidialDashboard from '../components/vicidial/pages/VicidialDashboard';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../utils/permissions';
@@ -159,6 +160,20 @@ export default function Services() {
                             >
                                 <span>Email Marketing</span>
                             </button>
+
+                            <button
+                                onClick={() => setSelectedService('sms')}
+                                className={`
+                  flex items-center gap-2 px-4 py-4 border-b-2 font-medium text-sm transition-colors
+                  ${selectedService === 'sms'
+                                        ? 'border-blue-500 text-blue-600'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                    }
+                `}
+                            >
+                                <span>SMS Campaigns</span>
+                            </button>
+
                             <button
                                 onClick={() => setSelectedService('vicidial')}
                                 className={`
@@ -183,6 +198,9 @@ export default function Services() {
                 )}
                 {selectedService === 'mautic' && (
                     <MauticDashboard accessibleClientIds={accessibleClientIds} />
+                )}
+                {selectedService === 'sms' && (
+                    <SmsList />
                 )}
                 {selectedService === 'vicidial' && (
                     <VicidialDashboard accessibleClientIds={accessibleClientIds} />

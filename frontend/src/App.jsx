@@ -16,6 +16,8 @@ import LoginPage from './pages/LoginPage.jsx'
 import SignupPage from './pages/SignupPage.jsx'
 import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx'
 import VicidialDashboard from './components/vicidial/pages/VicidialDashboard.jsx'
+import SmsStats from './components/mautic/SmsStats.jsx'
+import ContactView from './components/mautic/ContactView.jsx'
 
 // Lazy load dashboard and feature pages (code splitting)
 const Dashboard = lazy(() => import('./pages/Dashboard.jsx'))
@@ -55,7 +57,9 @@ function App() {
     { path: '/employees', element: <HierarchyPage /> },
     // NEW — Agents page route
     { path: "/agents", element: <VicidialDashboard /> },
-
+    // SMS routes
+    { path: '/sms/:id', element: <SmsStats /> },
+    { path: '/contact/:id', element: <ContactView /> },
   ]
 
   return (

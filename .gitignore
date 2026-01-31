@@ -19,6 +19,9 @@ backend/.env*
 /build
 /dist
 
+# Test folder
+/backend/test
+
 # Logs
 /backend/logs
 /frontend/logs
