@@ -41,6 +41,10 @@ const Clients = () => {
         managerId: "",
         userIds: [],
     });
+    
+    // SMS Campaign and Contact states
+    const [selectedSmsCampaign, setSelectedSmsCampaign] = useState(null);
+    const [selectedContactId, setSelectedContactId] = useState(null);
 
     const fetchClients = async () => {
         try {

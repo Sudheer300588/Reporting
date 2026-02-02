@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, X } from "lucide-react";
 import axios from "axios";
 import { useMauticStore } from "../../zustand/useMauticStore";
@@ -8,7 +8,8 @@ export default function SmsStats({ onBack, campaign, isModal = false, onOpenCont
     // Support both route params and modal prop-based usage
     const { id: routeId } = useParams();
     const smsId = campaign?.id || routeId;
-    
+    const location = useLocation();
+
     const navigate = useNavigate();
     const { smsStatsCache, setSmsStats } = useMauticStore();
 
@@ -73,6 +74,9 @@ export default function SmsStats({ onBack, campaign, isModal = false, onOpenCont
         }
     };
 
+    // Show back button only if opened via /sms/... route (Services page)
+    const isStandaloneRoute = location.pathname.startsWith("/sms/");
+
     const {
         stats = [],
         campaignName = "",
@@ -82,26 +86,19 @@ export default function SmsStats({ onBack, campaign, isModal = false, onOpenCont
     } = statsData || {};
 
     const content = (
-        <div className="animate-fade-in flex flex-col bg-gradient-to-b from-white to-gray-50 h-full">
-            {/* Back Button */}
-            <div className="flex items-center justify-between mb-4">
-                <button
-                    onClick={() => onBack ? onBack() : navigate(-1)}
-                    className="flex items-center gap-2 text-gray-700 hover:text-blue-600 font-semibold transition-colors cursor-pointer"
-                >
-                    <ArrowLeft size={18} />
-                    <span>Back</span>
-                </button>
-                {isModal && (
+        <div className="w-full h-[calc(100vh-90px)] animate-fade-in flex flex-col">
+            {/* Optional Back Button (only for standalone route usage) */}
+            {isStandaloneRoute && (
+                <div className="flex items-center justify-between mb-4">
                     <button
-                        onClick={onBack}
-                        className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-                        title="Close"
+                        onClick={() => navigate('/services')}
+                        className="flex items-center gap-2 text-gray-700 hover:text-blue-600 font-semibold transition-colors cursor-pointer"
                     >
-                        <X size={20} />
+                        <ArrowLeft size={18} />
+                        <span>Back</span>
                     </button>
-                )}
-            </div>
+                </div>
+            )}
 
             {/* Title */}
             <h1 className="text-2xl font-bold text-gray-800 tracking-tight">
@@ -241,8 +238,8 @@ export default function SmsStats({ onBack, campaign, isModal = false, onOpenCont
                                     onKeyDown={(e) => e.key === "Enter" && handleGoto()}
                                     placeholder="Page #"
                                     className={`w-20 px-3 py-2 rounded-lg text-sm font-medium border focus:ring-2 focus:ring-blue-500 ${gotoInvalid
-                                            ? "border-red-500 ring-1 ring-red-300"
-                                            : "border-gray-300"
+                                        ? "border-red-500 ring-1 ring-red-300"
+                                        : "border-gray-300"
                                         }`}
                                 />
                                 <button
@@ -259,22 +256,9 @@ export default function SmsStats({ onBack, campaign, isModal = false, onOpenCont
         </div>
     );
 
-    // If modal mode, wrap in modal container
-    if (isModal) {
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                <div className="bg-white rounded-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden">
-                    <div className="p-6 overflow-auto flex-1">
-                        {content}
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    // Otherwise, return full page layout
+    // Return full page layout
     return (
-        <div className="p-6 h-[calc(100vh-90px)] flex flex-col">
+        <div className="w-full h-full flex flex-col p-6">
             {content}
         </div>
     );

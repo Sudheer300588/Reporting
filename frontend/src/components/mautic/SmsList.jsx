@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useMauticStore } from "../../zustand/useMauticStore";
 
-export default function SmsList({ onCampaignSelect, clientId, onOpenStats }) {
+export default function SmsList({ onCampaignSelect, clientId, onOpenStats, accessibleClientIds = null }) {
     const navigate = useNavigate();
     const { smsCampaigns, setSmsCampaigns } = useMauticStore();
     const [loading, setLoading] = useState(false);
@@ -13,14 +13,24 @@ export default function SmsList({ onCampaignSelect, clientId, onOpenStats }) {
         setLoading(true);
         const baseUrl = import.meta.env.VITE_API_URL || "";
         axios.get(`${baseUrl}/api/mautic/smses`)
-            .then((res) => setSmsCampaigns(res.data.data))
+            .then((res) => setSmsCampaigns(res.data?.data || []))
+            .catch((err) => {
+                console.error("Failed to fetch SMS campaigns:", err);
+            })
             .finally(() => setLoading(false));
     }, [smsCampaigns, setSmsCampaigns]);
 
     // Filter campaigns by clientId if provided (for Clients.jsx context)
-    const filteredCampaigns = clientId 
+    let filteredCampaigns = clientId
         ? smsCampaigns.filter(sms => sms.clientId === clientId)
         : smsCampaigns;
+
+    // Further restrict to accessible clients if provided
+    if (Array.isArray(accessibleClientIds) && accessibleClientIds.length > 0) {
+        filteredCampaigns = filteredCampaigns.filter((sms) =>
+            accessibleClientIds.includes(sms.clientId)
+        );
+    }
 
     const handleRowClick = (sms) => {
         // If onOpenStats provided, open as modal (Task 3)
@@ -42,7 +52,7 @@ export default function SmsList({ onCampaignSelect, clientId, onOpenStats }) {
     if (loading) return <div className="p-8 text-gray-600">Loading...</div>;
 
     return (
-        <div className="p-6 animate-fade-in flex flex-col bg-gradient-to-b from-white to-gray-50">
+        <div className="w-full h-full flex flex-col bg-gradient-to-b from-white to-gray-50 p-6 animate-fade-in">
             <h1 className="text-3xl font-bold mb-6 text-gray-800">📱 SMS Campaigns</h1>
 
             <div className="flex-1 overflow-auto bg-white rounded-2xl border border-gray-200 shadow-md">

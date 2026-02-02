@@ -200,7 +200,7 @@ export default function Services() {
                     <MauticDashboard accessibleClientIds={accessibleClientIds} />
                 )}
                 {selectedService === 'sms' && (
-                    <SmsList />
+                    <SmsList accessibleClientIds={accessibleClientIds} />
                 )}
                 {selectedService === 'vicidial' && (
                     <VicidialDashboard accessibleClientIds={accessibleClientIds} />
