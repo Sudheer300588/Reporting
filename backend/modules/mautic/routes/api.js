@@ -3,6 +3,7 @@ import express from "express";
 import mauticAPI from "../services/mauticAPI.js";
 import dataService from "../services/dataService.js";
 import statsService from "../services/statsService.js";
+import smsService from "../services/smsService.js";
 import MauticSchedulerService from "../services/schedulerService.js";
 import encryptionService from "../services/encryption.js";
 import prisma from "../../../prisma/client.js";
@@ -13,9 +14,13 @@ import {
 import DropCowboyDataService from "../../dropCowboy/services/dataService.js";
 import DropCowboyScheduler from "../../dropCowboy/services/schedulerService.js";
 import { authenticate, hasFullAccess, getAccessibleClientIds } from '../../../middleware/auth.js';
+import smsClientRoutes from './smsClient.js';
 
 const router = express.Router();
 const schedulerService = new MauticSchedulerService();
+
+// SMS Client routes
+router.use('/', smsClientRoutes);
 
 // Track ongoing sync operations
 let isSyncInProgress = false;
@@ -233,6 +238,27 @@ router.get("/clients/:clientId/campaigns", async (req, res) => {
       .json({
         success: false,
         message: "Failed to fetch campaigns",
+        error: error.message,
+      });
+  }
+});
+
+// Get SMS campaigns for a specific Mautic client
+router.get("/clients/:clientId/sms", async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const smsCampaigns = await prisma.mauticSms.findMany({
+      where: { clientId: parseInt(clientId) },
+      orderBy: { id: 'asc' }
+    });
+    res.json({ success: true, data: smsCampaigns });
+  } catch (error) {
+    logger.error(error);
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Failed to fetch SMS campaigns",
         error: error.message,
       });
   }
@@ -492,6 +518,16 @@ router.post("/clients", async (req, res) => {
         },
       });
       logger.debug(`✨ Created new Mautic client: ${name} (ID: ${client.id})`);
+
+      // Reassign orphaned SMS that match this client's name prefix
+      try {
+        const reassignedCount = await smsService.reassignOrphanedSms(client.id);
+        if (reassignedCount > 0) {
+          logger.info(`Reassigned ${reassignedCount} SMS campaigns to Mautic client "${name}"`);
+        }
+      } catch (reassignError) {
+        logger.error(`Failed to reassign SMS for client ${client.id}:`, reassignError);
+      }
 
       // Start background month-by-month backfill (non-blocking)
       // Calculate backfill range based on MAUTIC_HISTORICAL_MONTHS config
@@ -1839,6 +1875,140 @@ router.post("/sync/:clientId", async (req, res) => {
       success: false,
       message: "Failed to sync client",
       error: error.message,
+    });
+  }
+});
+
+// ============================================
+// SMS CAMPAIGNS ROUTES
+// ============================================
+
+/**
+ * GET /api/mautic/smses
+ * Get all SMS campaigns (from all clients)
+ * Supports role-based access control
+ */
+router.get("/smses", authenticate, async (req, res) => {
+  try {
+    const accessibleClientIds = await getAccessibleClientIds(req);
+    
+    const campaigns = await smsService.getAllSmsCampaigns(accessibleClientIds);
+
+    res.json({
+      success: true,
+      data: campaigns
+    });
+  } catch (error) {
+    logger.error("Failed to fetch SMS campaigns:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch SMS campaigns",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/mautic/smses/:id/stats
+ * Get statistics for a specific SMS campaign
+ */
+router.get("/smses/:id/stats", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { page = 1, limit = 100 } = req.query;
+
+    const sms = await prisma.mauticSms.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        client: { select: { name: true } },
+        smsClient: { select: { name: true } }
+      }
+    });
+
+    if (!sms) {
+      return res.status(404).json({
+        success: false,
+        message: "SMS campaign not found"
+      });
+    }
+
+    const stats = await smsService.getCampaignStats(parseInt(id), {
+      page: parseInt(page),
+      limit: parseInt(limit)
+    });
+
+    res.json({
+      success: true,
+      data: {
+        campaignName: sms.name,
+        clientName: sms.client?.name || sms.smsClient?.name || 'Unknown',
+        ...stats
+      }
+    });
+  } catch (error) {
+    logger.error("Failed to fetch SMS stats:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch SMS statistics",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/mautic/smses/:smsId/contacts/:contactId
+ * Get SMS activity for a specific contact
+ */
+router.get("/smses/:smsId/contacts/:contactId", async (req, res) => {
+  try {
+    const { smsId, contactId } = req.params;
+
+    // Get SMS campaign and its client
+    const sms = await prisma.mauticSms.findUnique({
+      where: { id: parseInt(smsId) },
+      include: {
+        client: true,
+        smsClient: true
+      }
+    });
+
+    if (!sms) {
+      return res.status(404).json({
+        success: false,
+        message: "SMS campaign not found"
+      });
+    }
+
+    // Use the appropriate client to fetch activity
+    const client = sms.client || sms.smsClient;
+    if (!client) {
+      return res.status(404).json({
+        success: false,
+        message: "No client associated with this SMS campaign"
+      });
+    }
+
+    // Fetch activity from Mautic API
+    const activity = await mauticAPI.fetchContactSmsActivity(
+      client,
+      parseInt(contactId),
+      sms.mauticId
+    );
+
+    res.json({
+      success: true,
+      data: {
+        contact: { id: parseInt(contactId) },
+        campaign: { id: sms.id, name: sms.name },
+        events: activity
+      }
+    });
+  } catch (error) {
+    logger.error("Failed to fetch contact SMS activity:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch contact activity",
+      error: error.message
     });
   }
 });

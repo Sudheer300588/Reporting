@@ -5,7 +5,7 @@
  */
 
 import React, { useState } from 'react';
-import { RefreshCw, AlertCircle, Mail, List, Target } from 'lucide-react';
+import { RefreshCw, AlertCircle, Mail, List, Target, MessageSquare } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useDashboardMetrics, useClients, useSync } from '../../hooks/mautic';
 import MetricsCards from './MetricsCards';
@@ -13,12 +13,13 @@ import ClientSelector from './ClientSelector';
 import CampaignsSection from './CampaignsSection';
 import EmailsSection from './EmailsSection'; // This shows Emails
 import SegmentsSection from './SegmentsSection';
+import SmsSection from './SmsSection';
 
 export default function MauticDashboard({ clientId = null, clientName = null, accessibleClientIds = null }) {
   // If clientId is provided (from ClientDashboard), use it and lock it
   const [selectedClientId, setSelectedClientId] = useState(clientId);
   
-  const [activeTab, setActiveTab] = useState('campaigns'); // 'campaigns', 'emails', 'segments'
+  const [activeTab, setActiveTab] = useState('campaigns'); // 'campaigns', 'emails', 'segments', 'sms'
   
   const { clients, loading: clientsLoading, refetch: refetchClients } = useClients();
   const { metrics, loading, error, refetch } = useDashboardMetrics(selectedClientId || clientId);
@@ -226,6 +227,20 @@ export default function MauticDashboard({ clientId = null, clientName = null, ac
                   <List className="w-4 h-4" />
                   <span>Segments</span>
                 </button>
+
+                <button
+                  onClick={() => setActiveTab('sms')}
+                  className={`
+                    flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors
+                    ${activeTab === 'sms'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }
+                  `}
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>SMS Campaigns</span>
+                </button>
               </nav>
             </div>
           </div>
@@ -235,6 +250,7 @@ export default function MauticDashboard({ clientId = null, clientName = null, ac
             {activeTab === 'campaigns' && <CampaignsSection clientId={selectedClientId} refreshKey={refreshKey} accessibleClientIds={accessibleClients.map(c => c.id)} />}
             {activeTab === 'emails' && <EmailsSection clientId={selectedClientId} refreshKey={refreshKey} accessibleClientIds={accessibleClients.map(c => c.id)} />}
             {activeTab === 'segments' && <SegmentsSection clientId={selectedClientId} refreshKey={refreshKey} accessibleClientIds={accessibleClients.map(c => c.id)} />}
+            {activeTab === 'sms' && <SmsSection clientId={selectedClientId} refreshKey={refreshKey} accessibleClientIds={accessibleClients.map(c => c.id)} />}
           </div>
         </>
       )}

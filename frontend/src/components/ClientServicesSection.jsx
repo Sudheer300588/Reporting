@@ -1,22 +1,34 @@
 import { useEffect } from "react";
-import { Mail, PhoneOff, ArrowLeft } from "lucide-react";
+import { Mail, PhoneOff, MessageSquare, ArrowLeft } from "lucide-react";
 import MauticServiceStats from "./mautic/MauticServiceStats";
 import EmailPerformanceWidget from "./widgets/EmailPerformanceWidget";
 import VoicemailPerformanceWidget from "./widgets/VoicemailPerformanceWidget";
 import useViewLevel from "../zustand/useViewLevel";
 import { useDashboardMetrics } from "../hooks/mautic";
 
-const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCampaigns, openDropcowboyCampaigns }) => {
+const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCampaigns, openDropcowboyCampaigns, openSmsCampaigns }) => {
 
     const { selectedService, setSelectedService } = useViewLevel();
     // Fetch per-client dashboard metrics (kept as a top-level hook to preserve hook order)
     const { metrics } = useDashboardMetrics(selectedClient?.mauticApiId || null);
+    
+    // Auto-navigate to SMS campaigns for SMS-only clients
+    useEffect(() => {
+        if (selectedClient?.reportId === 'sms-only') {
+            openSmsCampaigns();
+        }
+    }, [selectedClient, openSmsCampaigns]);
     
     useEffect(() => {
         if (selectedService === null) {
             setSelectedService(selectedClient.services[0] || 'mautic');
         }
     }, [selectedClient, selectedService, setSelectedService]);
+
+    // For SMS-only clients, return null while navigating
+    if (selectedClient?.reportId === 'sms-only') {
+        return null;
+    }
 
     return (
         <div className="animate-fade-in">
@@ -147,6 +159,28 @@ const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCamp
                                 <span className="text-gray-900 font-medium">Ringless Voicemail</span>
                             </td>
                             <td className="px-4 py-3 text-gray-600">Voicemail Campaigns</td>
+                            <td className="px-4 py-3 text-center">
+                                <span className="flex items-center justify-center gap-2">
+                                    <span className={`w-3 h-3 rounded-full ${selectedClient.isActive ? "bg-green-500" : "bg-gray-400"}`}></span>
+                                    <span className="text-sm font-medium">
+                                        {selectedClient.isActive ? "Active" : "Inactive"}
+                                    </span>
+                                </span>
+                            </td>
+                        </tr>
+
+                        {/* SMS Campaigns Service */}
+                        <tr
+                            className={`transition-colors ${selectedClient.services.includes('mautic') ? 'hover:bg-gray-50 cursor-pointer' : 'cursor-not-allowed opacity-70 bg-gray-100 hover:bg-gray-100'}`}
+                            onClick={selectedClient.services.includes('mautic') ? openSmsCampaigns : undefined}
+                        >
+                            <td className="px-4 py-3 flex items-center gap-3">
+                                <div className="p-3 bg-purple-100 rounded-lg">
+                                    <MessageSquare className="w-6 h-6 text-purple-600" />
+                                </div>
+                                <span className="text-gray-900 font-medium">SMS Campaigns</span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-600">SMS Marketing Messages</td>
                             <td className="px-4 py-3 text-center">
                                 <span className="flex items-center justify-center gap-2">
                                     <span className={`w-3 h-3 rounded-full ${selectedClient.isActive ? "bg-green-500" : "bg-gray-400"}`}></span>

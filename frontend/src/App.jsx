@@ -55,7 +55,6 @@ function App() {
     { path: '/employees', element: <HierarchyPage /> },
     // NEW — Agents page route
     { path: "/agents", element: <VicidialDashboard /> },
-
   ]
 
   return (

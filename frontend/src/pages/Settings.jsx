@@ -3,6 +3,7 @@ import {
   SettingsHeader,
   RolesAndPermissions,
   MauticSettings,
+  SmsClientsSettings,
   NotificationsSettings,
   MaintenanceEmail,
   SmtpCredentials,
@@ -18,6 +19,7 @@ const Settings = () => {
       <SettingsHeader />
       <RolesAndPermissions />
       <MauticSettings />
+      <SmsClientsSettings />
       <NotificationsSettings />
       <MaintenanceEmail />
       <SmtpCredentials />

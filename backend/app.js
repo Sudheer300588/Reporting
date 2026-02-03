@@ -83,11 +83,11 @@ export function createApp() {
   // STATIC FILE SERVING
   // ============================================
   
-  // Serve frontend build
-  app.use(express.static(path.join(__dirname, 'dist')));
+  // Serve frontend build (only in production - disabled in dev mode)
+  // app.use(express.static(path.join(__dirname, 'dist')));
 
   // Serve uploaded assets (dev + runtime)
-  app.use('/assets', express.static(path.join(__dirname, '..', 'frontend', 'public', 'assets')));
+  // app.use('/assets', express.static(path.join(__dirname, '..', 'frontend', 'public', 'assets')));
 
   // ============================================
   // PUBLIC API ROUTES
