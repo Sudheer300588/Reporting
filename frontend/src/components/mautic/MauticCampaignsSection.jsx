@@ -300,6 +300,12 @@ const MauticCampaignsSection = ({ campaigns, selectedClient, loadingCampaigns, g
                                                 Read Rate
                                             </div>
                                         </th>
+                                        <th className="px-4 py-3 text-center text-xs font-bold text-purple-700 uppercase tracking-wider">
+                                            <div className="flex items-center justify-center gap-1">
+                                                <Users className="w-4 h-4" />
+                                                Unique Clicks
+                                            </div>
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-100">
@@ -318,6 +324,9 @@ const MauticCampaignsSection = ({ campaigns, selectedClient, loadingCampaigns, g
                                             campaignRead = campaign.emails.reduce((a, e) => a + e.readCount, 0);
                                         }
                                         const readPercentage = campaignSent ? ((campaignRead / campaignSent) * 100).toFixed(2) : 0;
+                                        
+                                        // Calculate unique clicks for this campaign
+                                        const campaignUniqueClicks = campaign.emails.reduce((sum, email) => sum + (email.uniqueClicks || 0), 0);
 
                                         return (
                                             <tr
@@ -357,6 +366,15 @@ const MauticCampaignsSection = ({ campaigns, selectedClient, loadingCampaigns, g
                                                     ) : (
                                                         <span className="text-gray-400 text-xs">N/A</span>
                                                     )}
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <div className="flex flex-col items-center">
+                                                        <span className="text-sm font-bold text-purple-800">
+                                                            <Users className="w-4 h-4 inline mr-1 text-purple-600" />
+                                                            {campaignUniqueClicks.toLocaleString()}
+                                                        </span>
+                                                        <span className="text-xs text-gray-500">unique visitors</span>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         );

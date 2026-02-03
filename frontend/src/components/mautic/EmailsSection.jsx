@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Mail, TrendingUp, Eye, MousePointerClick, UserX, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { Mail, TrendingUp, Eye, MousePointerClick, UserX, Users, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { useEmails } from '../../hooks/mautic';
 import { formatNumber, formatPercentage, formatDate } from '../../utils/mautic';
 
@@ -98,6 +98,9 @@ export default function EmailsSection({ clientId, refreshKey, accessibleClientId
                                 Click Rate
                             </th>
                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Unique Clicks
+                            </th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Unsubscribe
                             </th>
                         </tr>
@@ -159,6 +162,17 @@ export default function EmailsSection({ clientId, refreshKey, accessibleClientId
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right">
                                         <div className="flex items-center justify-end gap-1">
+                                            <Users size={14} className="text-purple-600" />
+                                            <span className="text-sm font-bold text-purple-900">
+                                                {formatNumber(email.uniqueClicks || 0)}
+                                            </span>
+                                        </div>
+                                        <div className="text-xs text-gray-500">
+                                            unique visitors
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                                        <div className="flex items-center justify-end gap-1">
                                             <UserX size={14} className="text-red-400" />
                                             <span className="text-sm font-medium text-gray-900">
                                                 {formatPercentage(email.unsubscribeRate)}
@@ -172,7 +186,7 @@ export default function EmailsSection({ clientId, refreshKey, accessibleClientId
                             ))
                         ) : (
                             <tr>
-                                <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
+                                <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
                                     No emails found
                                 </td>
                             </tr>

@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import cookieSession from 'cookie-session';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import helmet from 'helmet';
@@ -48,8 +49,18 @@ export function createApp() {
     crossOriginEmbedderPolicy: false
   }));
 
-  // CORS
-  app.use(cors());
+  // CORS (allow credentials for cookie-based sessions)
+  app.use(cors({ origin: process.env.FRONTEND_ORIGIN || true, credentials: true }));
+
+  // Cookie-based session middleware (24h expiry)
+  app.use(cookieSession({
+    name: 'session',
+    keys: [process.env.SESSION_SECRET || process.env.JWT_SECRET || 'change_this_in_prod'],
+    maxAge: 2 * 60 * 1000, // 2 minutes
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax'
+  }));
   
 
 

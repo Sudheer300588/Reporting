@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -379,6 +379,7 @@ model MauticClient {
   fetchedMonths MauticFetchedMonth[]
   emailReports  MauticEmailReport[]        @relation("ClientEmailReports")
   emailStatsCache MauticEmailStatsCache[]  @relation("ClientEmailStatsCache")
+  clickTrackables MauticClickTrackable[]
 
   @@unique([name])
   @@index([isActive])
@@ -397,6 +398,7 @@ model MauticEmail {
   sentCount       Int       @default(0)
   readCount       Int       @default(0)
   clickedCount    Int       @default(0)
+  uniqueClicks    Int       @default(0)
   unsubscribed    Int       @default(0)
   bounced         Int       @default(0)
   readRate        Decimal   @default(0) @db.Decimal(5, 2)
@@ -438,6 +440,25 @@ model MauticEmailReport {
   @@index([eId])
   @@index([clientId])
   @@index([dateSent])
+}
+
+// Store click/redirect stats per email (from channel_url_trackables)
+model MauticClickTrackable {
+  id          Int      @id @default(autoincrement())
+  redirectId  String   @db.VarChar(255)
+  hits        Int      @default(0)
+  uniqueHits  Int      @default(0)
+  channelId   Int      // Mautic channel id (email id)
+  url         String?  @db.VarChar(1000)
+  clientId    Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client MauticClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, redirectId], map: "mautic_click_redirect_unique")
+  @@index([clientId])
+  @@index([channelId])
 }
 
 model MauticEmailStatsCache {

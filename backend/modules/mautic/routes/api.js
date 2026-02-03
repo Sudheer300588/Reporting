@@ -84,6 +84,28 @@ router.get("/clients/:clientId/emails", async (req, res) => {
       },
     });
 
+    // Attach unique click counts (from MauticClickTrackable) to emails when available
+    try {
+      const mauticIds = emails.map(e => parseInt(e.mauticEmailId || '0')).filter(Boolean);
+      if (mauticIds.length > 0) {
+        const clickSums = await prisma.mauticClickTrackable.groupBy({
+          by: ['channelId'],
+          where: { channelId: { in: mauticIds }, clientId: parseInt(clientId) },
+          _sum: { uniqueHits: true, hits: true }
+        });
+        const clickMap = new Map(clickSums.map(c => [c.channelId, c._sum]));
+        emails.forEach(email => {
+          const mid = parseInt(email.mauticEmailId || '0');
+          const sums = clickMap.get(mid) || { uniqueHits: 0, hits: 0 };
+          email.uniqueClicks = sums.uniqueHits || 0;
+          email.clickHits = sums.hits || 0;
+        });
+      }
+    } catch (e) {
+      // ignore if table/model missing or grouping fails
+      logger.warn('Failed to attach unique click counts to emails (non-fatal):', e.message || e);
+    }
+
     // If date filter is applied, we need to calculate filtered stats
     if (fromDate || toDate) {
       const reportWhere = { clientId: parseInt(clientId) };

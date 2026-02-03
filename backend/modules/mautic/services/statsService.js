@@ -111,6 +111,7 @@ class StatsService {
           take: 10,
           select: {
             id: true,
+            mauticEmailId: true,
             name: true,
             subject: true,
             sentCount: true,
@@ -130,6 +131,38 @@ class StatsService {
 
       const stats = StatsService.formatStats(emailAggregate);
 
+      // Aggregate click trackable totals (hits + uniqueHits)
+      let clickAgg = { _sum: { hits: 0, uniqueHits: 0 } };
+      try {
+        clickAgg = await prisma.mauticClickTrackable.aggregate({
+          where: clientFilter || {},
+          _sum: { hits: true, uniqueHits: true }
+        });
+      } catch (e) {
+        // non-fatal
+      }
+
+      // Attach unique clicks to topEmails
+      try {
+        const mauticIds = topEmails.map(e => parseInt(e.mauticEmailId || '0')).filter(Boolean);
+        if (mauticIds.length > 0) {
+          const clickSums = await prisma.mauticClickTrackable.groupBy({
+            by: ['channelId'],
+            where: { channelId: { in: mauticIds }, ...(clientFilter || {}) },
+            _sum: { hits: true, uniqueHits: true }
+          });
+          const clickMap = new Map(clickSums.map(c => [c.channelId, c._sum]));
+          topEmails.forEach(email => {
+            const mid = parseInt(email.mauticEmailId || '0');
+            const sums = clickMap.get(mid) || { hits: 0, uniqueHits: 0 };
+            email.uniqueHits = sums.uniqueHits || 0;
+          });
+        }
+      } catch (e) {
+        // non-fatal
+        logger.warn('Failed to attach click aggregates to topEmails (non-fatal):', e.message || e);
+      }
+
       return {
         success: true,
         data: {
@@ -140,6 +173,10 @@ class StatsService {
             totalSegments
           },
           stats,
+          clickSummary: {
+            totalClickHits: (clickAgg._sum && clickAgg._sum.hits) || 0,
+            totalUniqueClicks: (clickAgg._sum && clickAgg._sum.uniqueHits) || 0
+          },
           clients: allClients.map(c => ({
             id: c.id,
             name: c.name,
@@ -156,6 +193,7 @@ class StatsService {
             sent: e.sentCount,
             read: e.readCount,
             clicked: e.clickedCount,
+            uniqueHits: e.uniqueHits || 0,
             bounced: e.bounced,
             unsubscribed: e.unsubscribed,
             openRate: StatsService.normalizeRate(e.readRate),
@@ -284,6 +322,13 @@ class StatsService {
             totalEmails
           },
           stats,
+          // Click aggregates for this client (hits + unique)
+          clickSummary: await (async () => {
+            try {
+              const agg = await prisma.mauticClickTrackable.aggregate({ where: { clientId }, _sum: { hits: true, uniqueHits: true } });
+              return { totalClickHits: (agg._sum && agg._sum.hits) || 0, totalUniqueClicks: (agg._sum && agg._sum.uniqueHits) || 0 };
+            } catch (e) { return { totalClickHits: 0, totalUniqueClicks: 0 }; }
+          })(),
           campaigns: campaignStats,
           topEmails: emailStats,
           pagination: {
@@ -403,6 +448,22 @@ class StatsService {
         bounceRate: StatsService.calculateRate(email.bounced, email.sentCount),
         unsubscribeRate: StatsService.normalizeRate(email.unsubscribeRate)
       };
+
+      // Attach unique click totals for this email from click trackables
+      try {
+        const mauticEmailIdInt = parseInt(email.mauticEmailId || '0');
+        if (!isNaN(mauticEmailIdInt) && mauticEmailIdInt > 0) {
+          const clickAgg = await prisma.mauticClickTrackable.aggregate({ where: { channelId: mauticEmailIdInt, clientId: email.clientId }, _sum: { hits: true, uniqueHits: true } });
+          stats.totalClickHits = (clickAgg._sum && clickAgg._sum.hits) || 0;
+          stats.totalUniqueClicks = (clickAgg._sum && clickAgg._sum.uniqueHits) || 0;
+        } else {
+          stats.totalClickHits = 0;
+          stats.totalUniqueClicks = 0;
+        }
+      } catch (e) {
+        stats.totalClickHits = 0;
+        stats.totalUniqueClicks = 0;
+      }
 
       let history = [];
       if (includeHistory) {

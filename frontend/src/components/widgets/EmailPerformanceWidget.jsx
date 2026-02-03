@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
-import { Mail, CheckCircle, TrendingUp, AlertTriangle, Loader2 } from 'lucide-react'
+import { Mail, CheckCircle, TrendingUp, AlertTriangle, Loader2, Users } from 'lucide-react'
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
@@ -23,7 +23,8 @@ const MetricBox = ({ label, value, icon: Icon, color = 'gray' }) => {
     gray: 'bg-gray-100 text-gray-600',
     green: 'bg-green-100 text-green-600',
     blue: 'bg-blue-100 text-blue-600',
-    red: 'bg-red-100 text-red-600'
+    red: 'bg-red-100 text-red-600',
+    purple: 'bg-purple-100 text-purple-600'
   }
 
   return (
@@ -87,6 +88,7 @@ const EmailPerformanceWidget = ({ clientId, clientName }) => {
       sent: email.stats?.sent || 0,
       opened: email.stats?.read || 0,
       clicked: email.stats?.clicked || 0,
+      uniqueClicks: email.uniqueHits || email.uniqueClicks || 0,
       bounced: email.stats?.bounced || 0,
       unsubscribed: email.stats?.unsubscribed || 0,
       openRate: formatPercentOne(email.stats?.openRate),
@@ -142,7 +144,7 @@ const EmailPerformanceWidget = ({ clientId, clientName }) => {
         )}
       </div>
       
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
         <MetricBox 
           label="Total Sent" 
           value={formatNumber(clientStats.sent)} 
@@ -159,6 +161,12 @@ const EmailPerformanceWidget = ({ clientId, clientName }) => {
           value={formatNumber(clientStats.clicked)} 
           icon={TrendingUp}
           color="blue"
+        />
+        <MetricBox 
+          label="Unique Clicks" 
+          value={formatNumber(stats.clickSummary?.totalUniqueClicks || 0)} 
+          icon={Users}
+          color="purple"
         />
         <MetricBox 
           label="Bounced" 
@@ -194,6 +202,7 @@ const EmailPerformanceWidget = ({ clientId, clientName }) => {
                             <p><span className="text-gray-500">Sent:</span> <span className="font-medium">{formatNumber(data.sent)}</span></p>
                             <p><span className="text-gray-500">Opened:</span> <span className="font-medium text-blue-600">{formatNumber(data.opened)}</span> ({data.openRate}%)</p>
                             <p><span className="text-gray-500">Clicked:</span> <span className="font-medium text-green-600">{formatNumber(data.clicked)}</span> ({data.clickRate}%)</p>
+                            {data.uniqueClicks > 0 && <p><span className="text-gray-500">Unique Clicks:</span> <span className="font-medium text-purple-600">{formatNumber(data.uniqueClicks)}</span></p>}
                             <p><span className="text-gray-500">Bounced:</span> <span className="font-medium text-red-600">{formatNumber(data.bounced)}</span></p>
                             <p><span className="text-gray-500">Unsubs:</span> <span className="font-medium text-orange-600">{formatNumber(data.unsubscribed)}</span> ({data.unsubRate}%)</p>
                           </div>
@@ -206,6 +215,7 @@ const EmailPerformanceWidget = ({ clientId, clientName }) => {
                 <Bar dataKey="sent" fill="#94A3B8" name="Sent" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="opened" fill="#3B82F6" name="Opened" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="clicked" fill="#10B981" name="Clicked" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="uniqueClicks" fill="#8B5CF6" name="Unique Clicks" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

@@ -44,56 +44,67 @@ export const authenticate = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader?.replace('Bearer ', '');
 
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        error: {
-          code: 'AUTH_TOKEN_MISSING',
-          message: 'Authentication token is required'
-        }
-      });
-    }
-
-    // Verify token with explicit algorithm
+    // Support either Bearer JWT (authorization header) or cookie session (`req.session`)
     let decoded;
-    try {
-      decoded = jwt.verify(token, JWT_SECRET, JWT_OPTIONS);
-    } catch (err) {
-      if (err.name === 'TokenExpiredError') {
+    let usingSession = false;
+    let sessionUserId = null;
+
+    if (!token) {
+      if (req.session && req.session.userId) {
+        usingSession = true;
+        sessionUserId = req.session.userId;
+      } else {
         return res.status(401).json({
           success: false,
           error: {
-            code: 'AUTH_TOKEN_EXPIRED',
-            message: 'Token has expired'
+            code: 'AUTH_TOKEN_MISSING',
+            message: 'Authentication token or session cookie is required'
           }
         });
       }
-      if (err.name === 'JsonWebTokenError') {
-        return res.status(401).json({
-          success: false,
-          error: {
-            code: 'AUTH_TOKEN_INVALID',
-            message: 'Invalid token'
-          }
-        });
-      }
-      throw err;
     }
 
-    // Verify token type
-    if (decoded.type !== 'access') {
-      return res.status(401).json({
-        success: false,
-        error: {
-          code: 'AUTH_INVALID_TOKEN_TYPE',
-          message: 'Invalid token type'
+    if (!usingSession) {
+      // Verify token with explicit algorithm
+      try {
+        decoded = jwt.verify(token, JWT_SECRET, JWT_OPTIONS);
+      } catch (err) {
+        if (err.name === 'TokenExpiredError') {
+          return res.status(401).json({
+            success: false,
+            error: {
+              code: 'AUTH_TOKEN_EXPIRED',
+              message: 'Token has expired'
+            }
+          });
         }
-      });
+        if (err.name === 'JsonWebTokenError') {
+          return res.status(401).json({
+            success: false,
+            error: {
+              code: 'AUTH_TOKEN_INVALID',
+              message: 'Invalid token'
+            }
+          });
+        }
+        throw err;
+      }
+
+      // Verify token type
+      if (decoded.type !== 'access') {
+        return res.status(401).json({
+          success: false,
+          error: {
+            code: 'AUTH_INVALID_TOKEN_TYPE',
+            message: 'Invalid token type'
+          }
+        });
+      }
     }
 
     // Fetch fresh user data (includes real-time permission changes)
     const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
+      where: { id: usingSession ? sessionUserId : decoded.userId },
       select: {
         id: true,
         name: true,
@@ -121,7 +132,7 @@ export const authenticate = async (req, res, next) => {
 
     if (!user) {
       logger.warn('Token valid but user not found', { 
-        userId: decoded.userId,
+        userId: usingSession ? sessionUserId : decoded.userId,
         ip: req.ip 
       });
       return res.status(401).json({
@@ -149,10 +160,28 @@ export const authenticate = async (req, res, next) => {
     }
 
     // Token version check for revocation
-    if (decoded.tokenVersion !== user.tokenVersion) {
+    // If using cookie session, check session tokenVersion (if stored) against DB
+    if (usingSession) {
+      if (req.session.tokenVersion !== user.tokenVersion) {
+        req.session = null;
+        logger.warn('Session token version mismatch - session invalidated', { 
+          userId: user.id,
+          sessionVersion: req.session?.tokenVersion,
+          currentVersion: user.tokenVersion
+        });
+        return res.status(401).json({
+          success: false,
+          error: {
+            code: 'AUTH_SESSION_REVOKED',
+            message: 'Session has been revoked'
+          }
+        });
+      }
+    } else {
+      if (decoded.tokenVersion !== user.tokenVersion) {
       logger.warn('Token version mismatch - token revoked', { 
         userId: user.id,
-        tokenVersion: decoded.tokenVersion,
+          tokenVersion: decoded.tokenVersion,
         currentVersion: user.tokenVersion
       });
       return res.status(401).json({
@@ -162,6 +191,7 @@ export const authenticate = async (req, res, next) => {
           message: 'Token has been revoked'
         }
       });
+    }
     }
 
     req.user = user;

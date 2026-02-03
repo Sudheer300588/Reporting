@@ -89,51 +89,61 @@ class MauticDataService {
       }
 
       let totalCreated = 0;
-      const BATCH_SIZE = 5000; // ⚡ ULTRA MASSIVE batches for 1000x speed!
+      let totalUpdated = 0;
       const now = new Date();
 
-      // Process in ULTRA HUGE batches using createMany with skipDuplicates
-      for (let i = 0; i < emails.length; i += BATCH_SIZE) {
-        const batch = emails.slice(i, i + BATCH_SIZE);
+      // Process emails using upsert to update existing records
+      // NOTE: clickCount is NOT available in Mautic /api/emails response
+      // It must be calculated from MauticClickTrackable and updated separately
+      for (const email of emails) {
+        const sentCount = parseInt(email.sentCount || 0, 10);
+        const readCount = parseInt(email.readCount || 0, 10);
+        const unsubscribeCount = parseInt(email.unsubscribeCount || 0, 10);
+        const bounceCount = parseInt(email.bounceCount || 0, 10);
 
-        const emailData = batch.map(email => {
-          const sentCount = email.sentCount || 0;
-          const readCount = email.readCount || 0;
-          const clickCount = email.clickCount || 0;
-          const unsubscribeCount = email.unsubscribeCount || 0;
-          const bounceCount = email.bounceCount || 0;
+        const emailData = {
+          mauticEmailId: String(email.id),
+          name: email.name || '',
+          subject: email.subject || null,
+          emailType: email.emailType || null,
+          isPublished: email.isPublished || false,
+          publishUp: email.publishUp ? new Date(email.publishUp) : null,
+          publishDown: email.publishDown ? new Date(email.publishDown) : null,
+          sentCount: sentCount,
+          readCount: readCount,
+          // clickedCount and uniqueClicks will be updated later from MauticClickTrackable aggregation
+          unsubscribed: unsubscribeCount,
+          bounced: bounceCount,
+          readRate: sentCount > 0 ? new Prisma.Decimal((readCount / sentCount * 100).toFixed(2)) : new Prisma.Decimal(0),
+          // clickRate will be calculated after clickedCount is updated from click trackables
+          unsubscribeRate: sentCount > 0 ? new Prisma.Decimal((unsubscribeCount / sentCount * 100).toFixed(2)) : new Prisma.Decimal(0),
+          clientId: clientId,
+          dateAdded: email.dateAdded ? new Date(email.dateAdded) : now,
+          createdAt: now,
+          updatedAt: now
+        };
 
-          return {
-            mauticEmailId: String(email.id),
-            name: email.name || '',
-            subject: email.subject || null,
-            emailType: email.emailType || null,
-            isPublished: email.isPublished || false,
-            publishUp: email.publishUp ? new Date(email.publishUp) : null,
-            publishDown: email.publishDown ? new Date(email.publishDown) : null,
-            sentCount: sentCount,
-            readCount: readCount,
-            clickedCount: clickCount,
-            unsubscribed: unsubscribeCount,
-            bounced: bounceCount,
-            readRate: sentCount > 0 ? new Prisma.Decimal((readCount / sentCount * 100).toFixed(2)) : new Prisma.Decimal(0),
-            clickRate: sentCount > 0 ? new Prisma.Decimal((clickCount / sentCount * 100).toFixed(2)) : new Prisma.Decimal(0),
-            unsubscribeRate: sentCount > 0 ? new Prisma.Decimal((unsubscribeCount / sentCount * 100).toFixed(2)) : new Prisma.Decimal(0),
-            clientId: clientId,
-            dateAdded: email.dateAdded ? new Date(email.dateAdded) : now,
-            createdAt: now,
-            updatedAt: now
-          };
-        });
-
-        const result = await prisma.mauticEmail.createMany({
-          data: emailData,
-          skipDuplicates: true
-        });
-
-        totalCreated += result.count;
-        console.log(`   Processed ${Math.min(i + BATCH_SIZE, emails.length)}/${emails.length} emails (${totalCreated} new)...`);
+        try {
+          await prisma.mauticEmail.upsert({
+            where: {
+              clientId_mauticEmailId: {
+                clientId: clientId,
+                mauticEmailId: String(email.id)
+              }
+            },
+            update: {
+              ...emailData,
+              updatedAt: now
+            },
+            create: emailData
+          });
+          totalCreated++;
+        } catch (error) {
+          console.error(`Failed to upsert email ${email.id}:`, error.message);
+        }
       }
+
+      totalUpdated = emails.length;
 
       // Update client email count
       await prisma.mauticClient.update({
@@ -141,12 +151,12 @@ class MauticDataService {
         data: { totalEmails: emails.length }
       });
 
-      console.log(`✅ BULK INSERT DONE: ${totalCreated} new emails (${emails.length - totalCreated} duplicates skipped)`);
+      console.log(`✅ UPSERT DONE: ${emails.length} emails processed`);
 
       return {
         success: true,
         created: totalCreated,
-        updated: 0,
+        updated: totalUpdated,
         total: emails.length
       };
     } catch (error) {
@@ -393,6 +403,49 @@ class MauticDataService {
   }
 
   /**
+   * Save click/redirect trackables for emails using createMany
+   * @param {number} clientId
+   * @param {Array} clickRows - Array of { redirect_id, hits, unique_hits, channel_id, url }
+   */
+  async saveClickTrackables(clientId, clickRows) {
+    try {
+      if (!clickRows || clickRows.length === 0) {
+        return { success: true, created: 0, total: 0 };
+      }
+
+      const BATCH_SIZE = 1000;
+      let totalCreated = 0;
+      const now = new Date();
+
+      for (let i = 0; i < clickRows.length; i += BATCH_SIZE) {
+        const batch = clickRows.slice(i, i + BATCH_SIZE);
+        const data = batch.map(r => ({
+          redirectId: String(r.redirect_id || r.redirectId || ''),
+          hits: parseInt(r.hits || r.hits === 0 ? r.hits : 0, 10) || 0,
+          uniqueHits: parseInt(r.unique_hits || r.uniqueHits || 0, 10) || 0,
+          channelId: parseInt(r.channel_id || r.channelId || 0, 10) || 0,
+          url: r.url || null,
+          clientId: clientId,
+          createdAt: now,
+          updatedAt: now
+        }));
+
+        try {
+          const res = await prisma.mauticClickTrackable.createMany({ data, skipDuplicates: true });
+          totalCreated += res.count;
+        } catch (err) {
+          console.error('Error saving click trackables batch:', err.message || err);
+        }
+      }
+
+      return { success: true, created: totalCreated, total: clickRows.length };
+    } catch (error) {
+      console.error('Error saving click trackables:', error);
+      throw new Error(`Failed to save click trackables: ${error.message}`);
+    }
+  }
+
+  /**
    * Get dashboard metrics for a client
    * @param {number} clientId - Client ID (optional, null for all clients)
    * @returns {Promise<Object>} Dashboard metrics
@@ -440,6 +493,18 @@ class MauticDataService {
         }
       });
 
+      // Aggregate click trackables (hits + unique hits) for overview
+      let clickAgg = { _sum: { hits: 0, uniqueHits: 0 } };
+      try {
+        clickAgg = await prisma.mauticClickTrackable.aggregate({
+          where: clientId ? { clientId } : {},
+          _sum: { hits: true, uniqueHits: true }
+        });
+      } catch (e) {
+        // Non-fatal if model/table not present yet
+        console.warn('mauticClickTrackable aggregation failed (non-fatal):', e.message || e);
+      }
+
       // Top performing emails
       const topEmails = await prisma.mauticEmail.findMany({
         where: {
@@ -454,6 +519,27 @@ class MauticDataService {
           }
         }
       });
+
+      // Attach click aggregates (hits + uniqueHits) to topEmails using mauticEmailId mapping
+      try {
+        const mauticIds = topEmails.map(e => parseInt(e.mauticEmailId || '0')).filter(Boolean);
+        if (mauticIds.length > 0) {
+          const clickSums = await prisma.mauticClickTrackable.groupBy({
+            by: ['channelId'],
+            where: { channelId: { in: mauticIds }, ...(clientId ? { clientId } : {}) },
+            _sum: { hits: true, uniqueHits: true }
+          });
+          const clickMap = new Map(clickSums.map(c => [c.channelId, c._sum]));
+          topEmails.forEach(email => {
+            const mid = parseInt(email.mauticEmailId || '0');
+            const sums = clickMap.get(mid) || { hits: 0, uniqueHits: 0 };
+            email._clicks = { hits: sums.hits || 0, uniqueHits: sums.uniqueHits || 0 };
+          });
+        }
+      } catch (e) {
+        // continue without unique clicks if grouping fails
+        console.warn('Failed to attach click aggregates to topEmails (non-fatal):', e.message || e);
+      }
 
       return {
         success: true,
@@ -473,7 +559,10 @@ class MauticDataService {
             totalBounced: emailStats._sum.bounced || 0,
             avgReadRate: parseFloat(emailStats._avg.readRate || 0).toFixed(2),
             avgClickRate: parseFloat(emailStats._avg.clickRate || 0).toFixed(2),
-            avgUnsubscribeRate: parseFloat(emailStats._avg.unsubscribeRate || 0).toFixed(2)
+            avgUnsubscribeRate: parseFloat(emailStats._avg.unsubscribeRate || 0).toFixed(2),
+            // Click aggregates from trackables (more accurate unique clicks)
+            totalClickHits: (clickAgg._sum && clickAgg._sum.hits) || 0,
+            totalUniqueClicks: (clickAgg._sum && clickAgg._sum.uniqueHits) || 0
           },
           topEmails: topEmails.map(email => ({
             id: email.id,
@@ -482,7 +571,9 @@ class MauticDataService {
             client: email.client.name,
             sentCount: email.sentCount,
             readRate: parseFloat(email.readRate).toFixed(2),
-            clickRate: parseFloat(email.clickRate).toFixed(2)
+            clickRate: parseFloat(email.clickRate).toFixed(2),
+            clicks: email._clicks ? email._clicks.hits : email.clickedCount || 0,
+            uniqueClicks: email._clicks ? email._clicks.uniqueHits : 0
           }))
         }
       };

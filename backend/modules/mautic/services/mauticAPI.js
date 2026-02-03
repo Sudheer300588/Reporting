@@ -318,6 +318,80 @@ class MauticAPIService {
   }
 
   /**
+   * Fetch click trackable records for all emails in batch and save to DB
+   * @param {Object} client - Client configuration
+   * @param {Array} emails - Array of email objects (must contain .id)
+   */
+  async fetchAllEmailClickStats(client, emails) {
+    // Import dataService here to avoid circular deps
+    const { default: dataService } = await import('./dataService.js');
+    try {
+      if (!emails || emails.length === 0) return { success: true, created: 0 };
+
+      console.log(`📊 Fetching click trackables for ${emails.length} emails from ${client.name}...`);
+
+      const apiClient = this.createClient(client);
+      const clickRows = [];
+      const batchSize = 10;
+
+      for (let i = 0; i < emails.length; i += batchSize) {
+        const batch = emails.slice(i, i + batchSize);
+        const results = await Promise.allSettled(batch.map(async (email) => {
+          try {
+            const emailId = email.id || email.mauticEmailId || email.e_id;
+            if (!emailId) return [];
+            const resp = await apiClient.get('/stats/channel_url_trackables', {
+              params: {
+                'where[0][col]': 'channel_id',
+                'where[0][expr]': 'eq',
+                'where[0][val]': emailId,
+                limit: 10000
+              }
+            });
+            const rows = resp.data?.stats || resp.data || [];
+            return rows.map(r => ({
+              redirect_id: r.redirect_id || r.id || r.redirectId || '',
+              hits: parseInt(r.hits || r.hits_count || 0, 10) || 0,
+              unique_hits: parseInt(r.unique_hits || r.unique_hits_count || r.uniqueHits || 0, 10) || 0,
+              channel_id: parseInt(emailId, 10) || 0,
+              url: r.url || r.path || null
+            }));
+          } catch (e) {
+            console.warn(`   Failed to fetch click stats for email ${email.id}:`, e.message || e);
+            return [];
+          }
+        }));
+
+        for (const r of results) {
+          if (r.status === 'fulfilled' && Array.isArray(r.value)) clickRows.push(...r.value);
+        }
+
+        console.log(`   Processed ${Math.min(i + batchSize, emails.length)}/${emails.length} emails (${clickRows.length} click records)...`);
+      }
+
+      // Deduplicate rows by redirect_id
+      const dedupMap = new Map();
+      for (const row of clickRows) {
+        const key = String(row.redirect_id || `${row.channel_id}-${row.url}`);
+        if (!dedupMap.has(key)) dedupMap.set(key, row);
+        else {
+          const existing = dedupMap.get(key);
+          existing.hits = Math.max(existing.hits, row.hits || 0);
+          existing.unique_hits = Math.max(existing.unique_hits, row.unique_hits || 0);
+        }
+      }
+      const deduped = Array.from(dedupMap.values());
+
+      const saveResult = await dataService.saveClickTrackables(client.id, deduped);
+      console.log(`✅ Click trackables saved: ${saveResult.created} records`);
+      return saveResult;
+    } catch (error) {
+      console.error('Error fetching click trackables:', error.message || error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Fetch all segments (lists) from Mautic with contact counts
    * @param {Object} client - Client configuration
    * @returns {Promise<Array>} Array of segment objects with leadCount
@@ -956,9 +1030,12 @@ class MauticAPIService {
       let segments = [];
       let smses = [];
 
+      // Always fetch email metadata to keep sentCount and readCount up-to-date
+      // The /api/emails endpoint is fast and doesn't require individual /api/stats calls
+      // Only campaigns and segments are skipped on incremental sync (rarely change)
       if (!hasExistingData) {
-        // Full initial sync: fetch metadata (but skip slow individual stats!)
-        console.log(`🚀 INITIAL SYNC - Fetching metadata (emails/campaigns/segments/smses)...`);
+        // Full initial sync: fetch all metadata
+        console.log(`🚀 INITIAL SYNC - Fetching metadata (emails/campaigns/segments)...`);
         const results = await Promise.all([
           this.fetchEmails(client, false), // ⚡ FALSE = NO individual stats fetch!
           this.fetchCampaigns(client),
@@ -974,12 +1051,35 @@ class MauticAPIService {
         smses = results[3] || [];
       } else {
         console.log(`⚡⚡⚡ INCREMENTAL SYNC for ${client.name} — SKIPPING metadata fetch for MAXIMUM SPEED! ⚡⚡⚡`);
-        // Still try to fetch SMS campaigns in incremental sync
+
+        // --- Fetch SMS Campaigns (Deepak branch) ---
+        let smses = [];
         try {
           smses = await this.fetchSmses(client);
+          console.log(`   ⚡ Fetched ${smses.length} SMS campaigns`);
         } catch (err) {
-          console.warn('SMS fetch failed in incremental sync (non-fatal):', err.message);
+          console.warn('   ⚠️ SMS fetch failed in incremental sync (non-fatal):', err.message);
           smses = [];
+        }
+
+        // --- Fetch Emails (Main branch) ---
+        let emails = [];
+        try {
+          console.log(`   🔄 Fetching emails to update stats...`);
+          emails = await this.fetchEmails(client, false);
+          console.log(`   ⚡ Fetched ${emails.length} emails for stats update`);
+        } catch (err) {
+          console.warn('   ⚠️ Email fetch failed in incremental sync (non-fatal):', err.message);
+          emails = [];
+        }
+
+        // --- Persist Emails to DB ---
+        try {
+          const { default: dataService } = await import('./dataService.js');
+          const saveRes = await dataService.saveEmails(client.id, emails);
+          console.log(`   ✅ Saved emails to DB: created=${saveRes.created} updated=${saveRes.updated}`);
+        } catch (saveErr) {
+          console.warn('   ⚠️ Failed to save fetched emails to DB (non-fatal):', saveErr.message || saveErr);
         }
       }
 
@@ -1032,6 +1132,65 @@ class MauticAPIService {
 
       // ⚡ Skip storing SMS messages/replies (fetched on-demand via /contact/:id endpoint)
       console.log(`💬 Skipping SMS message storage — will be fetched on-demand via /contact/:id?smsId=`);
+      // Fetch click trackables for emails (if we fetched metadata)
+      try {
+        if (emails && emails.length > 0) {
+          await this.fetchAllEmailClickStats(client, emails);
+          
+          // Aggregate click trackables and update email records with clickedCount AND uniqueClicks
+          console.log(`📊 Aggregating total clicks and unique clicks into email records...`);
+          const emailIds = emails.map(e => parseInt(e.id, 10)).filter(Boolean);
+          const clickAggregates = await prisma.mauticClickTrackable.groupBy({
+            by: ['channelId'],
+            where: { channelId: { in: emailIds }, clientId: client.id },
+            _sum: { 
+              hits: true,        // Total clicks (clickedCount)
+              uniqueHits: true   // Unique clicks
+            }
+          });
+          
+          const clickMap = new Map(clickAggregates.map(agg => [
+            String(agg.channelId), 
+            {
+              clickedCount: parseInt(agg._sum.hits || 0, 10),
+              uniqueClicks: parseInt(agg._sum.uniqueHits || 0, 10)
+            }
+          ]));
+          
+          let updatedCount = 0;
+          for (const email of emails) {
+            const emailId = String(email.id);
+            const clickData = clickMap.get(emailId);
+            if (clickData && (clickData.clickedCount > 0 || clickData.uniqueClicks > 0)) {
+              try {
+                const sentCount = parseInt(email.sentCount || 0, 10);
+                const clickRate = sentCount > 0 
+                  ? parseFloat(((clickData.clickedCount / sentCount) * 100).toFixed(2))
+                  : 0;
+
+                const res = await prisma.mauticEmail.updateMany({
+                  where: {
+                    clientId: client.id,
+                    mauticEmailId: String(emailId)
+                  },
+                  data: { 
+                    clickedCount: clickData.clickedCount,
+                    uniqueClicks: clickData.uniqueClicks,
+                    clickRate: clickRate
+                  }
+                });
+
+                if (res && res.count) updatedCount += res.count;
+              } catch (e) {
+                console.warn(`Failed to update click counts for email ${emailId}:`, e.message || e);
+              }
+            }
+          }
+          console.log(`✅ Updated ${updatedCount} email records with click counts (total + unique)`);
+        }
+      } catch (e) {
+        console.warn('Failed to fetch/save click trackables (non-fatal):', e.message || e);
+      }
 
       return {
         success: true,

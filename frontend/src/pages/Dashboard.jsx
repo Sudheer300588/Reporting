@@ -140,6 +140,7 @@ const Dashboard = () => {
           totalSent: data.stats?.sent || 0,
           totalRead: data.stats?.read || 0,
           totalClicked: data.stats?.clicked || 0,
+          totalUniqueClicks: data.clickSummary?.totalUniqueClicks || 0,
           totalBounced: data.stats?.bounced || 0,
           totalUnsubscribed: data.stats?.unsubscribed || 0,
           avgReadRate: data.stats?.avgOpenRate || 0,
@@ -301,6 +302,7 @@ const Dashboard = () => {
         sent: email.sent || email.sentCount || 0,
         opened: email.read || email.readCount || 0,
         clicked: email.clicked || email.clickedCount || 0,
+        uniqueClicks: email.uniqueHits || email.uniqueClicks || 0,
         bounced: email.bounced || 0,
         unsubscribed: email.unsubscribed || 0,
         openRate: parseFloat(email.openRate || email.readRate || 0),
@@ -448,7 +450,7 @@ const Dashboard = () => {
               </button>
             </div>
             
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
               <MetricBox 
                 label="Total Sent" 
                 value={formatNumber(emailMetrics.totalSent)} 
@@ -461,10 +463,16 @@ const Dashboard = () => {
                 color="green"
               />
               <MetricBox 
-                label="Clicked" 
+                label="Clicks" 
                 value={formatNumber(emailMetrics.totalClicked)} 
                 icon={TrendingUp}
                 color="blue"
+              />
+              <MetricBox 
+                label="Unique Clicks" 
+                value={formatNumber(emailMetrics.totalUniqueClicks)} 
+                icon={Users}
+                color="purple"
               />
               <MetricBox 
                 label="Bounced" 
@@ -505,6 +513,7 @@ const Dashboard = () => {
                                 <p><span className="text-gray-500">Sent:</span> <span className="font-medium">{formatNumber(data.sent)}</span></p>
                                 <p><span className="text-gray-500">Opened:</span> <span className="font-medium text-blue-600">{formatNumber(data.opened)}</span> ({data.openRate}%)</p>
                                 <p><span className="text-gray-500">Clicked:</span> <span className="font-medium text-green-600">{formatNumber(data.clicked)}</span> ({data.clickRate}%)</p>
+                                {data.uniqueClicks !== undefined && <p><span className="text-gray-500">Unique Clicks:</span> <span className="font-medium text-purple-600">{formatNumber(data.uniqueClicks)}</span></p>}
                                 <p><span className="text-gray-500">Bounced:</span> <span className="font-medium text-red-600">{formatNumber(data.bounced)}</span></p>
                                 <p><span className="text-gray-500">Unsubs:</span> <span className="font-medium text-orange-600">{formatNumber(data.unsubscribed)}</span> ({data.unsubRate}%)</p>
                               </div>
@@ -516,7 +525,8 @@ const Dashboard = () => {
                     />
                     <Bar dataKey="sent" fill="#94A3B8" name="Sent" radius={[4, 4, 0, 0]} />
                     <Bar dataKey="opened" fill="#3B82F6" name="Opened" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="clicked" fill="#10B981" name="Clicked" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="clicked" fill="#10B981" name="Clicks" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="uniqueClicks" fill="#8B5CF6" name="Unique Clicks" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

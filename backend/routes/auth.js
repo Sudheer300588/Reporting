@@ -130,6 +130,16 @@ router.post('/register', signupLimiter, validate(registerSchema), async (req, re
 
     const token = generateToken(user.id, user.tokenVersion);
 
+    // Set cookie-based session (1 day)
+    try {
+      req.session = {
+        userId: user.id,
+        tokenVersion: user.tokenVersion
+      };
+    } catch (err) {
+      logger.debug('Failed to set session cookie', { error: err.message });
+    }
+
     logger.info('User registered successfully', { userId: user.id, role: user.role });
 
     res.status(201).json({
@@ -294,6 +304,13 @@ router.post('/logout', authenticate, async (req, res) => {
     ).catch(err => logger.error('Failed to log activity', { error: err.message }));
 
     logger.info('User logged out successfully', { userId: req.user.id });
+
+    // Clear server-side cookie session (if present)
+    try {
+      req.session = null;
+    } catch (err) {
+      logger.debug('Failed to clear session cookie', { error: err.message });
+    }
 
     res.json({
       success: true,

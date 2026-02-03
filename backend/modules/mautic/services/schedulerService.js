@@ -11,6 +11,29 @@ class MauticSchedulerService {
   }
 
   /**
+   * Get current sync progress and recent sync logs for monitoring
+   */
+  async getSyncProgress() {
+    try {
+      const activeClients = await prisma.mauticClient.count({ where: { isActive: true } });
+      const recentSyncs = await prisma.syncLog.findMany({
+        where: { source: 'mautic' },
+        orderBy: { syncStartedAt: 'desc' },
+        take: 10
+      });
+
+      return {
+        isRunning: this.isRunning,
+        activeClients,
+        recentSyncs
+      };
+    } catch (error) {
+      console.error('Error fetching sync progress from DB:', error.message);
+      throw error;
+    }
+  }
+
+  /**
    * Start the scheduler
    */
   start() {
@@ -120,7 +143,6 @@ class MauticSchedulerService {
               // Save emails, campaigns, segments, and SMS campaigns
               // Email reports are already saved to DB during fetch
               const saveResults = await Promise.all([
-                dataService.saveEmails(client.id, syncResult.data.emails),
                 dataService.saveCampaigns(client.id, syncResult.data.campaigns),
                 dataService.saveSegments(client.id, syncResult.data.segments),
                 smsService.storeSmsCampaigns(client.id, syncResult.data.smses || []).catch(err => {
@@ -158,24 +180,42 @@ class MauticSchedulerService {
                   console.warn(`[${client.name}] SMS stats fetch failed (non-fatal):`, err.message);
                 }
               }
+              // For backwards compatibility, create a mock emailsResult object
+              const emailsResult = {
+                created: 0,
+                updated: syncResult.data.emails?.length || 0,
+                total: syncResult.data.emails?.length || 0
+              };
 
               // Update last sync time
               await dataService.updateClientSyncTime(client.id);
 
-              console.log(`✅ [${client.name}] Synced successfully - Emails: ${saveResults[0].total}, Campaigns: ${saveResults[1].total}, Segments: ${saveResults[2].total}, SMS: ${saveResults[3].total}, SMS Stats: ${smsSatsTotal}, Email Reports: ${syncResult.data.emailReports.created} created, ${syncResult.data.emailReports.skipped} skipped`);
               // Count total email reports currently in DB for this client
-              const totalReportsInDb = await prisma.mauticEmailReport.count({ where: { clientId: client.id } });
+              const totalReportsInDb = await prisma.mauticEmailReport.count({
+                where: { clientId: client.id }
+              });
 
-              console.log(`✅ [${client.name}] Synced successfully - Emails: ${saveResults[0].total}, Campaigns: ${saveResults[1].total}, Segments: ${saveResults[2].total}, SMS: ${saveResults[3].total}, SMS Stats: ${smsSatsTotal}, Email Reports: ${syncResult.data.emailReports.created} created, ${syncResult.data.emailReports.skipped} skipped, totalInDb: ${totalReportsInDb}`);
+              // ✅ Unified, clean log with consistent numbering based on saveResults
+              console.log(
+                `✅ [${client.name}] Synced successfully - ` +
+                `Emails: ${emailsResult?.total || 0}, ` +
+                `Campaigns: ${saveResults[0]?.total || 0}, ` +
+                `Segments: ${saveResults[1]?.total || 0}, ` +
+                `SMS: ${saveResults[2]?.total || 0}, ` +
+                `SMS Stats: ${smsSatsTotal || 0}, ` +
+                `Email Reports: ${syncResult.data.emailReports.created} created, ` +
+                `${syncResult.data.emailReports.skipped} skipped, ` +
+                `totalInDb: ${totalReportsInDb}`
+              );
 
               return {
                 success: true,
                 clientId: client.id,
                 clientName: client.name,
-                emails: saveResults[0],
-                campaigns: saveResults[1],
-                segments: saveResults[2],
-                sms: saveResults[3],
+                emails: emailsResult,
+                campaigns: saveResults[0],
+                segments: saveResults[1],
+                sms: saveResults[2],
                 emailReports: {
                   ...syncResult.data.emailReports,
                   totalInDb: totalReportsInDb
@@ -269,14 +309,14 @@ class MauticSchedulerService {
         throw new Error(syncResult.error);
       }
 
-      // Save emails, campaigns, segments, and SMS campaigns
-      // Email reports are already saved to DB during fetch
-      const [emailsResult, campaignsResult, segmentsResult, smsResult] = await Promise.all([
-        dataService.saveEmails(client.id, syncResult.data.emails),
+      // Save data to database
+      // syncAllData already saves emails to DB with correct readCount/sentCount/clickedCount
+      // Here we save campaigns, segments, and SMS campaigns (emails skipped to avoid duplication)
+      const [campaignsResult, segmentsResult, smsResult] = await Promise.all([
         dataService.saveCampaigns(client.id, syncResult.data.campaigns),
         dataService.saveSegments(client.id, syncResult.data.segments),
         smsService.storeSmsCampaigns(client.id, syncResult.data.smses || []).catch(err => {
-          console.warn(`SMS campaigns save failed (non-fatal): ${err.message}`);
+          console.warn(`[${client.name}] SMS campaigns save failed (non-fatal):`, err.message);
           return { created: 0, updated: 0, total: 0 };
         })
       ]);
@@ -310,6 +350,12 @@ class MauticSchedulerService {
           console.warn(`SMS stats fetch failed (non-fatal):`, err.message);
         }
       }
+      // For backwards compatibility, create a mock emailsResult object
+      const emailsResult = {
+        created: 0,
+        updated: syncResult.data.emails?.length || 0,
+        total: syncResult.data.emails?.length || 0
+      };
 
       // Update last sync time
       await dataService.updateClientSyncTime(client.id);
