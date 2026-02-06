@@ -895,12 +895,22 @@ class MauticAPIService {
         }
       }
 
-      // ✅ Persist SMS campaigns to DB - ALL under originating Mautic client
+      // ✅ Persist SMS campaigns to DB - With smart categorization
       if (smsCampaigns && smsCampaigns.length > 0) {
         try {
           const { default: smsService } = await import('./smsService.js');
-          const smsSaveRes = await smsService.storeSmsForMauticClient(client.id, smsCampaigns);
-          console.log(`   ✅ Saved SMS campaigns to DB: created=${smsSaveRes.created} updated=${smsSaveRes.updated}`);
+          
+          // Get all active Mautic clients for categorization (exclude sms-only clients)
+          const allMauticClients = await prisma.mauticClient.findMany({
+            where: { 
+              isActive: true,
+              NOT: { reportId: 'sms-only' }
+            },
+            select: { id: true, name: true, reportId: true }
+          });
+
+          const smsSaveRes = await smsService.storeSmsForMauticClient(client.id, smsCampaigns, allMauticClients);
+          console.log(`   ✅ Saved SMS campaigns to DB: created=${smsSaveRes.created} updated=${smsSaveRes.updated} preserved=${smsSaveRes.preserved} categorized=${smsSaveRes.categorized}`);
         } catch (smsErr) {
           console.warn('   ⚠️ Failed to save SMS campaigns to DB (non-fatal):', smsErr.message || smsErr);
         }
@@ -1031,7 +1041,7 @@ class MauticAPIService {
         apiClient.get('/smses', {
           params: { 
             limit: 9999,
-            orderBy: 'name',
+            orderBy: 'id',
             orderByDir: 'asc'
           }
         })
@@ -1042,11 +1052,18 @@ class MauticAPIService {
       
       logger.info(`Fetched ${smsArray.length} SMS campaigns`);
 
+      // Return with all available fields from Mautic API
       return smsArray.map(sms => ({
         id: sms.id,
         name: sms.name,
         category: sms.category || null,
-        sentCount: sms.sentCount || 0
+        sentCount: sms.sentCount || 0,
+        language: sms.language || null,
+        message: sms.message || null,
+        createdBy: sms.createdBy || null,
+        createdByUser: sms.createdByUser || null,
+        dateAdded: sms.dateAdded || null,
+        dateModified: sms.dateModified || null
       }));
     } catch (error) {
       logger.error(`Failed to fetch SMS campaigns:`, { error: error.message });

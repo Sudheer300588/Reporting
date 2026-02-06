@@ -3,43 +3,54 @@ import logger from '../../../utils/logger.js';
 
 class SmsService {
   /**
-   * Categorize SMS campaigns based on Mautic client name prefixes
+   * Categorize SMS campaigns based on first-word matching with Mautic client names
    * @param {Array} smsCampaigns - Array of SMS campaigns from Mautic
-   * @param {Array} mauticClients - Array of all Mautic clients
+   * @param {Array} mauticClients - Array of all Mautic clients (EXCLUDING sms-only clients)
    * @returns {Object} Categorized SMS campaigns
    */
   categorizeSms(smsCampaigns, mauticClients) {
     const categorized = {
-      matched: [], // SMS with client prefix match
-      unmatched: [] // SMS without client prefix match
+      matched: [], // SMS with first-word match to client (e.g., "JAE Distro SMS 1" matches "JAE Automation")
+      unmatched: [] // SMS without first-word match (goes to SMS Clients)
     };
 
-    const clientNameMap = new Map(
-      mauticClients.map(client => [client.name.toLowerCase(), client.id])
-    );
+    // Filter out sms-only clients from matching to avoid conflicts
+    const regularClients = mauticClients.filter(client => client.reportId !== 'sms-only');
+    
+    // Build a map of client first words to client data
+    const clientFirstWordMap = new Map();
+    for (const client of regularClients) {
+      const firstWord = client.name.split(/[\s_\-:]+/)[0].toLowerCase(); // Extract first word
+      if (!clientFirstWordMap.has(firstWord)) {
+        clientFirstWordMap.set(firstWord, { id: client.id, name: client.name });
+      }
+    }
 
     for (const sms of smsCampaigns) {
-      const smsName = sms.name.toLowerCase();
+      const smsName = sms.name;
+      const smsFirstWord = smsName.split(/[\s_\-:]+/)[0].toLowerCase(); // Extract first word from SMS name
       let matched = false;
 
-      // Check if SMS name starts with any client name prefix
-      for (const [clientName, clientId] of clientNameMap) {
-        if (smsName.startsWith(clientName.toLowerCase())) {
-          categorized.matched.push({
-            ...sms,
-            clientId,
-            clientName
-          });
-          matched = true;
-          break;
-        }
+      // Check if SMS first word matches any client's first word (case-insensitive)
+      // Examples: "JAE Distro SMS 1" matches "JAE Automation", "S4_Campaign" matches "S4: Something"
+      if (clientFirstWordMap.has(smsFirstWord)) {
+        const clientData = clientFirstWordMap.get(smsFirstWord);
+        categorized.matched.push({
+          ...sms,
+          clientId: clientData.id,
+          clientName: clientData.name
+        });
+        matched = true;
+        logger.info(`✅ Matched SMS "${smsName}" to client "${clientData.name}" (first word "${smsFirstWord}" matches)`);
       }
 
       if (!matched) {
         categorized.unmatched.push(sms);
+        logger.info(`❌ No client match for SMS "${smsName}" (first word "${smsFirstWord}" has no matching client)`);
       }
     }
 
+    logger.info(`Categorization complete: ${categorized.matched.length} matched, ${categorized.unmatched.length} unmatched`);
     return categorized;
   }
 
@@ -99,35 +110,32 @@ class SmsService {
       const allSms = [...categorized.matched, ...categorized.unmatched];
       
       for (const sms of allSms) {
-        const existing = await prisma.mauticSms.findUnique({
-          where: { mauticId: sms.id }
+        const result = await prisma.mauticSms.upsert({
+          where: { mauticId: sms.id },
+          update: {
+            name: sms.name,
+            category: sms.category,
+            sentCount: sms.sentCount || 0,
+            clientId: sms.clientId,
+            smsClientId: null,
+            updatedAt: new Date()
+          },
+          create: {
+            mauticId: sms.id,
+            name: sms.name,
+            category: sms.category,
+            sentCount: sms.sentCount || 0,
+            clientId: sms.clientId,
+            smsClientId: null
+          }
         });
-
-        if (existing) {
-          await prisma.mauticSms.update({
-            where: { id: existing.id },
-            data: {
-              name: sms.name,
-              category: sms.category,
-              sentCount: sms.sentCount || 0,
-              clientId: sms.clientId,
-              smsClientId: null,
-              updatedAt: new Date()
-            }
-          });
-          updated++;
-        } else {
-          await prisma.mauticSms.create({
-            data: {
-              mauticId: sms.id,
-              name: sms.name,
-              category: sms.category,
-              sentCount: sms.sentCount || 0,
-              clientId: sms.clientId,
-              smsClientId: null
-            }
-          });
+        
+        // Check if it was created or updated by checking if createdAt equals updatedAt
+        const wasCreated = result.createdAt.getTime() === result.updatedAt.getTime();
+        if (wasCreated) {
           created++;
+        } else {
+          updated++;
         }
       }
 
@@ -152,59 +160,103 @@ class SmsService {
 
   /**
    * Store SMS campaigns from a Mautic client
-   * All SMS are stored under the originating Mautic client by default
+   * Respects existing categorization from SMS sync to avoid overwriting clientId
+   * Also performs smart categorization based on campaign name prefixes
    * @param {Int} mauticClientId - Mautic Client ID
    * @param {Array} smsCampaigns - Array of SMS campaigns
+   * @param {Array} mauticClients - Optional array of all Mautic clients for categorization
    * @returns {Promise<Object>} Store results
    */
-  async storeSmsForMauticClient(mauticClientId, smsCampaigns) {
+  async storeSmsForMauticClient(mauticClientId, smsCampaigns, mauticClients = []) {
     try {
       logger.info(`Storing ${smsCampaigns.length} SMS campaigns for Mautic client ${mauticClientId}`);
       
       let created = 0, updated = 0;
+      let preservedClientAssignments = 0;
+      let categorized = 0;
 
-      // Store all SMS under the originating Mautic client
+      // Build a map of client first words for categorization (excluding sms-only clients)
+      const regularClients = mauticClients.filter(client => !client.reportId || client.reportId !== 'sms-only');
+      const clientFirstWordMap = new Map();
+      for (const client of regularClients) {
+        const firstWord = client.name.split(/[\s_\-:]+/)[0].toLowerCase(); // Extract first word
+        if (!clientFirstWordMap.has(firstWord)) {
+          clientFirstWordMap.set(firstWord, { id: client.id, name: client.name });
+        }
+      }
+
+      // Store all SMS, but preserve existing clientId if already assigned
+      // Also perform smart categorization based on first-word matching
       for (const sms of smsCampaigns) {
+        // Check if SMS already exists in database
         const existing = await prisma.mauticSms.findUnique({
           where: { mauticId: sms.id }
         });
 
-        if (existing) {
-          // Update existing SMS - keep under originating client
-          await prisma.mauticSms.update({
-            where: { id: existing.id },
-            data: {
-              name: sms.name,
-              category: sms.category,
-              sentCount: sms.sentCount || 0,
-              clientId: mauticClientId,
-              smsClientId: null,
-              updatedAt: new Date()
-            }
-          });
-          updated++;
-        } else {
-          // Create new SMS under originating Mautic client
-          await prisma.mauticSms.create({
-            data: {
-              mauticId: sms.id,
-              name: sms.name,
-              category: sms.category,
-              sentCount: sms.sentCount || 0,
-              clientId: mauticClientId,
-              smsClientId: null
-            }
-          });
+        let updateData = {
+          name: sms.name,
+          category: sms.category,
+          sentCount: sms.sentCount || 0,
+          updatedAt: new Date()
+        };
+
+        // If SMS already exists with a clientId assignment, preserve it
+        // This respects the categorization from the SMS sync
+        if (existing && existing.clientId) {
+          logger.info(`✅ Preserving existing client assignment for SMS "${sms.name}" (mauticId: ${sms.id}) - already assigned to clientId ${existing.clientId}`);
+          preservedClientAssignments++;
+          // Don't override clientId, just update metadata
+          // Continue without upserting to skip this SMS
+          continue;
+        }
+
+        // For new SMS or SMS without clientId, try to categorize based on first-word matching
+        let targetClientId = mauticClientId; // Default to originating client
+        const smsFirstWord = sms.name.split(/[\s_\-:]+/)[0].toLowerCase(); // Extract first word from SMS name
+        
+        // Check if SMS first word matches any known client's first word
+        if (clientFirstWordMap.has(smsFirstWord)) {
+          const clientData = clientFirstWordMap.get(smsFirstWord);
+          targetClientId = clientData.id;
+          categorized++;
+          logger.info(`✅ Categorized SMS "${sms.name}" to client "${clientData.name}" (first word "${smsFirstWord}" matches)`);
+        }
+
+        updateData.clientId = targetClientId;
+        updateData.smsClientId = null;
+
+        const result = await prisma.mauticSms.upsert({
+          where: { mauticId: sms.id },
+          update: updateData,
+          create: {
+            mauticId: sms.id,
+            name: sms.name,
+            category: sms.category,
+            sentCount: sms.sentCount || 0,
+            clientId: targetClientId,
+            smsClientId: null
+          }
+        });
+        
+        const wasCreated = result.createdAt.getTime() === result.updatedAt.getTime();
+        if (wasCreated) {
           created++;
+          const sourceMsg = targetClientId === mauticClientId ? `originating Mautic client ${mauticClientId}` : `matched client ${targetClientId}`;
+          logger.info(`✨ Created new SMS "${sms.name}" (mauticId: ${sms.id}) under ${sourceMsg}`);
+        } else {
+          updated++;
+          logger.info(`🔄 Updated SMS "${sms.name}" (mauticId: ${sms.id})`);
         }
       }
 
-      logger.info(`✅ SMS storage complete for Mautic client ${mauticClientId}: ${created} created, ${updated} updated`);
+      logger.info(`✅ SMS storage complete for Mautic client ${mauticClientId}: ${created} created, ${updated} updated, ${preservedClientAssignments} preserved from SMS sync, ${categorized} categorized by name`);
 
       return { 
         created, 
         updated, 
         total: created + updated,
+        preserved: preservedClientAssignments,
+        categorized: categorized,
         matchedCount: smsCampaigns.length,
         unmatchedCount: 0
       };
@@ -230,85 +282,70 @@ class SmsService {
 
       // Store matched SMS (linked to Mautic clients)
       for (const sms of categorized.matched) {
-        const existing = await prisma.mauticSms.findUnique({
-          where: { mauticId: sms.id }
-        });
-
-        if (existing) {
-          // Check if client assignment changed
-          if (existing.clientId !== sms.clientId) {
-            await prisma.mauticSms.update({
-              where: { id: existing.id },
-              data: {
-                name: sms.name,
-                category: sms.category,
-                sentCount: sms.sentCount || 0,
-                clientId: sms.clientId,
-                smsClientId: null,
-                updatedAt: new Date()
-              }
-            });
-            logger.info(`Reassigned SMS "${sms.name}" to Mautic client ${sms.clientId}`);
-          } else {
-            await prisma.mauticSms.update({
-              where: { id: existing.id },
-              data: {
-                name: sms.name,
-                category: sms.category,
-                sentCount: sms.sentCount || 0,
-                updatedAt: new Date()
-              }
-            });
+        const result = await prisma.mauticSms.upsert({
+          where: { mauticId: sms.id },
+          update: {
+            name: sms.name,
+            category: sms.category,
+            sentCount: sms.sentCount || 0,
+            clientId: sms.clientId,
+            smsClientId: null,
+            updatedAt: new Date()
+          },
+          create: {
+            mauticId: sms.id,
+            name: sms.name,
+            category: sms.category,
+            sentCount: sms.sentCount || 0,
+            clientId: sms.clientId,
+            smsClientId: null
           }
-          updated++;
-        } else {
-          await prisma.mauticSms.create({
-            data: {
-              mauticId: sms.id,
-              name: sms.name,
-              category: sms.category,
-              sentCount: sms.sentCount || 0,
-              clientId: sms.clientId,
-              smsClientId: null
-            }
-          });
+        });
+        
+        const wasCreated = result.createdAt.getTime() === result.updatedAt.getTime();
+        if (wasCreated) {
           created++;
+        } else {
+          updated++;
         }
       }
 
       // Store unmatched SMS (linked to SMS client)
       for (const sms of categorized.unmatched) {
+        // Check if already exists with a clientId (don't overwrite)
         const existing = await prisma.mauticSms.findUnique({
           where: { mauticId: sms.id }
         });
 
-        if (existing) {
-          // Only update if not already assigned to a Mautic client
-          if (!existing.clientId) {
-            await prisma.mauticSms.update({
-              where: { id: existing.id },
-              data: {
-                name: sms.name,
-                category: sms.category,
-                sentCount: sms.sentCount || 0,
-                smsClientId,
-                updatedAt: new Date()
-              }
-            });
-            updated++;
+        if (existing && existing.clientId) {
+          // Skip if already assigned to a Mautic client
+          continue;
+        }
+
+        const result = await prisma.mauticSms.upsert({
+          where: { mauticId: sms.id },
+          update: {
+            name: sms.name,
+            category: sms.category,
+            sentCount: sms.sentCount || 0,
+            smsClientId,
+            updatedAt: new Date()
+          },
+          create: {
+            mauticId: sms.id,
+            name: sms.name,
+            category: sms.category,
+            sentCount: sms.sentCount || 0,
+            clientId: null,
+            smsClientId
           }
-        } else {
-          await prisma.mauticSms.create({
-            data: {
-              mauticId: sms.id,
-              name: sms.name,
-              category: sms.category,
-              sentCount: sms.sentCount || 0,
-              clientId: null,
-              smsClientId
-            }
-          });
+        });
+        
+        const wasCreated = result.createdAt.getTime() === result.updatedAt.getTime();
+        if (wasCreated) {
           created++;
+        } else {
+          updated++;
         }
       }
 

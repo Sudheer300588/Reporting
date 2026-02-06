@@ -1554,6 +1554,64 @@ router.get("/reports", async (req, res) => {
   }
 });
 
+
+// ============================================
+// SMS ROUTES
+// ============================================
+/**
+* GET /api/contact/:id
+* Get contact activity (SMS messages and replies) from endpoint on-demand
+*/
+router.get("/contact/:id", async (req, res) => {
+  const { id } = req.params;
+  const { smsId } = req.query;
+ 
+  try {
+    // Find which client owns this smsId
+    const smsCampaign = await prisma.mauticSms.findUnique({
+      where: { id: parseInt(smsId) },
+      include: { client: true }
+    });
+ 
+    if (!smsCampaign || !smsCampaign.client) {
+      return res.status(404).json({ error: "SMS campaign or client not found" });
+    }
+ 
+    // Create mautic client instance using that client's credentials
+    const apiClient = mauticAPI.createClient(smsCampaign.client);
+ 
+    // Fetch contact details + activity from Mautic
+    const [activityRes, contactRes] = await Promise.all([
+      apiClient.get(`/contacts/${id}/activity`),
+      apiClient.get(`/contacts/${id}`)
+    ]);
+ 
+    const contact = contactRes.data?.contact || {};
+    const events = activityRes.data?.events || [];
+ 
+    // Filter events
+    const filteredEvents = events.filter(
+      e =>
+        (e.event === "sms.sent" && e.details?.stat?.sms_id?.toString() === smsCampaign.mauticId.toString()) ||
+        e.event === "sms_reply"
+    );
+ 
+    const name = `${contact.fields?.core?.firstname?.value || ""} ${contact.fields?.core?.lastname?.value || ""}`.trim();
+ 
+    res.json({
+      id,
+      name: name || `Contact #${id}`,
+      events: filteredEvents
+    });
+ 
+  } catch (err) {
+    console.error("❌ Error fetching contact activity:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+
 // ============================================
 // SYNC ROUTES
 // ============================================
