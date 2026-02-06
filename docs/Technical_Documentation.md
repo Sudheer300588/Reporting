@@ -221,6 +221,7 @@ GET /stats/channel_url_trackables?where[0][col]=channel_id&where[0][val]={emailI
 
 **Used For:**  
 - Click Count  
+- Unique Click Count
 - **Formula:** `Click Rate = (Unique Clicks / Sent) × 100`
 
 **To Get Actual URLs:**
@@ -324,5 +325,100 @@ Filters events where:
 
 ---
 
-**Author:** Internal Mautic Analytics Documentation  
-**Last Updated:** January 2026
+# 💬 Mautic SMS Performance Endpoints
+
+This section lists the external Mautic API endpoints used to fetch **SMS campaigns** and **message statistics**.
+
+---
+
+### 📤 1. SMS Campaigns
+
+**Purpose:**  
+Retrieve all available SMS campaigns from Mautic for a client.
+
+**Endpoint:**  
+```
+GET /smses
+```
+
+
+**Key Fields Returned**
+
+| **Field Name** | **Description** |
+|-----------------|-----------------|
+| `id` | Unique SMS campaign ID in Mautic |
+| `name` | Name of the SMS campaign |
+| `message` | SMS content text |
+| `isPublished` | Whether the SMS is active or archived |
+| `dateAdded` | Creation timestamp |
+
+**Used For:**  
+Listing SMS campaigns, syncing metadata to `MauticSms` table.
+
+---
+
+### 📈 2. SMS Message Statistics
+
+**Purpose:**  
+Fetch delivery statistics for an individual SMS campaign.
+
+**Endpoint:**  
+```
+GET /stats/sms_message_stats?where[0][col]=sms_id&where[0][val]={smsId}
+```
+
+
+**Table:**  
+`sms_message_stats`
+
+**Key Fields**
+
+| **Field Name** | **Description** |
+|-----------------|-----------------|
+| `lead_id` | Contact ID the SMS was sent to |
+| `date_sent` | When the SMS was sent |
+| `is_failed` | 1 if delivery failed, otherwise 0 |
+
+**Used For:**  
+Calculating sent and failed counts for each SMS campaign.  
+Data stored in `MauticSmsStat` table.
+
+---
+
+### 🧾 3. Contact SMS Replies / Activity
+
+**Purpose:**  
+Retrieve all reply messages or interactions for a specific contact.
+
+**Endpoint:**  
+```
+GET /contacts/{contactId}/activity
+```
+
+
+**Key Fields Returned**
+
+| **Field Name** | **Description** |
+|-----------------|-----------------|
+| `event` | Activity type (`sms_reply`, `sms.sent`, etc.) |
+| `details` | Contains `stat.sms_id` and message payload |
+| `timestamp` | Time of the event |
+
+**Used For:**  
+- Identifying replies from contacts (`event = "sms_reply"`)  
+- Associating replies with campaign IDs  
+- Tracking two-way SMS engagement
+
+---
+
+📍 **Summary**
+
+| **Metric** | **Endpoint** | **Stored Table** |
+|-------------|--------------|------------------|
+| SMS Campaigns | `/smses` | `MauticSms` |
+| SMS Stats | `/stats/sms_message_stats` | `MauticSmsStat` |
+| Contact Activity (Replies) | `/contacts/{id}/activity` | Parsed into `MauticSmsStat` / logs |
+
+---
+
+**Last Updated:** February 6, 2026
