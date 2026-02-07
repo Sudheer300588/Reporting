@@ -205,8 +205,8 @@ router.get("/clients/:clientId/segments", async (req, res) => {
     // Calculate total contacts across all segments
     const totalContacts = segments.reduce((sum, segment) => sum + (segment.contactCount || 0), 0);
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: segments,
       totalContacts: totalContacts,
       segmentCount: segments.length
@@ -800,8 +800,8 @@ router.post("/clients/:id/backfill", async (req, res) => {
     const start = fromDate
       ? new Date(fromDate)
       : client.createdAt
-      ? new Date(client.createdAt)
-      : new Date(new Date().getFullYear(), 0, 1);
+        ? new Date(client.createdAt)
+        : new Date(new Date().getFullYear(), 0, 1);
     const end = toDate ? new Date(toDate) : new Date();
 
     // Respond quickly and run backfill in background
@@ -1015,9 +1015,9 @@ router.delete("/clients/:id/permanent", async (req, res) => {
       const deletedSegments = await tx.mauticSegment.deleteMany({ where: { clientId: clientId } });
       const deletedSyncLogs = await tx.mauticSyncLog.deleteMany({ where: { mauticClientId: clientId } });
       const deletedMonths = await tx.mauticFetchedMonth.deleteMany({ where: { clientId: clientId } });
-      
+
       logger.debug(`Deleted ${deletedEmails.count} emails, ${deletedReports.count} reports, ${deletedCampaigns.count} campaigns, ${deletedSegments.count} segments, ${deletedSyncLogs.count} sync logs, ${deletedMonths.count} fetched months`);
-      
+
       await tx.mauticClient.delete({ where: { id: clientId } });
 
       if (linkedClientId) {
@@ -1102,17 +1102,15 @@ router.patch("/clients/:id/toggle", async (req, res) => {
         data: { isActive: newStatus },
       });
       logger.debug(
-        `✓ ${newStatus ? "Activated" : "Deactivated"} linked client (ID: ${
-          mauticClient.clientId
+        `✓ ${newStatus ? "Activated" : "Deactivated"} linked client (ID: ${mauticClient.clientId
         })`
       );
     }
 
     res.json({
       success: true,
-      message: `Mautic service ${
-        newStatus ? "activated" : "deactivated"
-      } successfully`,
+      message: `Mautic service ${newStatus ? "activated" : "deactivated"
+        } successfully`,
       data: {
         ...mauticClient,
         password: undefined,
@@ -1200,14 +1198,27 @@ router.get("/dashboard", async (req, res) => {
 router.get("/stats/overview", authenticate, async (req, res) => {
   try {
     const { fromDate, toDate } = req.query;
-    
+
     // Get accessible client IDs for current user
     let clientIds = null;
     if (!hasFullAccess(req.user)) {
       const accessibleClientIds = await getAccessibleClientIds(req.user.id, req.user);
       clientIds = accessibleClientIds;
     }
-    
+
+    // ⚡ CRITICAL FIX: Filter out SMS-only clients to prevent duplicate email stats
+    // Even if user has access to SMS-only clients, exclude them from email stats
+    if (clientIds) {
+      const validClients = await prisma.mauticClient.findMany({
+        where: {
+          id: { in: clientIds },
+          reportId: { not: 'sms-only' }
+        },
+        select: { id: true }
+      });
+      clientIds = validClients.map(c => c.id);
+    }
+
     const result = await statsService.getApplicationStats({ fromDate, toDate, clientIds });
     res.json(result);
   } catch (error) {
@@ -1229,7 +1240,7 @@ router.get("/clients/:clientId/stats", async (req, res) => {
   try {
     const { clientId } = req.params;
     const { fromDate, toDate, includeCampaigns, page, limit } = req.query;
-    
+
     const result = await statsService.getClientStats(parseInt(clientId), {
       fromDate,
       toDate,
@@ -1237,11 +1248,11 @@ router.get("/clients/:clientId/stats", async (req, res) => {
       page: page ? parseInt(page) : 1,
       limit: limit ? parseInt(limit) : 20
     });
-    
+
     if (!result.success) {
       return res.status(404).json(result);
     }
-    
+
     res.json(result);
   } catch (error) {
     logger.error("Error fetching client stats:", error);
@@ -1262,18 +1273,18 @@ router.get("/campaigns/:campaignId/stats", async (req, res) => {
   try {
     const { campaignId } = req.params;
     const { fromDate, toDate, page, limit } = req.query;
-    
+
     const result = await statsService.getCampaignStats(parseInt(campaignId), {
       fromDate,
       toDate,
       page: page ? parseInt(page) : 1,
       limit: limit ? parseInt(limit) : 50
     });
-    
+
     if (!result.success) {
       return res.status(404).json(result);
     }
-    
+
     res.json(result);
   } catch (error) {
     logger.error("Error fetching campaign stats:", error);
@@ -1294,17 +1305,17 @@ router.get("/emails/:emailId/stats", async (req, res) => {
   try {
     const { emailId } = req.params;
     const { includeHistory, fromDate, toDate } = req.query;
-    
+
     const result = await statsService.getEmailStats(parseInt(emailId), {
       includeHistory: includeHistory === 'true',
       fromDate,
       toDate
     });
-    
+
     if (!result.success) {
       return res.status(404).json(result);
     }
-    
+
     res.json(result);
   } catch (error) {
     logger.error("Error fetching email stats:", error);
@@ -1554,64 +1565,6 @@ router.get("/reports", async (req, res) => {
   }
 });
 
-
-// ============================================
-// SMS ROUTES
-// ============================================
-/**
-* GET /api/contact/:id
-* Get contact activity (SMS messages and replies) from endpoint on-demand
-*/
-router.get("/contact/:id", async (req, res) => {
-  const { id } = req.params;
-  const { smsId } = req.query;
- 
-  try {
-    // Find which client owns this smsId
-    const smsCampaign = await prisma.mauticSms.findUnique({
-      where: { id: parseInt(smsId) },
-      include: { client: true }
-    });
- 
-    if (!smsCampaign || !smsCampaign.client) {
-      return res.status(404).json({ error: "SMS campaign or client not found" });
-    }
- 
-    // Create mautic client instance using that client's credentials
-    const apiClient = mauticAPI.createClient(smsCampaign.client);
- 
-    // Fetch contact details + activity from Mautic
-    const [activityRes, contactRes] = await Promise.all([
-      apiClient.get(`/contacts/${id}/activity`),
-      apiClient.get(`/contacts/${id}`)
-    ]);
- 
-    const contact = contactRes.data?.contact || {};
-    const events = activityRes.data?.events || [];
- 
-    // Filter events
-    const filteredEvents = events.filter(
-      e =>
-        (e.event === "sms.sent" && e.details?.stat?.sms_id?.toString() === smsCampaign.mauticId.toString()) ||
-        e.event === "sms_reply"
-    );
- 
-    const name = `${contact.fields?.core?.firstname?.value || ""} ${contact.fields?.core?.lastname?.value || ""}`.trim();
- 
-    res.json({
-      id,
-      name: name || `Contact #${id}`,
-      events: filteredEvents
-    });
- 
-  } catch (err) {
-    console.error("❌ Error fetching contact activity:", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-
-
 // ============================================
 // SYNC ROUTES
 // ============================================
@@ -1657,7 +1610,7 @@ router.get("/sync/status", async (req, res) => {
       orderBy: { syncCompletedAt: 'desc' }
     });
     lastSyncAt = lastSync?.syncCompletedAt || null;
-    
+
     // If no sync log, check MauticClient lastSyncAt as fallback
     if (!lastSyncAt) {
       const client = await prisma.mauticClient.findFirst({
@@ -1949,7 +1902,7 @@ router.post("/sync/:clientId", async (req, res) => {
 router.get("/smses", authenticate, async (req, res) => {
   try {
     const accessibleClientIds = await getAccessibleClientIds(req);
-    
+
     const campaigns = await smsService.getAllSmsCampaigns(accessibleClientIds);
 
     res.json({
@@ -2068,6 +2021,58 @@ router.get("/smses/:smsId/contacts/:contactId", async (req, res) => {
       message: "Failed to fetch contact activity",
       error: error.message
     });
+  }
+});
+
+/**
+ * GET /api/contact/:id
+ * Get contact activity (SMS messages and replies) from endpoint on-demand
+ */
+router.get("/contact/:id", async (req, res) => {
+  const { id } = req.params;
+  const { smsId } = req.query;
+
+  try {
+    // Find which client owns this smsId
+    const smsCampaign = await prisma.mauticSms.findUnique({
+      where: { id: parseInt(smsId) },
+      include: { client: true }
+    });
+
+    if (!smsCampaign || !smsCampaign.client) {
+      return res.status(404).json({ error: "SMS campaign or client not found" });
+    }
+
+    // Create mautic client instance using that client's credentials
+    const apiClient = mauticAPI.createClient(smsCampaign.client);
+
+    // Fetch contact details + activity from Mautic
+    const [activityRes, contactRes] = await Promise.all([
+      apiClient.get(`/contacts/${id}/activity`),
+      apiClient.get(`/contacts/${id}`)
+    ]);
+
+    const contact = contactRes.data?.contact || {};
+    const events = activityRes.data?.events || [];
+
+    // Filter events
+    const filteredEvents = events.filter(
+      e =>
+        (e.event === "sms.sent" && e.details?.stat?.sms_id?.toString() === smsCampaign.mauticId.toString()) ||
+        e.event === "sms_reply"
+    );
+
+    const name = `${contact.fields?.core?.firstname?.value || ""} ${contact.fields?.core?.lastname?.value || ""}`.trim();
+
+    res.json({
+      id,
+      name: name || `Contact #${id}`,
+      events: filteredEvents
+    });
+
+  } catch (err) {
+    console.error("❌ Error fetching contact activity:", err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
