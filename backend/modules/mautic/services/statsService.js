@@ -61,8 +61,21 @@ class StatsService {
       const { fromDate, toDate, clientIds } = options;
       const dateFilter = StatsService.buildDateFilter(fromDate, toDate);
 
-      // Add client filtering if specified (for non-full-access users)
-      const clientFilter = clientIds ? { clientId: { in: clientIds } } : {};
+      // ⚡ CRITICAL FIX: Filter out SMS-only clients to prevent duplicate email stats
+      // Get valid client IDs (exclude reportId='sms-only' to avoid duplication)
+      const validClientIds = await prisma.mauticClient.findMany({
+        where: {
+          isActive: true,
+          reportId: { not: 'sms-only' },
+          ...(clientIds ? { id: { in: clientIds } } : {})
+        },
+        select: { id: true }
+      }).then(clients => clients.map(c => c.id));
+
+      // Build client filter using only valid (non-SMS-only) client IDs
+      const clientFilter = validClientIds.length > 0
+        ? { clientId: { in: validClientIds } }
+        : { clientId: -1 }; // No valid clients found
 
       const [
         emailAggregate,
@@ -91,9 +104,19 @@ class StatsService {
         prisma.mauticEmail.count({ where: { ...dateFilter, ...clientFilter } }),
         prisma.mauticCampaign.count({ where: clientFilter }),
         prisma.mauticSegment.count({ where: clientFilter }),
-        prisma.mauticClient.count({ where: { isActive: true, ...(clientIds ? { clientId: { in: clientIds } } : {}) } }),
+        prisma.mauticClient.count({
+          where: {
+            isActive: true,
+            reportId: { not: 'sms-only' },
+            ...(clientIds ? { id: { in: clientIds } } : {})
+          }
+        }),
         prisma.mauticClient.findMany({
-          where: { isActive: true, ...(clientIds ? { clientId: { in: clientIds } } : {}) },
+          where: {
+            isActive: true,
+            reportId: { not: 'sms-only' },
+            ...(clientIds ? { id: { in: clientIds } } : {})
+          },
           select: {
             id: true,
             name: true,
@@ -258,19 +281,19 @@ class StatsService {
         prisma.mauticEmail.count({ where: { clientId, ...dateFilter } }),
         includeCampaigns
           ? prisma.mauticCampaign.findMany({
-              where: { clientId },
-              skip,
-              take: limit,
-              orderBy: { createdAt: 'desc' },
-              select: {
-                id: true,
-                mauticCampaignId: true,
-                name: true,
-                isPublished: true,
-                createdAt: true,
-                description: true
-              }
-            })
+            where: { clientId },
+            skip,
+            take: limit,
+            orderBy: { createdAt: 'desc' },
+            select: {
+              id: true,
+              mauticCampaignId: true,
+              name: true,
+              isPublished: true,
+              createdAt: true,
+              description: true
+            }
+          })
           : [],
         prisma.mauticEmail.findMany({
           where: { clientId, ...dateFilter, sentCount: { gt: 0 } },
@@ -473,13 +496,13 @@ class StatsService {
       if (includeHistory) {
         const dateFilter = StatsService.buildDateFilter(fromDate, toDate);
         const mauticEmailIdInt = parseInt(email.mauticEmailId);
-        
+
         if (!isNaN(mauticEmailIdInt)) {
-          const reportWhere = { 
+          const reportWhere = {
             eId: mauticEmailIdInt,
             clientId: email.clientId
           };
-          
+
           if (dateFilter.dateAdded) {
             reportWhere.dateSent = dateFilter.dateAdded;
           }
