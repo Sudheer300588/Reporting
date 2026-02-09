@@ -26,6 +26,7 @@ const Profile = lazy(() => import('./pages/Profile.jsx'))
 const Notifications = lazy(() => import('./pages/Notifications.jsx'))
 const Services = lazy(() => import('./pages/Services.jsx'))
 const Clients = lazy(() => import('./pages/Clients.jsx'))
+const SmsClients = lazy(() => import('./pages/SmsClients.jsx'))
 const HierarchyPage = lazy(() => import('./components/HierarchyPage.jsx'))
 
 // Common protected layout wrapper
@@ -46,6 +47,7 @@ function App() {
     { path: '/dashboard', element: <Dashboard /> },
     { path: '/users', element: <Employees /> },
     { path: '/clients', element: <Clients /> },
+    { path: '/sms-clients', element: <SmsClients /> },
     { path: '/activities', element: <Activities /> },
     { path: '/services', element: <Services /> },
     { path: '/settings', element: <Settings /> },

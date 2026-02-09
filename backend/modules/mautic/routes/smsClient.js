@@ -17,6 +17,7 @@ const router = express.Router();
  */
 router.get('/sms-clients', async (req, res) => {
   try {
+    // Get all SMS clients
     const smsClients = await prisma.smsClient.findMany({
       orderBy: { name: 'asc' },
       include: {
@@ -26,9 +27,24 @@ router.get('/sms-clients', async (req, res) => {
       }
     });
 
-    res.json({
-      success: true,
-      data: smsClients.map(client => ({
+    // For each SMS client, also check if there's a corresponding Mautic client with same name
+    // to get campaigns from that client too
+    const clientsWithCounts = await Promise.all(smsClients.map(async (client) => {
+      // Find matching Mautic client by name (exact match)
+      const mauticClient = await prisma.mauticClient.findFirst({
+        where: {
+          name: client.name
+        },
+        include: {
+          _count: {
+            select: { smsCampaigns: true }
+          }
+        }
+      });
+
+      const smsCount = client._count.smsCampaigns + (mauticClient?._count.smsCampaigns || 0);
+
+      return {
         id: client.id,
         name: client.name,
         mauticUrl: client.mauticUrl,
@@ -36,9 +52,15 @@ router.get('/sms-clients', async (req, res) => {
         isActive: client.isActive,
         lastSyncAt: client.lastSyncAt,
         smsCampaignsCount: client._count.smsCampaigns,
+        smsCount: smsCount, // Total count including Mautic client campaigns
         createdAt: client.createdAt,
         updatedAt: client.updatedAt
-      }))
+      };
+    }));
+
+    res.json({
+      success: true,
+      data: clientsWithCounts
     });
   } catch (error) {
     logger.error('Failed to fetch SMS clients:', error);
@@ -326,16 +348,51 @@ router.post('/sms-clients/:id/sync', async (req, res) => {
 /**
  * GET /api/mautic/sms-clients/:id/campaigns
  * Get SMS campaigns for a specific SMS client
+ * This includes campaigns from both the SMS client and any Mautic client with matching name
  */
 router.get('/sms-clients/:id/campaigns', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const campaigns = await smsService.getClientSmsCampaigns(parseInt(id), 'sms');
+    // Get the SMS client
+    const smsClient = await prisma.smsClient.findUnique({
+      where: { id: parseInt(id) }
+    });
+
+    if (!smsClient) {
+      return res.status(404).json({
+        success: false,
+        message: 'SMS client not found'
+      });
+    }
+
+    // Get campaigns from SMS client
+    const smsCampaigns = await smsService.getClientSmsCampaigns(parseInt(id), 'sms');
+
+    // Also get campaigns from Mautic client with same name (if exists)
+    const mauticClient = await prisma.mauticClient.findFirst({
+      where: {
+        name: smsClient.name
+      }
+    });
+
+    let mauticCampaigns = [];
+    if (mauticClient) {
+      mauticCampaigns = await smsService.getClientSmsCampaigns(mauticClient.id, 'mautic');
+    }
+
+    // Combine and deduplicate campaigns by mauticId
+    const allCampaigns = [...smsCampaigns, ...mauticCampaigns];
+    const uniqueCampaigns = Array.from(
+      new Map(allCampaigns.map(c => [c.mauticId, c])).values()
+    );
+
+    // Sort by name for consistent display
+    uniqueCampaigns.sort((a, b) => a.name.localeCompare(b.name));
 
     res.json({
       success: true,
-      data: campaigns
+      data: uniqueCampaigns
     });
   } catch (error) {
     logger.error('Failed to fetch SMS client campaigns:', error);
@@ -346,6 +403,286 @@ router.get('/sms-clients/:id/campaigns', async (req, res) => {
     });
   }
 });
+
+/**
+ * GET /api/mautic/sms-campaigns/:smsId/messages
+ * Get SMS messages/stats for a specific SMS campaign with pagination
+ * Includes reply data cross-referenced from lead event log
+ */
+router.get('/sms-campaigns/:smsId/messages', async (req, res) => {
+  try {
+    const { smsId } = req.params;
+    const { page = 1, limit = 100 } = req.query;
+
+    // Find the SMS campaign to get client credentials
+    // Try both regular client and SMS client
+    const smsCampaign = await prisma.mauticSms.findFirst({
+      where: { mauticId: parseInt(smsId, 10) },
+      include: {
+        client: {
+          select: { id: true, mauticUrl: true, username: true, password: true }
+        },
+        smsClient: {
+          select: { id: true, mauticUrl: true, username: true, password: true }
+        }
+      }
+    });
+
+    if (!smsCampaign) {
+      return res.status(404).json({
+        success: false,
+        message: 'SMS campaign not found'
+      });
+    }
+
+    // Use credentials from whichever client exists
+    const credentials = smsCampaign.client || smsCampaign.smsClient;
+    
+    if (!credentials) {
+      return res.status(404).json({
+        success: false,
+        message: 'No client credentials found for this SMS campaign'
+      });
+    }
+
+    // Decrypt password if needed
+    const password = credentials.password.includes(':')
+      ? encryptionService.decrypt(credentials.password)
+      : credentials.password;
+
+    // Fetch messages from Mautic API - ensure URL has https://
+    let mauticUrl = credentials.mauticUrl;
+    if (!mauticUrl.startsWith('http://') && !mauticUrl.startsWith('https://')) {
+      mauticUrl = `https://${mauticUrl}`;
+    }
+    mauticUrl = mauticUrl.replace(/\/$/, '');
+    
+    const auth = Buffer.from(`${credentials.username}:${password}`).toString('base64');
+
+    // Step 1: Fetch ALL outbound SMS stats
+    const statsResponse = await fetch(
+      `${mauticUrl}/api/stats/sms_message_stats?where[0][col]=sms_id&where[0][expr]=eq&where[0][val]=${smsId}&limit=10000`,
+      {
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Accept': 'application/json'
+        }
+      }
+    );
+
+    if (!statsResponse.ok) {
+      throw new Error(`Mautic API error: ${statsResponse.status}`);
+    }
+
+    const statsData = await statsResponse.json();
+    const allMessages = statsData.stats || [];
+    const total = statsData.total || allMessages.length;
+
+    logger.info(`Fetched ${allMessages.length} SMS messages for campaign ${smsId}`);
+
+    // Step 2: Fetch ALL reply events from lead event log (only once, not per page)
+    let replyData = [];
+    try {
+      const replyResponse = await fetch(
+        `${mauticUrl}/api/stats/lead_event_log?where[0][col]=bundle&where[0][expr]=eq&where[0][val]=sms&where[1][col]=action&where[1][expr]=eq&where[1][val]=reply&limit=10000`,
+        {
+          headers: {
+            'Authorization': `Basic ${auth}`,
+            'Accept': 'application/json'
+          }
+        }
+      );
+      
+      if (replyResponse.ok) {
+        const replyJson = await replyResponse.json();
+        replyData = replyJson.stats || [];
+        logger.info(`Fetched ${replyData.length} SMS reply events`);
+      }
+    } catch (replyError) {
+      logger.warn('Failed to fetch reply data:', replyError);
+      // Continue without reply data
+    }
+
+    // Create a map of lead_id to reply data for quick lookup
+    const replyMap = new Map();
+    for (const reply of replyData) {
+      const leadId = reply.lead_id;
+      if (!replyMap.has(leadId)) {
+        replyMap.set(leadId, []);
+      }
+      replyMap.get(leadId).push({
+        replyDate: reply.date_added,
+        message: reply.properties?.message || null
+      });
+    }
+
+    // Apply pagination
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const startIndex = (pageNum - 1) * limitNum;
+    const endIndex = startIndex + limitNum;
+    const paginatedMessages = allMessages.slice(startIndex, endIndex);
+
+    // Calculate overall stats from all messages
+    // Note: is_failed comes as string '0' or '1' from Mautic API
+    const overallDelivered = allMessages.filter(msg => msg.is_failed != 1 && msg.is_failed != '1').length;
+    const overallFailed = allMessages.filter(msg => msg.is_failed == 1 || msg.is_failed == '1').length;
+
+    // Format messages with reply data
+    const formattedMessages = paginatedMessages.map(msg => {
+      const leadId = msg.lead_id;
+      const replies = replyMap.get(leadId) || [];
+      
+      return {
+        leadId,
+        dateSent: msg.date_sent,
+        status: (msg.is_failed == 1 || msg.is_failed == '1') ? 'failed' : 'delivered',
+        hasReplied: replies.length > 0,
+        replyDetails: replies.length > 0 ? replies : null
+      };
+    });
+
+    res.json({
+      success: true,
+      data: formattedMessages,
+      total,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(total / limitNum),
+      delivered: overallDelivered,
+      failed: overallFailed
+    });
+  } catch (error) {
+    logger.error('Failed to fetch SMS messages:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch messages',
+      error: error.message
+    });
+  }
+});
+
+
+// ============================================
+// NEW: GET LEAD ACTIVITY
+// ============================================
+
+/**
+ * GET /api/mautic/leads/:leadId/activity
+ * Get activity timeline for a specific lead
+ */
+router.get('/leads/:leadId/activity', async (req, res) => {
+  try {
+    const { leadId } = req.params;
+    const { smsId } = req.query; // Optional: to find which client to use
+
+    // Find the SMS campaign to get client credentials
+    let credentials;
+    
+    if (smsId) {
+      const smsCampaign = await prisma.mauticSms.findFirst({
+        where: { mauticId: parseInt(smsId, 10) },
+        include: {
+          client: {
+            select: { id: true, mauticUrl: true, username: true, password: true }
+          },
+          smsClient: {
+            select: { id: true, mauticUrl: true, username: true, password: true }
+          }
+        }
+      });
+
+      if (!smsCampaign) {
+        return res.status(404).json({
+          success: false,
+          message: 'SMS campaign not found'
+        });
+      }
+
+      credentials = smsCampaign.client || smsCampaign.smsClient;
+    } else {
+      // If no SMS ID provided, use the first active SMS client
+      const smsClient = await prisma.smsClient.findFirst({
+        where: { isActive: true },
+        select: { id: true, mauticUrl: true, username: true, password: true }
+      });
+
+      if (!smsClient) {
+        return res.status(404).json({
+          success: false,
+          message: 'No active SMS client found'
+        });
+      }
+
+      credentials = smsClient;
+    }
+
+    // Decrypt password if needed
+    const password = credentials.password.includes(':')
+      ? encryptionService.decrypt(credentials.password)
+      : credentials.password;
+
+    // Ensure URL has https://
+    let mauticUrl = credentials.mauticUrl;
+    if (!mauticUrl.startsWith('http://') && !mauticUrl.startsWith('https://')) {
+      mauticUrl = `https://${mauticUrl}`;
+    }
+    mauticUrl = mauticUrl.replace(/\/$/, '');
+    
+    const auth = Buffer.from(`${credentials.username}:${password}`).toString('base64');
+
+    // Fetch lead activity from Mautic API
+    const activityResponse = await fetch(
+      `${mauticUrl}/api/contacts/${leadId}/activity`,
+      {
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Accept': 'application/json'
+        }
+      }
+    );
+
+    if (!activityResponse.ok) {
+      throw new Error(`Mautic API error: ${activityResponse.status}`);
+    }
+
+    const activityData = await activityResponse.json();
+    const events = activityData.events || [];
+
+    // Filter and format relevant events (SMS sent, replies, etc.)
+    const formattedEvents = events.map(event => ({
+      type: event.event,
+      eventType: event.eventType,
+      timestamp: event.timestamp,
+      details: event.details || {},
+      icon: event.icon,
+      contactId: event.contactId
+    })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Most recent first
+
+    // Separate SMS-specific events
+    const smsEvents = formattedEvents.filter(e => 
+      e.event === 'sms.sent' || e.event === 'sms.failed' || e.event === 'sms.replied'
+    );
+
+    res.json({
+      success: true,
+      leadId,
+      totalEvents: formattedEvents.length,
+      smsEventsCount: smsEvents.length,
+      events: formattedEvents,
+      smsEvents
+    });
+
+  } catch (error) {
+    logger.error('Failed to fetch lead activity:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch lead activity',
+      error: error.message
+    });
+  }
+});
+
 
 // ============================================
 // HELPER FUNCTIONS
@@ -369,10 +706,13 @@ async function syncSmsClientData(smsClientId) {
       throw new Error('SMS client not found');
     }
 
-    // Get all Mautic clients for prefix matching
+    // Get all Mautic clients for prefix matching (exclude sms-only clients to avoid conflicts)
     const mauticClients = await prisma.mauticClient.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true }
+      where: { 
+        isActive: true,
+        NOT: { reportId: 'sms-only' }
+      },
+      select: { id: true, name: true, reportId: true }
     });
 
     // Fetch SMS campaigns from Mautic

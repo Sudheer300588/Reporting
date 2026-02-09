@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext.jsx'
 import axios from 'axios'
 import {
     LogOut, User, Users, FolderOpen, BarChart3, Activity, Settings,
-    CheckSquare, Bell, Menu, X, UserPlus, HeartHandshake
+    CheckSquare, Bell, Menu, X, UserPlus, HeartHandshake, MessageSquare
 } from 'lucide-react'
 
 const Navbar = () => {
@@ -69,6 +69,7 @@ const Navbar = () => {
     const navLinks = [
         { to: '/dashboard', label: 'Dashboard', icon: BarChart3, pageKey: 'Dashboard' },
         { to: '/clients', label: 'Clients', icon: UserPlus, pageKey: 'Clients' },
+        { to: '/sms-clients', label: 'SMS Clients', icon: MessageSquare, pageKey: 'Services' },
         { to: '/users', label: 'Employees', icon: Users, pageKey: 'Users' },
         { to: '/services', label: 'Services', icon: HeartHandshake, pageKey: 'Services' },
         { to: '/activities', label: 'Activities', icon: Activity, pageKey: 'Activities' },
