@@ -15,6 +15,7 @@ export const useSettings = () => {
 const SECTION_CONFIG = [
   { key: 'roles', label: 'Roles', superadminOnly: true },
   { key: 'mautic', label: 'Autovation Clients' },
+  { key: 'sms-clients', label: 'SMS Clients' },
   { key: 'notifs', label: 'Notifications' },
   { key: 'maintenance', label: 'System Maintenance Email' },
   { key: 'smtp', label: 'SMTP Credentials' },
@@ -47,7 +48,7 @@ const SettingsLayout = ({ children, myPermissions = [] }) => {
     const handleScroll = () => {
       if (isInteractingRef.current) return;
 
-      const sections = ['roles', 'mautic', 'notifs', 'maintenance', 'smtp', 'sftp', 'vicidial', 'sitecustom', 'ai'];
+      const sections = ['roles', 'mautic', 'sms-clients', 'notifs', 'maintenance', 'smtp', 'sftp', 'vicidial', 'sitecustom', 'ai'];
 
       for (const key of sections) {
         const el = sectionRefs.current[key];
@@ -84,6 +85,7 @@ const SettingsLayout = ({ children, myPermissions = [] }) => {
   const sectionToPermissionKey = {
     'roles': 'Roles',
     'mautic': 'Autovation Clients',
+    'sms-clients': 'SMS Clients',
     'notifs': 'Notifications',
     'maintenance': 'System Maintenance Email',
     'smtp': 'SMTP Credentials',
@@ -95,31 +97,31 @@ const SettingsLayout = ({ children, myPermissions = [] }) => {
 
   const canAccessSetting = (settingKey) => {
     if (hasFullAccess()) return true;
-    
+
     // Check customRole.permissions.Settings for the specific section
     const permissionKey = sectionToPermissionKey[settingKey] || settingKey;
     const settingsPerms = user?.customRole?.permissions?.Settings;
-    
+
     // Handle object format: {"Autovation Clients": true}
     if (settingsPerms && typeof settingsPerms === 'object' && !Array.isArray(settingsPerms)) {
       if (settingsPerms[permissionKey] === true) return true;
     }
-    
+
     // Handle array format: ["Autovation Clients"] (legacy)
     if (Array.isArray(settingsPerms)) {
       if (settingsPerms.includes(permissionKey)) return true;
     }
-    
+
     // Also check myPermissions for backward compatibility
     if (myPermissions.includes(settingKey) || myPermissions.includes(permissionKey)) return true;
-    
+
     return false;
   };
 
   const visibleSections = SECTION_CONFIG.filter(({ key, superadminOnly }) => {
     // Roles section is superadmin-only by design
     if (superadminOnly && !hasFullAccess()) return false;
-    
+
     return canAccessSetting(key);
   });
 
@@ -180,8 +182,8 @@ const SettingsLayout = ({ children, myPermissions = [] }) => {
                 <button
                   onClick={() => scrollToSection(key)}
                   className={`flex items-center gap-3 w-full text-left px-4 py-3 rounded-lg transition-all duration-200 
-                    ${activeSection === key 
-                      ? 'bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700 font-medium shadow-sm border border-blue-200' 
+                    ${activeSection === key
+                      ? 'bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700 font-medium shadow-sm border border-blue-200'
                       : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900 border border-transparent'
                     }
                   `}

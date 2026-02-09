@@ -35,7 +35,7 @@ const SmsClientsSettings = () => {
   };
 
   useEffect(() => {
-    if (canAccessSetting('mautic')) {
+    if (canAccessSetting('sms-clients')) {
       fetchClients();
     }
   }, [canAccessSetting]);
@@ -53,7 +53,7 @@ const SmsClientsSettings = () => {
         await axios.post(`${baseUrl}/api/mautic/sms-clients`, formData);
         toast.update(toastId, { render: '✅ SMS client created successfully!', type: 'success', isLoading: false, autoClose: 3000 });
       }
-      
+
       setIsModalOpen(false);
       setEditingClient(null);
       setShowPassword(false);
@@ -61,11 +61,11 @@ const SmsClientsSettings = () => {
       await fetchClients();
     } catch (error) {
       console.error('Error saving SMS client:', error);
-      toast.update(toastId, { 
-        render: `❌ ${error.response?.data?.message || 'Failed to save SMS client'}`, 
-        type: 'error', 
-        isLoading: false, 
-        autoClose: 5000 
+      toast.update(toastId, {
+        render: `❌ ${error.response?.data?.message || 'Failed to save SMS client'}`,
+        type: 'error',
+        isLoading: false,
+        autoClose: 5000
       });
     }
   };
@@ -94,11 +94,11 @@ const SmsClientsSettings = () => {
       await fetchClients();
     } catch (error) {
       console.error('Error deleting SMS client:', error);
-      toast.update(toastId, { 
-        render: `❌ ${error.response?.data?.message || 'Failed to delete SMS client'}`, 
-        type: 'error', 
-        isLoading: false, 
-        autoClose: 5000 
+      toast.update(toastId, {
+        render: `❌ ${error.response?.data?.message || 'Failed to delete SMS client'}`,
+        type: 'error',
+        isLoading: false,
+        autoClose: 5000
       });
     }
   };
@@ -117,11 +117,11 @@ const SmsClientsSettings = () => {
       await fetchClients();
     } catch (error) {
       console.error('Error syncing SMS client:', error);
-      toast.update(toastId, { 
-        render: `❌ ${error.response?.data?.message || 'Failed to sync SMS client'}`, 
-        type: 'error', 
-        isLoading: false, 
-        autoClose: 5000 
+      toast.update(toastId, {
+        render: `❌ ${error.response?.data?.message || 'Failed to sync SMS client'}`,
+        type: 'error',
+        isLoading: false,
+        autoClose: 5000
       });
     } finally {
       setSyncingClientId(null);
@@ -135,7 +135,7 @@ const SmsClientsSettings = () => {
 
     setSyncingClientId('all');
     const toastId = toast.loading(`⚙️ Syncing ${clients.length} SMS client(s)...`);
-    
+
     try {
       const baseUrl = import.meta.env.VITE_API_URL || "";
       let successCount = 0;
@@ -152,184 +152,187 @@ const SmsClientsSettings = () => {
       }
 
       if (failCount === 0) {
-        toast.update(toastId, { 
-          render: `✅ All ${successCount} SMS clients synced successfully!`, 
-          type: 'success', 
-          isLoading: false, 
-          autoClose: 3000 
+        toast.update(toastId, {
+          render: `✅ All ${successCount} SMS clients synced successfully!`,
+          type: 'success',
+          isLoading: false,
+          autoClose: 3000
         });
       } else {
-        toast.update(toastId, { 
-          render: `⚠️ Synced ${successCount} clients, ${failCount} failed`, 
-          type: 'warning', 
-          isLoading: false, 
-          autoClose: 5000 
+        toast.update(toastId, {
+          render: `⚠️ Synced ${successCount} clients, ${failCount} failed`,
+          type: 'warning',
+          isLoading: false,
+          autoClose: 5000
         });
       }
-      
+
       await fetchClients();
     } catch (error) {
       console.error('Error syncing SMS clients:', error);
-      toast.update(toastId, { 
-        render: `❌ ${error.response?.data?.message || 'Failed to sync SMS clients'}`, 
-        type: 'error', 
-        isLoading: false, 
-        autoClose: 5000 
+      toast.update(toastId, {
+        render: `❌ ${error.response?.data?.message || 'Failed to sync SMS clients'}`,
+        type: 'error',
+        isLoading: false,
+        autoClose: 5000
       });
     } finally {
       setSyncingClientId(null);
     }
   };
 
-  if (!canAccessSetting('mautic')) return null;
+  if (!canAccessSetting('sms-clients')) return null;
 
   return (
     <>
       <SettingsSection id="sms-clients" className="mb-16">
-        {/* Summary Card */}
-        <div className="bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-6 mb-6 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="bg-white p-3 rounded-lg shadow-sm">
-                <MessageSquare className="w-6 h-6 text-purple-600" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">SMS Clients</h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  Manage SMS clients for campaigns without prefix matching
-                </p>
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-3xl font-bold text-purple-600">{clients.length}</div>
-              <div className="text-sm text-gray-600">Total Clients</div>
-            </div>
-          </div>
-        </div>
-
         <div className="card">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="text-sm text-gray-600">
-              Configure SMS clients to sync campaigns from your Mautic instances
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleSyncAll}
-                disabled={clients.length === 0 || syncingClientId !== null}
-                className="btn btn-secondary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Sync all SMS clients"
-              >
-                <RefreshCw className={`w-4 h-4 ${syncingClientId !== null ? 'animate-spin' : ''}`} />
-                Sync
-              </button>
-              <button
-                onClick={() => { 
-                  setEditingClient(null); 
-                  setShowPassword(false);
-                  setFormData({ name: '', mauticUrl: '', username: '', password: '' });
-                  setIsModalOpen(true); 
-                }}
-                className="btn btn-primary flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Add Client
-              </button>
+          {/* Summary Card */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                    <MessageSquare className="mr-2" size={20} />
+                    SMS Clients
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Manage SMS clients for campaigns without prefix matching
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-3xl font-bold text-purple-600">{clients.length}</div>
+                <div className="text-sm text-gray-600">Total Clients</div>
+              </div>
             </div>
           </div>
 
-          {loading ? (
-            <div className="flex justify-center items-center h-32">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div className="card">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                Configure SMS clients to sync campaigns from your Mautic instances
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleSyncAll}
+                  disabled={clients.length === 0 || syncingClientId !== null}
+                  className="btn btn-secondary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Sync all SMS clients"
+                >
+                  <RefreshCw className={`w-4 h-4 ${syncingClientId !== null ? 'animate-spin' : ''}`} />
+                  Sync
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingClient(null);
+                    setShowPassword(false);
+                    setFormData({ name: '', mauticUrl: '', username: '', password: '' });
+                    setIsModalOpen(true);
+                  }}
+                  className="btn btn-primary flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Client
+                </button>
+              </div>
             </div>
-          ) : clients.length === 0 ? (
-            <div className="text-center py-12 bg-gray-50 rounded-lg">
-              <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500 font-medium">No SMS clients configured</p>
-              <p className="text-sm text-gray-400 mt-1">Add your first SMS client to get started</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mautic URL</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Username</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">SMS Count</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Last Sync</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {clients.map((client) => (
-                    <tr key={client.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{client.name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        <a 
-                          href={client.mauticUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline"
-                        >
-                          {client.mauticUrl}
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{client.username}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          {client.smsCampaignsCount || 0}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {client.isActive ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            <CheckCircle className="w-3 h-3" />
-                            Active
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                            <XCircle className="w-3 h-3" />
-                            Inactive
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center text-sm text-gray-600">
-                        {client.lastSync ? new Date(client.lastSync).toLocaleString() : 'Never'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => handleSync(client.id)}
-                            disabled={syncingClientId === client.id}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            title="Sync SMS campaigns"
-                          >
-                            <RefreshCw className={`w-4 h-4 ${syncingClientId === client.id ? 'animate-spin' : ''}`} />
-                          </button>
-                          <button
-                            onClick={() => handleEdit(client)}
-                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                            title="Edit client"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(client.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete client"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
+
+            {loading ? (
+              <div className="flex justify-center items-center h-32">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            ) : clients.length === 0 ? (
+              <div className="text-center py-12 bg-gray-50 rounded-lg">
+                <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500 font-medium">No SMS clients configured</p>
+                <p className="text-sm text-gray-400 mt-1">Add your first SMS client to get started</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mautic URL</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Username</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">SMS Count</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Last Sync</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {clients.map((client) => (
+                      <tr key={client.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{client.name}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          <a
+                            href={client.mauticUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            {client.mauticUrl}
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{client.username}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {client.smsCampaignsCount || 0}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {client.isActive ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              <CheckCircle className="w-3 h-3" />
+                              Active
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                              <XCircle className="w-3 h-3" />
+                              Inactive
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-600">
+                          {client.lastSync ? new Date(client.lastSync).toLocaleString() : 'Never'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => handleSync(client.id)}
+                              disabled={syncingClientId === client.id}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              title="Sync SMS campaigns"
+                            >
+                              <RefreshCw className={`w-4 h-4 ${syncingClientId === client.id ? 'animate-spin' : ''}`} />
+                            </button>
+                            <button
+                              onClick={() => handleEdit(client)}
+                              className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                              title="Edit client"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(client.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete client"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
         </div>
       </SettingsSection>
 

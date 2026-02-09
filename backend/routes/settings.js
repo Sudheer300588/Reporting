@@ -59,7 +59,7 @@ router.get(
     try {
       // Find users with Settings permissions in their customRole
       const usersWithSettings = await prisma.user.findMany({
-        where: { 
+        where: {
           isActive: true,
           customRole: {
             isActive: true,
@@ -94,7 +94,7 @@ router.get(
         name: user.name,
         email: user.email,
         customRole: user.customRole?.name,
-        permissions: user.customRole?.fullAccess 
+        permissions: user.customRole?.fullAccess
           ? ["mautic", "smtp", "sftp", "vicidial", "sitecustom", "notifs", "maintenance"]
           : user.adminSettingsPermissions.map((p) => p.setting),
       }));
@@ -149,7 +149,7 @@ router.put(
       }
 
       // Check if user has Settings access via customRole
-      const hasSettingsAccess = user.customRole?.fullAccess || 
+      const hasSettingsAccess = user.customRole?.fullAccess ||
         (user.customRole?.permissions?.Settings && user.customRole.permissions.Settings.length > 0);
 
       if (!hasSettingsAccess) {
@@ -163,6 +163,7 @@ router.put(
       const validSettings = [
         "mautic",
         "smtp",
+        "sms-clients",
         "sftp",
         "vicidial",
         "sitecustom",
@@ -187,13 +188,13 @@ router.put(
         }),
         ...(permissions.length > 0
           ? [
-              prisma.adminSettingsPermission.createMany({
-                data: permissions.map((setting) => ({
-                  adminId: parseInt(adminId),
-                  setting,
-                })),
-              }),
-            ]
+            prisma.adminSettingsPermission.createMany({
+              data: permissions.map((setting) => ({
+                adminId: parseInt(adminId),
+                setting,
+              })),
+            }),
+          ]
           : []),
       ]);
 
@@ -229,7 +230,7 @@ router.put(
 router.get("/my-permissions", authenticate, async (req, res) => {
   try {
     const { hasFullAccess } = await import("../middleware/auth.js");
-    
+
     // Users with full access have access to all settings
     if (hasFullAccess(req.user)) {
       return res.json({
@@ -237,6 +238,7 @@ router.get("/my-permissions", authenticate, async (req, res) => {
         permissions: [
           "mautic",
           "smtp",
+          "sms-clients",
           "sftp",
           "vicidial",
           "sitecustom",
@@ -249,7 +251,7 @@ router.get("/my-permissions", authenticate, async (req, res) => {
     // For users with Settings permissions, check their customRole
     if (req.user.customRole?.permissions?.Settings) {
       const settingsPerms = req.user.customRole.permissions.Settings;
-      
+
       // Check if user has any Settings subsection permissions
       // Handle both array format ["Read", "Update"] and object format {"Autovation Clients": true}
       let hasSettingsAccess = false;
@@ -259,7 +261,7 @@ router.get("/my-permissions", authenticate, async (req, res) => {
         // Object format - check if any setting is enabled
         hasSettingsAccess = Object.values(settingsPerms).some(v => v === true);
       }
-      
+
       if (hasSettingsAccess) {
         // For object format, map enabled settings to permission keys
         let mappedPermissions = [];
@@ -268,6 +270,7 @@ router.get("/my-permissions", authenticate, async (req, res) => {
           const settingsKeyMap = {
             "Autovation Clients": "mautic",
             "SMTP Credentials": "smtp",
+            "SMS Clients": "sms-clients",
             "Voicemail SFTP Credentials": "sftp",
             "Vicidial Credentials": "vicidial",
             "Site Customization": "sitecustom",
@@ -275,14 +278,14 @@ router.get("/my-permissions", authenticate, async (req, res) => {
             "System Maintenance Email": "maintenance",
             "Roles": "roles"
           };
-          
+
           for (const [key, value] of Object.entries(settingsPerms)) {
             if (value === true && settingsKeyMap[key]) {
               mappedPermissions.push(settingsKeyMap[key]);
             }
           }
         }
-        
+
         // If we have mapped permissions, use them; otherwise fall back to legacy behavior
         if (mappedPermissions.length > 0) {
           return res.json({
@@ -290,7 +293,7 @@ router.get("/my-permissions", authenticate, async (req, res) => {
             permissions: mappedPermissions,
           });
         }
-        
+
         // Legacy fallback: check adminSettingsPermission table
         const permissions = await prisma.adminSettingsPermission.findMany({
           where: { adminId: req.user.id },
@@ -299,7 +302,7 @@ router.get("/my-permissions", authenticate, async (req, res) => {
 
         return res.json({
           success: true,
-          permissions: permissions.length > 0 
+          permissions: permissions.length > 0
             ? permissions.map((p) => p.setting)
             : ["mautic", "smtp", "sftp", "vicidial", "sitecustom", "notifs", "maintenance"],
         });
