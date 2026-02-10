@@ -7,10 +7,11 @@ const router = express.Router();
 const prisma = new PrismaClient();
 
 const PERMISSIONS_SCHEMA = {
-  Pages: ["Dashboard", "Clients", "Users", "Services", "Activities", "Settings"],
+  Pages: ["Dashboard", "Clients", "SMS Clients", "Users", "Services", "Activities", "Settings"],
   Settings: [
     "Roles",
     "Autovation Clients",
+    "SMS Clients",
     "Notifications",
     "System Maintenance Email",
     "SMTP Credentials",
@@ -27,7 +28,7 @@ const canAccessRoles = (req, res, next) => {
   if (hasFullAccess(req.user)) return next();
   if (userHasPermission(req.user, 'Users', 'Create')) return next();
   if (userHasPermission(req.user, 'Users', 'Update')) return next();
-  
+
   return res.status(403).json({
     success: false,
     message: 'Access denied. You need Users.Create or Users.Update permission to access roles.'
@@ -72,7 +73,7 @@ router.get('/schema', authenticate, requireAdmin, async (req, res) => {
 router.get('/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     const role = await prisma.role.findUnique({
       where: { id: parseInt(id) },
       include: {
@@ -125,8 +126,8 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
       });
     }
 
-    const validatedPermissions = fullAccess 
-      ? generateFullPermissions() 
+    const validatedPermissions = fullAccess
+      ? generateFullPermissions()
       : validateAndSanitizePermissions(permissions);
 
     const role = await prisma.role.create({
@@ -193,8 +194,8 @@ router.put('/:id', authenticate, requireAdmin, async (req, res) => {
       }
     }
 
-    const validatedPermissions = fullAccess 
-      ? generateFullPermissions() 
+    const validatedPermissions = fullAccess
+      ? generateFullPermissions()
       : (permissions ? validateAndSanitizePermissions(permissions) : existing.permissions);
 
     const role = await prisma.role.update({
@@ -367,7 +368,7 @@ function validateAndSanitizePermissions(permissions) {
   }
 
   const sanitized = {};
-  
+
   Object.keys(PERMISSIONS_SCHEMA).forEach(module => {
     if (permissions[module] && typeof permissions[module] === 'object') {
       sanitized[module] = {};

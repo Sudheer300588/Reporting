@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import ClientsDropCowboyDashboard from "../components/dropCowboy/ClientsDropCowboyDashboard";
 import MauticEmailsSection from "../components/mautic/MauticEmailsSection";
 import MauticCampaignsSection from "../components/mautic/MauticCampaignsSection";
+import MauticSmsSection from "../components/mautic/MauticSmsSection";
 import useViewLevel from "../zustand/useViewLevel";
 import ClientServicesSection from "../components/ClientServicesSection";
 import { usePermissions } from "../utils/permissions";
@@ -236,6 +237,10 @@ const Clients = () => {
 
     const openDropcowboyCampaigns = () => {
         setView("dropcowboy");
+    };
+
+    const openSmsCampaigns = () => {
+        setView("sms");
     };
 
     const openCampaignDetails = (campaign) => {
@@ -641,6 +646,7 @@ const Clients = () => {
                     goBackToClients={goBackToClients}
                     openMauticCampaigns={openMauticCampaigns}
                     openDropcowboyCampaigns={openDropcowboyCampaigns}
+                    openSmsCampaigns={openSmsCampaigns}
                 />
             )}
 
@@ -682,6 +688,15 @@ const Clients = () => {
 
                     <ClientsDropCowboyDashboard clientName={selectedClient.name} />
                 </div>
+            )}
+
+            {/* VIEW 6: SMS CAMPAIGNS LIST */}
+            {view === "sms" && selectedClient && (
+                <MauticSmsSection
+                    selectedClient={selectedClient}
+                    goBackToServices={goBackToServices}
+                    goBackToClients={goBackToClients}
+                />
             )}
 
             {/* Assign Modal */}

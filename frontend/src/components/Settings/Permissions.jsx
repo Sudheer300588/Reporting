@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 
 const PERMISSIONS_SCHEMA = {
-  Pages: ["Dashboard", "Clients", "Users", "Services", "Activities", "Settings"],
+  Pages: ["Dashboard", "Clients", "SMS Clients", "Users", "Services", "Activities", "Settings"],
   Settings: [
     "Roles",
     "Autovation Clients",
+    "SMS Clients",
     "Notifications",
     "System Maintenance Email",
     "SMTP Credentials",
@@ -61,7 +62,7 @@ export default function Permissions({ fullAccess, permissions: externalPermissio
 
   const togglePermission = (module, action) => {
     if (fullAccess) return;
-    
+
     const updated = {
       ...permissions,
       [module]: {
@@ -70,6 +71,7 @@ export default function Permissions({ fullAccess, permissions: externalPermissio
       },
     };
     setPermissions(updated);
+
     if (onPermissionsChange) {
       onPermissionsChange(updated);
     }
@@ -77,11 +79,11 @@ export default function Permissions({ fullAccess, permissions: externalPermissio
 
   const toggleModuleAll = (module) => {
     if (fullAccess) return;
-    
+
     const allChecked = PERMISSIONS_SCHEMA[module].every(
       (action) => permissions[module]?.[action]
     );
-    
+
     const updated = {
       ...permissions,
       [module]: {},
@@ -111,10 +113,9 @@ export default function Permissions({ fullAccess, permissions: externalPermissio
               onClick={() => setActiveModule(module)}
               disabled={fullAccess}
               className={`w-full text-left px-4 py-3 text-sm border-b last:border-b-0 transition
-                ${
-                  activeModule === module
-                    ? "bg-black text-white"
-                    : "bg-white hover:bg-gray-50 text-gray-700"
+                ${activeModule === module
+                  ? "bg-black text-white"
+                  : "bg-white hover:bg-gray-50 text-gray-700"
                 }
               `}
             >

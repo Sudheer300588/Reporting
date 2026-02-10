@@ -5,7 +5,7 @@
  */
 
 import React, { useState } from 'react';
-import { RefreshCw, AlertCircle, Mail, List, Target } from 'lucide-react';
+import { RefreshCw, AlertCircle, Mail, List, Target, MessageSquare } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useDashboardMetrics, useClients, useSync } from '../../hooks/mautic';
 import MetricsCards from './MetricsCards';
@@ -13,18 +13,19 @@ import ClientSelector from './ClientSelector';
 import CampaignsSection from './CampaignsSection';
 import EmailsSection from './EmailsSection'; // This shows Emails
 import SegmentsSection from './SegmentsSection';
+import SmsSection from './SmsSection';
 
 export default function MauticDashboard({ clientId = null, clientName = null, accessibleClientIds = null }) {
   // If clientId is provided (from ClientDashboard), use it and lock it
   const [selectedClientId, setSelectedClientId] = useState(clientId);
-  
-  const [activeTab, setActiveTab] = useState('campaigns'); // 'campaigns', 'emails', 'segments'
-  
+
+  const [activeTab, setActiveTab] = useState('campaigns'); // 'campaigns', 'emails', 'segments', 'sms'
+
   const { clients, loading: clientsLoading, refetch: refetchClients } = useClients();
   const { metrics, loading, error, refetch } = useDashboardMetrics(selectedClientId || clientId);
   const { syncAllClients, syncClient, isSyncing } = useSync();
   const [refreshKey, setRefreshKey] = useState(Date.now());
-  
+
   // Hide client selector if clientId is provided (viewing single client)
   const isClientLocked = clientId !== null;
 
@@ -33,7 +34,7 @@ export default function MauticDashboard({ clientId = null, clientName = null, ac
   const accessibleClients = React.useMemo(() => {
     console.log("accessible clients ids", accessibleClientIds);
     console.log("clients", clients);
-    
+
     if (!accessibleClientIds || accessibleClientIds.length === 0) {
       return clients || [];
     }
@@ -62,9 +63,9 @@ export default function MauticDashboard({ clientId = null, clientName = null, ac
     const result = selectedClientId
       ? await syncClient(selectedClientId)
       : await syncAllClients();
-    
+
     if (result.success) {
-      const message = result.data?.results 
+      const message = result.data?.results
         ? `Sync completed! ${result.data.results.successful}/${result.data.results.totalClients} clients synced successfully.`
         : result.message || 'Sync completed successfully!';
       toast.success(message, { autoClose: 5000 });
@@ -160,11 +161,11 @@ export default function MauticDashboard({ clientId = null, clientName = null, ac
           )}
           {isClientLocked && clientName && (
             <div className="px-4 py-2 bg-blue-100 text-blue-800 rounded-lg font-medium">
-               Viewing: {clientName}
+              Viewing: {clientName}
             </div>
           )}
         </div>
-        
+
         <button
           onClick={handleSync}
           disabled={isSyncing || clients.length === 0}
@@ -226,6 +227,20 @@ export default function MauticDashboard({ clientId = null, clientName = null, ac
                   <List className="w-4 h-4" />
                   <span>Segments</span>
                 </button>
+
+                <button
+                  onClick={() => setActiveTab('sms')}
+                  className={`
+                    flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors
+                    ${activeTab === 'sms'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }
+                  `}
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>SMS Campaigns</span>
+                </button>
               </nav>
             </div>
           </div>
@@ -235,6 +250,7 @@ export default function MauticDashboard({ clientId = null, clientName = null, ac
             {activeTab === 'campaigns' && <CampaignsSection clientId={selectedClientId} refreshKey={refreshKey} accessibleClientIds={accessibleClients.map(c => c.id)} />}
             {activeTab === 'emails' && <EmailsSection clientId={selectedClientId} refreshKey={refreshKey} accessibleClientIds={accessibleClients.map(c => c.id)} />}
             {activeTab === 'segments' && <SegmentsSection clientId={selectedClientId} refreshKey={refreshKey} accessibleClientIds={accessibleClients.map(c => c.id)} />}
+            {activeTab === 'sms' && <SmsSection clientId={selectedClientId} refreshKey={refreshKey} accessibleClientIds={accessibleClients.map(c => c.id)} />}
           </div>
         </>
       )}

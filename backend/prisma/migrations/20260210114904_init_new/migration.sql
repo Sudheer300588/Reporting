@@ -389,7 +389,8 @@ CREATE TABLE `MauticCampaign` (
 -- CreateTable
 CREATE TABLE `MauticSyncLog` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
-    `mauticClientId` INTEGER NOT NULL,
+    `mauticClientId` INTEGER NULL,
+    `smsClientId` INTEGER NULL,
     `status` ENUM('success', 'failed', 'partial') NOT NULL,
     `syncType` VARCHAR(191) NOT NULL DEFAULT 'scheduled',
     `totalFetched` INTEGER NOT NULL DEFAULT 0,
@@ -406,6 +407,7 @@ CREATE TABLE `MauticSyncLog` (
 
     INDEX `MauticSyncLog_status_idx`(`status`),
     INDEX `MauticSyncLog_mauticClientId_idx`(`mauticClientId`),
+    INDEX `MauticSyncLog_smsClientId_idx`(`smsClientId`),
     INDEX `MauticSyncLog_startedAt_idx`(`startedAt`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -421,6 +423,55 @@ CREATE TABLE `MauticFetchedMonth` (
 
     INDEX `MauticFetchedMonth_clientId_idx`(`clientId`),
     UNIQUE INDEX `client_year_month_unique`(`clientId`, `yearMonth`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `sms_clients` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `name` VARCHAR(191) NOT NULL,
+    `mauticUrl` VARCHAR(191) NOT NULL,
+    `username` VARCHAR(191) NOT NULL,
+    `password` VARCHAR(191) NOT NULL,
+    `isActive` BOOLEAN NOT NULL DEFAULT true,
+    `lastSyncAt` DATETIME(3) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `sms_clients_name_key`(`name`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `mautic_sms` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `mauticId` INTEGER NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `category` JSON NULL,
+    `sentCount` INTEGER NOT NULL DEFAULT 0,
+    `clientId` INTEGER NULL,
+    `smsClientId` INTEGER NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `mautic_sms_mauticId_key`(`mauticId`),
+    INDEX `mautic_sms_clientId_idx`(`clientId`),
+    INDEX `mautic_sms_smsClientId_idx`(`smsClientId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `mautic_sms_stats` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `smsId` INTEGER NOT NULL,
+    `mauticSmsId` INTEGER NOT NULL,
+    `leadId` INTEGER NOT NULL,
+    `dateSent` DATETIME(3) NULL,
+    `isFailed` VARCHAR(191) NOT NULL DEFAULT '0',
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `mautic_sms_stats_smsId_idx`(`smsId`),
+    UNIQUE INDEX `mautic_sms_stats_mauticSmsId_leadId_key`(`mauticSmsId`, `leadId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -702,7 +753,19 @@ ALTER TABLE `MauticCampaign` ADD CONSTRAINT `MauticCampaign_clientId_fkey` FOREI
 ALTER TABLE `MauticSyncLog` ADD CONSTRAINT `MauticSyncLog_mauticClientId_fkey` FOREIGN KEY (`mauticClientId`) REFERENCES `MauticClient`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE `MauticSyncLog` ADD CONSTRAINT `MauticSyncLog_smsClientId_fkey` FOREIGN KEY (`smsClientId`) REFERENCES `sms_clients`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE `MauticFetchedMonth` ADD CONSTRAINT `MauticFetchedMonth_clientId_fkey` FOREIGN KEY (`clientId`) REFERENCES `MauticClient`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `mautic_sms` ADD CONSTRAINT `mautic_sms_clientId_fkey` FOREIGN KEY (`clientId`) REFERENCES `MauticClient`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `mautic_sms` ADD CONSTRAINT `mautic_sms_smsClientId_fkey` FOREIGN KEY (`smsClientId`) REFERENCES `sms_clients`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `mautic_sms_stats` ADD CONSTRAINT `mautic_sms_stats_smsId_fkey` FOREIGN KEY (`smsId`) REFERENCES `mautic_sms`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `SFTPCredential` ADD CONSTRAINT `SFTPCredential_createdById_fkey` FOREIGN KEY (`createdById`) REFERENCES `User`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;

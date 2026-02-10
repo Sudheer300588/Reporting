@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext.jsx'
 import axios from 'axios'
 import {
     LogOut, User, Users, FolderOpen, BarChart3, Activity, Settings,
-    CheckSquare, Bell, Menu, X, UserPlus, HeartHandshake
+    CheckSquare, Bell, Menu, X, UserPlus, HeartHandshake, MessageSquare
 } from 'lucide-react'
 
 const Navbar = () => {
@@ -21,7 +21,7 @@ const Navbar = () => {
             if (!mounted || !site) return;
             if (site.logoPath) setSiteLogo(site.logoPath);
             if (site.siteTitle) setSiteTitle(site.siteTitle);
-        }).catch(() => {});
+        }).catch(() => { });
 
         // listen for immediate updates when customization is changed in Settings
         const handler = (ev) => {
@@ -47,11 +47,11 @@ const Navbar = () => {
     // Helper to check page access from customRole.permissions.Pages
     const hasPageAccess = (pageKey) => {
         if (hasFullAccess()) return true;
-        
+
         // Check customRole.permissions.Pages
         const pages = user?.customRole?.permissions?.Pages;
         if (pages && pages[pageKey] === true) return true;
-        
+
         // Backward compatibility for legacy users without customRole
         if (!user?.customRoleId) {
             if (['superadmin', 'admin'].includes(user?.role)) return true;
@@ -69,6 +69,7 @@ const Navbar = () => {
     const navLinks = [
         { to: '/dashboard', label: 'Dashboard', icon: BarChart3, pageKey: 'Dashboard' },
         { to: '/clients', label: 'Clients', icon: UserPlus, pageKey: 'Clients' },
+        { to: '/sms-clients', label: 'SMS Clients', icon: MessageSquare, pageKey: 'SMS Clients' },
         { to: '/users', label: 'Employees', icon: Users, pageKey: 'Users' },
         { to: '/services', label: 'Services', icon: HeartHandshake, pageKey: 'Services' },
         { to: '/activities', label: 'Activities', icon: Activity, pageKey: 'Activities' },

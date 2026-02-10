@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -380,6 +380,7 @@ model MauticClient {
   emailReports  MauticEmailReport[]        @relation("ClientEmailReports")
   emailStatsCache MauticEmailStatsCache[]  @relation("ClientEmailStatsCache")
   clickTrackables MauticClickTrackable[]
+  smsCampaigns  MauticSms[]
 
   @@unique([name])
   @@index([isActive])
@@ -532,7 +533,8 @@ model MauticCampaign {
 
 model MauticSyncLog {
   id              Int              @id @default(autoincrement())
-  mauticClientId  Int
+  mauticClientId  Int?
+  smsClientId     Int?
   status          MauticSyncStatus
   syncType        String           @default("scheduled")
   totalFetched    Int              @default(0)
@@ -547,10 +549,12 @@ model MauticSyncLog {
   version         Int              @default(1)
   createdAt       DateTime         @default(now())
 
-  mauticClient MauticClient @relation(fields: [mauticClientId], references: [id], onDelete: Cascade)
+  mauticClient MauticClient? @relation(fields: [mauticClientId], references: [id], onDelete: Cascade)
+  smsClient    SmsClient?    @relation(fields: [smsClientId], references: [id], onDelete: Cascade)
 
   @@index([status])
   @@index([mauticClientId])
+  @@index([smsClientId])
   @@index([startedAt])
 }
 
@@ -567,6 +571,65 @@ model MauticFetchedMonth {
 
   @@unique([clientId, yearMonth], map: "client_year_month_unique")
   @@index([clientId])
+}
+
+// ==========================================================
+// SMS CLIENT MODEL (Independent SMS data source)
+// ==========================================================
+model SmsClient {
+  id           Int       @id @default(autoincrement())
+  name         String    @unique
+  mauticUrl    String
+  username     String
+  password     String    // Encrypted
+  isActive     Boolean   @default(true)
+  lastSyncAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  smsCampaigns MauticSms[]
+  syncLogs     MauticSyncLog[]
+
+  @@map("sms_clients")
+}
+
+// ==========================================================
+// MAUTIC SMS INTEGRATION (Optimized – no message storage)
+// ==========================================================
+model MauticSms {
+  id           Int       @id @default(autoincrement())
+  mauticId     Int       @unique // Original SMS ID from Mautic
+  name         String
+  category     Json?     // Store category object { id, title }
+  sentCount    Int       @default(0)
+  clientId     Int?      // Links to MauticClient if prefix matches
+  smsClientId  Int?      // Links to SmsClient if no prefix match
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  client       MauticClient? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  smsClient    SmsClient?    @relation(fields: [smsClientId], references: [id], onDelete: Cascade)
+  stats        MauticSmsStat[]
+
+  @@index([clientId])
+  @@index([smsClientId])
+  @@map("mautic_sms")
+}
+
+model MauticSmsStat {
+  id          Int       @id @default(autoincrement())
+  smsId       Int       // Links to MauticSms
+  mauticSmsId Int       // Original SMS campaign ID from Mautic
+  leadId      Int
+  dateSent    DateTime?
+  isFailed    String    @default("0")
+  createdAt   DateTime  @default(now())
+
+  sms         MauticSms @relation(fields: [smsId], references: [id], onDelete: Cascade)
+
+  @@unique([mauticSmsId, leadId])
+  @@index([smsId])
+  @@map("mautic_sms_stats")
 }
 
 model SFTPCredential {
