@@ -360,6 +360,39 @@ router.post('/sms-clients/:id/sync', async (req, res) => {
 });
 
 /**
+ * GET /api/mautic/sms-clients/sync-status
+ * Get current SMS sync status
+ */
+router.get('/sms-clients/sync-status', async (req, res) => {
+  try {
+    // Get last successful sync from SMS clients
+    const lastSyncClient = await prisma.smsClient.findFirst({
+      where: { lastSyncAt: { not: null } },
+      orderBy: { lastSyncAt: 'desc' },
+      select: { lastSyncAt: true }
+    });
+
+    const lastSyncAt = lastSyncClient?.lastSyncAt || null;
+
+    res.json({
+      success: true,
+      data: {
+        lastSyncAt: lastSyncAt,
+        lastUpdated: lastSyncAt, // Alias for frontend compatibility
+        lastSync: lastSyncAt, // Additional alias
+      },
+    });
+  } catch (error) {
+    logger.error('Error fetching SMS sync status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch SMS sync status',
+      error: error.message
+    });
+  }
+});
+
+/**
  * POST /api/mautic/sms-clients/recategorize
  * Re-categorize all SMS campaigns based on first-word matching
  * This fixes any existing data inconsistencies
