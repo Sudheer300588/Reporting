@@ -49,13 +49,17 @@ const Clients = () => {
                 axios.get("/api/dropcowboy/metrics").catch(() => ({ data: { data: { campaigns: [] } } })),
             ]);
 
-            const mauticClients = (mauticRes.data?.data || []).map((c) => ({
-                ...c,
-                id: c.clientId || c.id,
-                mauticApiId: c.id,
-                uniqueId: `mautic-${c.clientId || c.id}`,
-                services: c.reportId === 'sms-only' ? ["sms"] : ["mautic"], // SMS-only clients only have SMS service
-            }));
+            // ✅ Filter out SMS-only clients (auto-created for unmatched SMS campaigns)
+            // These should only appear in SMS settings, not in main client list
+            const mauticClients = (mauticRes.data?.data || [])
+                .filter(c => c.reportId !== 'sms-only') // Exclude SMS-only clients
+                .map((c) => ({
+                    ...c,
+                    id: c.clientId || c.id,
+                    mauticApiId: c.id,
+                    uniqueId: `mautic-${c.clientId || c.id}`,
+                    services: ["mautic"], // Regular Mautic clients
+                }));
 
             // Extract clients from DropCowboy campaigns
             const dropCowboyCampaigns = dropCowboyRes.data?.data?.campaigns || [];

@@ -752,11 +752,11 @@ class MauticDataService {
   async getClients() {
     try {
        const clients = await prisma.mauticClient.findMany({
-      //   where: {
-      //     // Include all clients (including SMS-only)
-      //     isActive: true,
-      //     // reportId: { not: 'sms-only' } // uncomment this if you want to hide SMS-only clients
-      //   },
+        where: {
+          // ✅ Exclude SMS-only clients from main client list
+          // SMS-only clients are auto-created for unmatched SMS campaigns and should only appear in SMS settings
+          reportId: { not: 'sms-only' }
+        },
         orderBy: [
           { isActive: 'desc' }, // Active clients first
           { name: 'asc' }
