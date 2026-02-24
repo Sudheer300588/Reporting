@@ -1,11 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Phone, CheckCircle, AlertTriangle, Loader2, BarChart3 } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
-import { useMetrics } from '../../hooks/dropCowboy/useDropCowboy'
+import { useClientMetrics } from '../../hooks/dropCowboy/useDropCowboy'
 
 const formatNumber = (num) => {
-  console.log("total stat", num);
-  
   if (num === null || num === undefined) return '0'
   if (num >= 1000000) return (Math.floor(num / 100000) / 10).toFixed(1) + 'M'
   if (num >= 1000) return (Math.floor(num / 100) / 10).toFixed(1) + 'K'
@@ -42,29 +40,27 @@ const MetricBox = ({ label, value, icon: Icon, color = 'gray' }) => {
 const COLORS = ['#10B981', '#EF4444', '#F59E0B']
 
 const VoicemailPerformanceWidget = ({ clientName }) => {
-  const { metrics, loading, error } = useMetrics({})
+  // Use optimized client-specific metrics hook
+  const { metrics, loading, error } = useClientMetrics(clientName)
   const [clientStats, setClientStats] = useState(null)
 
   useEffect(() => {
-    if (!metrics?.campaigns || !clientName) return
+    if (!metrics?.campaigns) return
 
-    const records = metrics.campaigns.flatMap((campaign) => {
-      const campClientName = campaign.client || "Unknown"
-      return campaign.records.map((record) => ({
+    // Calculate stats from already filtered campaigns (backend filtered by clientName)
+    const records = metrics.campaigns.flatMap((campaign) => 
+      campaign.records.map((record) => ({
         ...record,
-        client: campClientName,
         status: record.status?.trim()?.toLowerCase() || "other",
       }))
-    })
+    )
 
-    const filteredRecords = records.filter((r) => r.client === clientName)
-
-    const totalSent = filteredRecords.length
-    const successfulDeliveries = filteredRecords.filter(r => r.status === "success").length
-    const failedSends = filteredRecords.filter(r => r.status === "failure").length
-    const otherStatus = filteredRecords.filter(r => !["success", "failure"].includes(r.status)).length
+    const totalSent = records.length
+    const successfulDeliveries = records.filter(r => r.status === "success" || r.status === "delivered" || r.status === "sent").length
+    const failedSends = records.filter(r => r.status === "failure" || r.status === "failed" || r.status === "error").length
+    const otherStatus = records.filter(r => !["success", "delivered", "sent", "failure", "failed", "error"].includes(r.status)).length
     
-    const totalCost = filteredRecords.reduce((sum, r) => sum + (parseFloat(r.cost) || 0), 0)
+    const totalCost = records.reduce((sum, r) => sum + (parseFloat(r.cost) || 0), 0)
 
     setClientStats({
       totalSent,
@@ -74,7 +70,7 @@ const VoicemailPerformanceWidget = ({ clientName }) => {
       totalCost,
       averageSuccessRate: totalSent > 0 ? ((successfulDeliveries / totalSent) * 100).toFixed(1) : 0
     })
-  }, [metrics, clientName])
+  }, [metrics])
 
   const pieChartData = useMemo(() => {
     if (!clientStats) return []

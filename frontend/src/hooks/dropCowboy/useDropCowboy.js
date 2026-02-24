@@ -57,6 +57,56 @@ export function useMetrics(initialFilters = {}) {
 }
 
 /**
+ * Hook for fetching client-specific metrics (optimized for single client)
+ * @param {string} clientName - Client name to filter by
+ * @param {Object} additionalFilters - Additional filters (startDate, endDate, etc)
+ * @returns {Object} { metrics, loading, error, refetch }
+ */
+export function useClientMetrics(clientName, additionalFilters = {}) {
+    const [metrics, setMetrics] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    const fetchData = useCallback(async () => {
+        if (!clientName) {
+            setLoading(false);
+            return;
+        }
+
+        try {
+            setLoading(true);
+            setError(null);
+            const result = await dropCowboyService.getClientMetrics(clientName, additionalFilters);
+
+            if (result.success) {
+                setMetrics(result.data);
+            } else {
+                setError(result.error);
+            }
+        } catch (err) {
+            setError(err.message || 'Failed to fetch client metrics');
+        } finally {
+            setLoading(false);
+        }
+    }, [clientName, JSON.stringify(additionalFilters)]);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    const refetch = useCallback(() => {
+        fetchData();
+    }, [fetchData]);
+
+    return {
+        metrics,
+        loading,
+        error,
+        refetch
+    };
+}
+
+/**
  * Hook for fetching and managing sync logs
  * @param {number} limit - Number of logs to fetch
  * @returns {Object} { syncLogs, loading, error, refetch }

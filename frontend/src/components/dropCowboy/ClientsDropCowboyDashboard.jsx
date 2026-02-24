@@ -26,8 +26,15 @@ export default function ClientsDropCowboyDashboard({ clientCampaigns = null, cli
     const [clientFilter, setClientFilter] = useState(clientName || 'All');
     const [clientOptions, setClientOptions] = useState(['All']);
 
-    // Use custom hooks for data fetching - pass campaign filter if provided
-    const initialFilters = clientCampaigns ? { campaignIds: clientCampaigns } : {};
+    // Use custom hooks for data fetching - optimize with client name filter if provided
+    const initialFilters = {};
+    if (clientCampaigns) {
+        initialFilters.campaignIds = clientCampaigns;
+    } else if (clientName) {
+        // Use clientName filter for better backend performance
+        initialFilters.clientName = clientName;
+    }
+    
     const { metrics, loading, error, refetch: refetchMetrics, setFilters, filters } = useMetrics(initialFilters);
     const { syncLogs, refetch: refetchSyncLogs } = useSyncLogs(10);
     const { triggerFetch, isFetching, error: fetchError } = useManualFetch();

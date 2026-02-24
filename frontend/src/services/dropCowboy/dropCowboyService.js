@@ -94,6 +94,31 @@ class DropCowboyService {
   }
 
   /**
+   * Fetch metrics for a specific client
+   * @param {string} clientName - Client name to filter by
+   * @param {Object} additionalFilters - Additional filters (startDate, endDate, etc)
+   * @returns {Promise<Object>} Client-specific metrics data
+   */
+  async getClientMetrics(clientName, additionalFilters = {}) {
+    try {
+      const filters = { ...additionalFilters, clientName };
+      const response = await apiFetchMetrics(filters);
+      return {
+        success: true,
+        data: response.data,
+        error: null
+      };
+    } catch (error) {
+      console.error(`Error fetching metrics for client ${clientName}:`, error);
+      return {
+        success: false,
+        data: null,
+        error: error.response?.data?.message || error.message || 'Failed to fetch client metrics'
+      };
+    }
+  }
+
+  /**
    * Fetch specific campaign details
    * @param {string} campaignName - Campaign name
    * @returns {Promise<Object>} Campaign details

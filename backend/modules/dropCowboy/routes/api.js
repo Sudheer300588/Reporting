@@ -7,6 +7,7 @@ import {
   notifySftpFetchFailed,
 } from "../../../utils/emailHelper.js";
 import { authenticate, hasFullAccess, getAccessibleClientIds } from '../../../middleware/auth.js';
+import { cacheMiddleware } from '../../../middleware/cache.js';
 import prisma from '../../../prisma/client.js';
 
 const router = express.Router();
@@ -18,9 +19,10 @@ let isSyncInProgress = false;
 let currentSyncStartTime = null;
 
 // Get dashboard metrics with optional filters and pagination - filtered by user's accessible clients
-router.get("/metrics", authenticate, async (req, res) => {
+// Cache for 2 minutes (120 seconds) to improve performance
+router.get("/metrics", authenticate, cacheMiddleware(120), async (req, res) => {
   try {
-    const { startDate, endDate, campaignName, campaignIds, page, limit } =
+    const { startDate, endDate, campaignName, campaignIds, clientName, page, limit } =
       req.query;
 
     const filters = {};
@@ -32,8 +34,12 @@ router.get("/metrics", authenticate, async (req, res) => {
       filters.campaignIds = campaignIds.split(",").filter((id) => id.trim());
     }
 
-    // Filter by accessible clients if user doesn't have full access
-    if (!hasFullAccess(req.user)) {
+    // Filter by specific client name if provided
+    if (clientName) {
+      filters.clientNames = [clientName];
+    } 
+    // Otherwise, filter by accessible clients if user doesn't have full access
+    else if (!hasFullAccess(req.user)) {
       const accessibleClientIds = await getAccessibleClientIds(req.user.id, req.user);
       // Get client names for these IDs
       const clients = await prisma.client.findMany({

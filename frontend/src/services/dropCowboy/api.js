@@ -29,6 +29,10 @@ export const fetchMetrics = async (filters = {}) => {
       // Send campaign IDs as comma-separated string
       params.append("campaignIds", filters.campaignIds.join(","));
     }
+    if (filters.clientName) {
+      // Filter by specific client name on backend
+      params.append("clientName", filters.clientName);
+    }
 
     const response = await api.get(`/metrics?${params.toString()}`);
     return response.data;
