@@ -34,7 +34,7 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
             try {
                 setLoading(true);
                 setError(null);
-                
+
                 // Determine the correct endpoint based on client type
                 let endpoint;
                 if (selectedClient?.smsClientId) {
@@ -83,13 +83,13 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
             setCurrentPage(page);
             setReplyFilter(filter);
             setMessages(response.data.data.messages || []);
-            
+
             const stats = response.data.data.stats || {};
             setTotalRecords(stats.total || 0);
             setOverallDelivered(stats.delivered || 0);
             setOverallFailed(stats.failed || 0);
             setOverallReplied(stats.totalWithReplies || 0);
-            
+
             setTotalPages(response.data.pagination?.totalPages || 1);
             setError(null);
             setView('messages');
@@ -282,25 +282,39 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                                         <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
                                     </tr>
                                 </thead>
-                                {/* <tbody className="bg-white divide-y divide-gray-200">
+                                {<tbody className="bg-white divide-y divide-gray-200">
                                     {smsCampaigns.map((sms) => (
-                                        <tr key={sms.id} className="hover:bg-gray-50 transition-colors">
+                                        <tr
+                                            key={sms.id}
+                                            className={`hover:bg-gray-50 transition-colors ${(sms.sentCount || 0) > 0 ? "cursor-pointer" : "cursor-not-allowed opacity-60"
+                                                }`}
+                                            onClick={() => {
+                                                if ((sms.sentCount || 0) > 0) {
+                                                    openCampaignMessages(sms);
+                                                }
+                                            }}
+                                        >
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center">
                                                     <MessageSquare className="w-5 h-5 text-blue-500 mr-3" />
-                                                    <span className="text-sm font-medium text-gray-900">{sms.name}</span>
+                                                    <span className="text-sm font-medium text-gray-900">
+                                                        {sms.name}
+                                                    </span>
                                                 </div>
                                             </td>
+
                                             <td className="px-6 py-4">
                                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                                    {sms.category?.title || 'SMS'}
+                                                    {sms.category?.title || "SMS"}
                                                 </span>
                                             </td>
+
                                             <td className="px-6 py-4 text-right">
                                                 <span className="text-sm font-semibold text-gray-900">
                                                     {(sms.sentCount || 0).toLocaleString()}
                                                 </span>
                                             </td>
+
                                             <td className="px-6 py-4 text-center">
                                                 {(sms.sentCount || 0) > 0 ? (
                                                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -314,68 +328,9 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                                                     </span>
                                                 )}
                                             </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <button
-                                                    onClick={() => openCampaignMessages(sms)}
-                                                    className="inline-flex items-center gap-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    disabled={(sms.sentCount || 0) === 0}
-                                                >
-                                                    <Activity className="w-4 h-4" />
-                                                    View Messages
-                                                </button>
-                                            </td>
                                         </tr>
-                                    ))}
-                                </tbody> */<tbody className="bg-white divide-y divide-gray-200">
-    {smsCampaigns.map((sms) => (
-        <tr
-            key={sms.id}
-            className={`hover:bg-gray-50 transition-colors ${
-                (sms.sentCount || 0) > 0 ? "cursor-pointer" : "cursor-not-allowed opacity-60"
-            }`}
-            onClick={() => {
-                if ((sms.sentCount || 0) > 0) {
-                    openCampaignMessages(sms);
-                }
-            }}
-        >
-            <td className="px-6 py-4">
-                <div className="flex items-center">
-                    <MessageSquare className="w-5 h-5 text-blue-500 mr-3" />
-                    <span className="text-sm font-medium text-gray-900">
-                        {sms.name}
-                    </span>
-                </div>
-            </td>
-
-            <td className="px-6 py-4">
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                    {sms.category?.title || "SMS"}
-                </span>
-            </td>
-
-            <td className="px-6 py-4 text-right">
-                <span className="text-sm font-semibold text-gray-900">
-                    {(sms.sentCount || 0).toLocaleString()}
-                </span>
-            </td>
-
-            <td className="px-6 py-4 text-center">
-                {(sms.sentCount || 0) > 0 ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        <CheckCircle className="w-3 h-3" />
-                        Active
-                    </span>
-                ) : (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                        <XCircle className="w-3 h-3" />
-                        Not Sent
-                    </span>
-                )}
-            </td>
-        </tr>
-    ))}
-</tbody>}
+                                    ))} 
+                                </tbody>}
                             </table>
                         </div>
                     )}
@@ -538,15 +493,6 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                                                     {msg.repliedAt ? new Date(msg.repliedAt).toLocaleString() : '-'}
                                                 </span>
                                             </td>
-                                            {/* <td className="px-4 py-3 text-center">
-                                                <button
-                                                    onClick={() => openLeadActivity(msg.leadId)}
-                                                    className="inline-flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 text-xs font-medium transition-colors"
-                                                >
-                                                    <Activity className="w-3 h-3" />
-                                                    View Activity
-                                                </button>
-                                            </td> */}
                                         </tr>
                                     ))}
                                 </tbody>
