@@ -280,10 +280,9 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
                                         <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sent</th>
                                         <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
-                                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
+                                {/* <tbody className="bg-white divide-y divide-gray-200">
                                     {smsCampaigns.map((sms) => (
                                         <tr key={sms.id} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-6 py-4">
@@ -327,7 +326,56 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                                             </td>
                                         </tr>
                                     ))}
-                                </tbody>
+                                </tbody> */<tbody className="bg-white divide-y divide-gray-200">
+    {smsCampaigns.map((sms) => (
+        <tr
+            key={sms.id}
+            className={`hover:bg-gray-50 transition-colors ${
+                (sms.sentCount || 0) > 0 ? "cursor-pointer" : "cursor-not-allowed opacity-60"
+            }`}
+            onClick={() => {
+                if ((sms.sentCount || 0) > 0) {
+                    openCampaignMessages(sms);
+                }
+            }}
+        >
+            <td className="px-6 py-4">
+                <div className="flex items-center">
+                    <MessageSquare className="w-5 h-5 text-blue-500 mr-3" />
+                    <span className="text-sm font-medium text-gray-900">
+                        {sms.name}
+                    </span>
+                </div>
+            </td>
+
+            <td className="px-6 py-4">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    {sms.category?.title || "SMS"}
+                </span>
+            </td>
+
+            <td className="px-6 py-4 text-right">
+                <span className="text-sm font-semibold text-gray-900">
+                    {(sms.sentCount || 0).toLocaleString()}
+                </span>
+            </td>
+
+            <td className="px-6 py-4 text-center">
+                {(sms.sentCount || 0) > 0 ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <CheckCircle className="w-3 h-3" />
+                        Active
+                    </span>
+                ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                        <XCircle className="w-3 h-3" />
+                        Not Sent
+                    </span>
+                )}
+            </td>
+        </tr>
+    ))}
+</tbody>}
                             </table>
                         </div>
                     )}
@@ -448,12 +496,11 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reply Text</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reply Date</th>
-                                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
                                     {messages.map((msg, idx) => (
-                                        <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                        <tr key={idx} className="hover:bg-gray-50 transition-colors" onClick={() => openLeadActivity(msg.leadId)}>
                                             <td className="px-4 py-3">
                                                 <span className="text-sm font-medium text-gray-900">{msg.leadId}</span>
                                             </td>
@@ -491,7 +538,7 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                                                     {msg.repliedAt ? new Date(msg.repliedAt).toLocaleString() : '-'}
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-3 text-center">
+                                            {/* <td className="px-4 py-3 text-center">
                                                 <button
                                                     onClick={() => openLeadActivity(msg.leadId)}
                                                     className="inline-flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 text-xs font-medium transition-colors"
@@ -499,7 +546,7 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                                                     <Activity className="w-3 h-3" />
                                                     View Activity
                                                 </button>
-                                            </td>
+                                            </td> */}
                                         </tr>
                                     ))}
                                 </tbody>
