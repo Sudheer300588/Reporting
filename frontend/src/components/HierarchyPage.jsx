@@ -46,7 +46,7 @@ export default function HierarchyPage() {
       axios.get("/api/users")
         .then(res => {
           const users = res.data.users;
-          const managerUsers = users.filter(u => u.role === "manager");
+          const managerUsers = users.filter(u => u.customRole?.isTeamManager === true);
           setManagers(managerUsers);
           setAllUsers(users);
         })
@@ -103,7 +103,8 @@ export default function HierarchyPage() {
                 <div>
                   <p className="text-sm font-medium text-blue-600">Total Employees</p>
                   <p className="text-3xl font-bold text-blue-900 mt-2">
-                    {allUsers.filter(u => u.role === 'employee' || u.role === 'telecaller').length}
+                    {/* {allUsers.filter(u => u.role === 'employee').length} */}
+                    {allUsers.filter(u => u.customRole?.isTeamManager === false).length}
                   </p>
                 </div>
                 <div className="p-3 bg-blue-200 rounded-full">
@@ -183,7 +184,7 @@ export default function HierarchyPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium capitalize">
-                            {m.role}
+                            {m.customRole?.name || m.role}
                           </span>
                         </td>
                       </tr>
@@ -231,7 +232,7 @@ export default function HierarchyPage() {
         <EmployeeClients
           // employeeId={activeEmployeeId}
           onBack={
-            user && (user.role === 'employee' || user.role === 'telecaller')
+            user && !isTeamManager() && !hasFullAccess()
               ? goHome
               : () => setEmpView('managerEmployees')
           }

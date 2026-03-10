@@ -48,7 +48,7 @@ export default function ManagerClients({ onBack }) {
       ]);
 
       const managerClients = clientsRes.data.filter(c =>
-        c.assignments?.some(a => a.user.id == managerId && a.user.role === "manager")
+        c.assignments?.some(a => a.user.id == managerId && a.user.customRole?.isTeamManager === true)
       );
 
       setClients(managerClients);

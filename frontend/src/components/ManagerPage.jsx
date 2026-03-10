@@ -57,12 +57,10 @@ export default function ManagerPage({ onBack, onEmployees, onClients }) {
             className={`px-3 py-1 text-xs font-bold rounded-full tracking-wide
         ${manager.role === "admin"
                 ? "bg-red-100 text-red-700"
-                : manager.role === "manager"
-                  ? "bg-blue-100 text-blue-700"
-                  : "bg-gray-200 text-gray-700"
+                : "bg-blue-200 text-blue-700"
               }`}
           >
-            {manager.role.toUpperCase()}
+            {manager.customRole?.name?.toUpperCase() || manager.role.toUpperCase()}
           </span>
         )}
       </div>
