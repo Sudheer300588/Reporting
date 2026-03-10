@@ -1556,10 +1556,10 @@ class MauticAPIService {
         };
       }
 
-      // ⚡⚡⚡ SPEED BOOST: Check if we have any data already (for regular clients)
-      const hasExistingData = await prisma.mauticEmail.count({
-        where: { clientId: client.id }
-      }) > 0;
+      // // ⚡⚡⚡ SPEED BOOST: Check if we have any data already (for regular clients)
+      // const hasExistingData = await prisma.mauticEmail.count({
+      //   where: { clientId: client.id }
+      // }) > 0;
 
       // ✅ CHECK: Skip SMS fetching if an SMS-only client exists with same URL
       // This prevents Mautic sync from re-fetching SMS campaigns from deleted SMS client instances
@@ -1584,38 +1584,38 @@ class MauticAPIService {
       let segments = [];
       let smsCampaigns = [];
 
-      // Always fetch email metadata to keep sentCount and readCount up-to-date
-      // The /api/emails endpoint is fast and doesn't require individual /api/stats calls
-      // Only campaigns and segments are skipped on incremental sync (rarely change)
-      if (!hasExistingData) {
-        // Full initial sync: fetch all metadata SEQUENTIALLY (step by step)
-        console.log(`🚀 INITIAL SYNC - Fetching metadata sequentially (step by step)${shouldSkipSms ? '' : ' including SMS'}...`);
+      // // Always fetch email metadata to keep sentCount and readCount up-to-date
+      // // The /api/emails endpoint is fast and doesn't require individual /api/stats calls
+      // // Only campaigns and segments are skipped on incremental sync (rarely change)
+      // if (!hasExistingData) {
+      //   // Full initial sync: fetch all metadata SEQUENTIALLY (step by step)
+      //   console.log(`🚀 INITIAL SYNC - Fetching metadata sequentially (step by step)${shouldSkipSms ? '' : ' including SMS'}...`);
 
-        console.log(`\n📧 Step 1/4: Fetching emails...`);
-        emails = await this.fetchEmails(client, false); // ⚡ FALSE = NO individual stats fetch!
-        console.log(`   ✅ Fetched ${emails.length} emails`);
+      //   console.log(`\n📧 Step 1/4: Fetching emails...`);
+      //   emails = await this.fetchEmails(client, false); // ⚡ FALSE = NO individual stats fetch!
+      //   console.log(`   ✅ Fetched ${emails.length} emails`);
 
-        console.log(`\n🎯 Step 2/4: Fetching campaigns...`);
-        campaigns = await this.fetchCampaigns(client);
-        console.log(`   ✅ Fetched ${campaigns.length} campaigns`);
+      //   console.log(`\n🎯 Step 2/4: Fetching campaigns...`);
+      //   campaigns = await this.fetchCampaigns(client);
+      //   console.log(`   ✅ Fetched ${campaigns.length} campaigns`);
 
-        console.log(`\n📋 Step 3/4: Fetching segments...`);
-        segments = await this.fetchSegments(client);
-        console.log(`   ✅ Fetched ${segments.length} segments`);
+      //   console.log(`\n📋 Step 3/4: Fetching segments...`);
+      //   segments = await this.fetchSegments(client);
+      //   console.log(`   ✅ Fetched ${segments.length} segments`);
 
-        // ✅ Only fetch SMS if no SMS-only client exists with same URL
-        if (!shouldSkipSms) {
-          console.log(`\n📱 Step 4/4: Fetching SMS campaigns...`);
-          smsCampaigns = await this.fetchSmses(client);
-          console.log(`   ✅ Fetched ${smsCampaigns.length} SMS campaigns`);
-        } else {
-          console.log(`\n📱 Step 4/4: Skipping SMS (SMS-only client exists)`);
-          smsCampaigns = [];
-        }
+      //   // ✅ Only fetch SMS if no SMS-only client exists with same URL
+      //   if (!shouldSkipSms) {
+      //     console.log(`\n📱 Step 4/4: Fetching SMS campaigns...`);
+      //     smsCampaigns = await this.fetchSmses(client);
+      //     console.log(`   ✅ Fetched ${smsCampaigns.length} SMS campaigns`);
+      //   } else {
+      //     console.log(`\n📱 Step 4/4: Skipping SMS (SMS-only client exists)`);
+      //     smsCampaigns = [];
+      //   }
 
-        console.log(`\n✅ Metadata fetch complete (sequential)`);
-      } else {
-        // Incremental sync: fetch emails AND SMS sequentially (to update stats), skip campaigns/segments
+      //   console.log(`\n✅ Metadata fetch complete (sequential)`);
+      // } else {
+      //   // Incremental sync: fetch emails AND SMS sequentially (to update stats), skip campaigns/segments
         console.log(`🔄 INCREMENTAL SYNC for ${client.name} — fetching sequentially...`);
 
         console.log(`\n📧 Step 1: Fetching emails to update stats...`);
@@ -1632,8 +1632,8 @@ class MauticAPIService {
           smsCampaigns = [];
         }
 
-        console.log(`\n✅ Incremental fetch complete (sequential)`);
-      }
+      //   console.log(`\n✅ Incremental fetch complete (sequential)`);
+      // }
 
       // Persist emails to DB (upsert will update sentCount, readCount, etc.)
       try {
