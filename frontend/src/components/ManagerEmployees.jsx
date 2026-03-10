@@ -176,7 +176,7 @@ export default function ManagerEmployees({ onBack, onEmployeeClick }) {
                           ? 'bg-blue-100 text-blue-700' 
                           : 'bg-indigo-100 text-indigo-700'
                       }`}>
-                        {emp.role}
+                        {emp.customRole?.name || emp.role}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

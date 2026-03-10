@@ -91,7 +91,7 @@ export default function EmployeeClients({ onBack }) {
               <div className="mt-2 flex items-center gap-4 text-sm text-gray-600">
                 <span>{employee.email}</span>
                 <span className="px-2 py-1 bg-primary-100 text-primary-700 rounded-full text-xs font-medium capitalize">
-                  {employee.role}
+                  {employee.customRole?.name || employee.role}
                 </span>
               </div>
             )}

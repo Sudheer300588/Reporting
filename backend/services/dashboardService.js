@@ -1,6 +1,6 @@
 import prisma from '../prisma/client.js';
 import logger from '../utils/logger.js';
-import { hasFullAccess, getAccessibleClientIds } from '../middleware/auth.js';
+import { hasFullAccess, getAccessibleClientIds, userHasPermission } from '../middleware/auth.js';
 import MauticSchedulerService from '../modules/mautic/schedulerService.js';
 import DropCowboyScheduler from '../modules/dropCowboy/services/schedulerService.js';
 
@@ -67,24 +67,81 @@ class DashboardService {
   }
 
   /**
+   * Async function to get the user's role, to check the user's isTeamManager field
+   * Only to be called from _getUserStats function
+   */
+  async getUserRole(customRoleId) {
+    try {
+      if (!customRoleId) {
+        console.log("No customRoleId found");
+        return null;
+      }
+      const role = await prisma.role.findFirst({
+        where: { id: customRoleId }
+      });
+
+      return role;
+    } catch (error) {
+      logger.error('Error fetching user role:', error);
+      return null;
+    }
+  }
+
+  /**
    * Get user statistics (employees, managers, admins)
    * Optimized with groupBy aggregation - no full user data fetched
    */
   async _getUserStats(currentUser) {
     try {
-      // Only users with full access can see user stats
-      if (!hasFullAccess(currentUser)) {
-        return {
-          totalEmployees: 0,
-          totalManagers: 0,
-          totalAdmins: 0
-        };
+      let where = {};
+
+      // Users with full access see all users
+      if (hasFullAccess(currentUser)) {
+        // No filter - see all users
+      } else if (userHasPermission(currentUser, 'Users', 'Read')) {
+        // Check if user is a team manager
+        const isTeamManager = currentUser.customRole?.isTeamManager === true;
+
+        if (isTeamManager) {
+          // Team managers see employees assigned to their clients
+          // First, get all clients assigned to this manager
+          const managerClientAssignments = await prisma.clientAssignment.findMany({
+            where: { userId: currentUser.id },
+            select: { clientId: true }
+          });
+          const managerClientIds = managerClientAssignments.map(a => a.clientId);
+
+          // Find all users assigned to those clients (excluding the manager themselves)
+          where = {
+            OR: [
+              { createdById: currentUser.id },
+              {
+                userAssignments: {
+                  some: {
+                    clientId: { in: managerClientIds }
+                  }
+                }
+              }
+            ],
+            id: { not: currentUser.id } // Exclude self
+          };
+        } else {
+          // Non-manager users with Users.Read see users they created
+          where = {
+            createdById: currentUser.id
+          };
+        }
+      } else {
+        // Users without Users.Read can only see themselves
+        where = { id: currentUser.id };
       }
 
-      // Use groupBy for efficient aggregation
+      where = { ...where, isActive: true };
+
+      // Query users with their role information
       const userStats = await prisma.user.groupBy({
-        by: ['role'],
-        where: { isActive: true },
+        by: ['customRoleId'], // group by customRoleId instead of role, it will be more specific
+        where,
         _count: true
       });
 
@@ -94,18 +151,27 @@ class DashboardService {
         totalAdmins: 0
       };
 
-      userStats.forEach(r => {
-        if (r.role === 'employee' || r.role === 'telecaller') {
-          stats.totalEmployees += r._count;
-        }
-        if (r.role === 'manager') {
-          stats.totalManagers += r._count;
-        }
-        if (r.role === 'admin' || r.role === 'superadmin') {
-          stats.totalAdmins += r._count;
-        }
-      });
+      // For each custom role group, fetch the role details to determine type
+      for (const group of userStats) {
+        const userRole = await this.getUserRole(group.customRoleId);
 
+        if (userRole) {
+          // Count as employees
+          stats.totalEmployees += group._count;
+
+          // Check if this role is manager as well
+          if (userRole.isTeamManager === 1 || userRole.isTeamManager === true) {
+            stats.totalManagers += group._count;
+          }
+
+          // Check if this is an admin role
+          if (userRole.fullAccess === true) {
+            stats.totalAdmins += group._count;
+          }
+        }
+      }
+
+      console.log("Final stats:", stats);
       return stats;
     } catch (error) {
       logger.error('[Dashboard] Error fetching user stats:', error);
@@ -135,7 +201,7 @@ class DashboardService {
       } else {
         // Limited users see only clients they have access to
         const accessibleClientIds = await getAccessibleClientIds(currentUser.id, currentUser);
-        
+
         [activeClients, inactiveClients] = await Promise.all([
           prisma.client.count({
             where: { isActive: true, id: { in: accessibleClientIds } }
@@ -222,7 +288,7 @@ class DashboardService {
 
       // Get top performing emails (limit to 6 for dashboard chart)
       const topEmails = await prisma.mauticEmail.findMany({
-        where: { 
+        where: {
           clientId: { in: validClientIds },
           sentCount: { gt: 0 }
         },
@@ -296,7 +362,7 @@ class DashboardService {
       if (!hasFullAccess(currentUser)) {
         // Get accessible client IDs
         const accessibleClientIds = await getAccessibleClientIds(currentUser.id, currentUser);
-        
+
         // Get campaigns for accessible clients
         const campaigns = await prisma.dropCowboyCampaign.findMany({
           where: { clientId: { in: accessibleClientIds } },
@@ -350,9 +416,9 @@ class DashboardService {
       const successfulDeliveries = successCount;
       const failedSends = failureCount;
       const otherStatus = totalSent - successfulDeliveries - failedSends;
-      const totalCost = parseFloat(overallAgg._sum.cost || 0) + 
-                        parseFloat(overallAgg._sum.complianceFee || 0) + 
-                        parseFloat(overallAgg._sum.ttsFee || 0);
+      const totalCost = parseFloat(overallAgg._sum.cost || 0) +
+        parseFloat(overallAgg._sum.complianceFee || 0) +
+        parseFloat(overallAgg._sum.ttsFee || 0);
       const averageSuccessRate = totalSent > 0 ? parseFloat(((successfulDeliveries / totalSent) * 100).toFixed(2)) : 0;
 
       // Get top 6 campaigns by volume (optimized - no record fetching)
@@ -474,9 +540,9 @@ class DashboardService {
   async _getDropCowboySyncStatus() {
     try {
       const lastSync = await prisma.syncLog.findFirst({
-        where: { 
+        where: {
           source: 'dropcowboy',
-          status: 'success' 
+          status: 'success'
         },
         orderBy: { syncCompletedAt: 'desc' },
         select: { syncCompletedAt: true }
@@ -511,9 +577,9 @@ class DashboardService {
   async _getSmsSyncStatus() {
     try {
       const mostRecentSync = await prisma.smsClient.findFirst({
-        where: { 
+        where: {
           lastSyncAt: { not: null },
-          isActive: true 
+          isActive: true
         },
         orderBy: { lastSyncAt: 'desc' },
         select: { lastSyncAt: true }
@@ -630,7 +696,7 @@ class DashboardService {
     try {
       logger.info('[Dashboard] Starting Mautic automation clients sync...', { forceFull });
       const result = await this.mauticScheduler.syncAllClients({ forceFull });
-      
+
       if (result.success) {
         logger.info(`[Dashboard] Mautic sync completed: ${result.successful}/${result.totalClients} clients synced`);
         return {
@@ -674,7 +740,7 @@ class DashboardService {
       }
 
       await this.dropCowboyScheduler.fetchAndProcessData();
-      
+
       return {
         success: true,
         message: 'DropCowboy sync started'
