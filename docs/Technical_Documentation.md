@@ -385,14 +385,14 @@ Data stored in `MauticSmsStat` table.
 
 ---
 
-### 🧾 3. Contact SMS Replies / Activity
+### 📱 3. Contacts Mobile Numbers
 
-**Purpose:**  
-Retrieve all reply messages or interactions for a specific contact.
+**Purpose:**
+Retrieve mobile numbers for all contacts.
 
-**Endpoint:**  
+**Endpoint:**
 ```
-GET /contacts/{contactId}/activity
+GET /contacts
 ```
 
 
@@ -400,14 +400,62 @@ GET /contacts/{contactId}/activity
 
 | **Field Name** | **Description** |
 |-----------------|-----------------|
-| `event` | Activity type (`sms_reply`, `sms.sent`, etc.) |
+| `mobile` | Mobile Number of a particular contact / lead|
+
+**Used For:**  
+- Assigning a mobile number to a particular lead in `MauticSmsStat` table.
+
+---
+
+### 🧾 4. Contacts SMS Messages
+
+**Purpose:**  
+Retrieve SMS messages sent to contacts throughout a SMS campaign.
+
+**Endpoint:**  
+```
+GET /contacts/{firstLeadId}/activity
+```
+
+
+**Key Fields Returned**
+
+| **Field Name** | **Description** |
+|-----------------|-----------------|
+| `event` | Activity type (`sms.sent`, etc.) |
 | `details` | Contains `stat.sms_id` and message payload |
+| `sms_id` | SMS Campaign ID of the particular SMS Campaign |
+| `message` | The SMS message template sent to contacts across the campaign |
 | `timestamp` | Time of the event |
 
 **Used For:**  
-- Identifying replies from contacts (`event = "sms_reply"`)  
-- Associating replies with campaign IDs  
-- Tracking two-way SMS engagement
+- Fetching SMS message sent to first contact by a SMS Campaign.
+- Saving it as `messageText` in `MauticSmsStat` table for all leads with the same `mauticSmsId`.
+
+---
+
+### 💬 5. Contacts SMS Replies
+
+**Purpose:**
+Retrieve SMS replies for all contacts who have replied.
+
+**Endpoint:**
+```
+GET /stats/lead_event_log
+```
+
+
+**Key Fields Returned**
+
+| **Field Name** | **Description** |
+|-----------------|-----------------|
+| `lead_id` | Lead ID of a particular contact of the current client |
+| `action` | Defines which type of event this is by the lead |
+| `properties` | Contains a `message` property which has SMS reply by that lead |
+
+**Used For:**  
+- Fetching SMS replies from leads and saving them in `MauticSmsStat` table.
+- Identifying reply from leads based on `lead_id` and `action = "reply"`.
 
 ---
 
@@ -417,8 +465,10 @@ GET /contacts/{contactId}/activity
 |-------------|--------------|------------------|
 | SMS Campaigns | `/smses` | `MauticSms` |
 | SMS Stats | `/stats/sms_message_stats` | `MauticSmsStat` |
-| Contact Activity (Replies) | `/contacts/{id}/activity` | Parsed into `MauticSmsStat` / logs |
+| Mobile Numbers | `/contacts` | `MauticSmsStat` |
+| SMS Messages | `/contacts/{firstLeadId}/activity` | `MauticSmsStat` |
+| SMS Replies | `/stats/lead_event_log` | `MauticSmsStat` |
 
 ---
 
-**Last Updated:** February 6, 2026
+**Last Updated:** March 4, 2026
