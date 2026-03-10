@@ -24,8 +24,13 @@ export default function HierarchyPage() {
   const { hasFullAccess, isTeamManager, canViewUsers } = usePermissions(user);
   const { employeesStates, setEmpView, setCurrentRoute, setActiveManagerId, setActiveEmployeeId } = useViewLevel();
   const { view, currentRoute } = employeesStates;
+  const [wentStraightBackToDashboard, setWentStraightBackToDashboard] = useState(false);
 
   useEffect(() => {
+    if (wentStraightBackToDashboard) {
+      setWentStraightBackToDashboard(false);
+      return;
+    }
     if (view === "list") {
       // If logged-in user is NOT a team manager and doesn't have full access, show their clients only
       if (user && !hasFullAccess() && !isTeamManager()) {
@@ -59,6 +64,8 @@ export default function HierarchyPage() {
     // Navigate to dashboard for consistent behaviour
     navigate('/dashboard');
     setCurrentRoute('/dashboard');
+    setEmpView("list");
+    setWentStraightBackToDashboard(true);
   };
 
   if (loading && view === "list") {
