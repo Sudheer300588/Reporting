@@ -377,9 +377,8 @@ class SmsService {
   }
 
   /**
-   * Store SMS campaigns from an SMS client - MATCHED CAMPAIGNS ONLY
-   * ✅ FIXED: Only stores campaigns that match existing Mautic clients
-   * ✅ Unmatched SMS campaigns are now SKIPPED (not auto-created in sms-only clients)
+   * Store SMS campaigns from an SMS client with automatic Mautic client creation
+   * Matched SMS go to existing Mautic clients, unmatched SMS auto-create a new Mautic client
    * ✅ USES PERSISTENCE: Re-evaluates existing campaigns to catch new matches
    * ✅ TRACKS ORIGIN: Sets originMauticUrl and originUsername to track which credentials fetched each campaign
    * @param {Object} smsClient - SMS Client object (needs name, mauticUrl, username, password)
@@ -398,17 +397,46 @@ class SmsService {
         : this.categorizeSms(smsCampaigns, mauticClients);  // Fallback if no Mautic clients provided
 
       let created = 0, updated = 0;
+      let autoCreatedClient = null;
 
-      // ✅ FIXED: Only store campaigns that match existing Mautic clients
-      // Skip unmatched campaigns - don't auto-create "sms-only" clients
-      // This ensures only campaigns grouped under real Mautic clients are stored
+      // If there are unmatched SMS, create/find a Mautic client for them
       if (categorized.unmatched.length > 0) {
-        logger.info(`⏭️  Skipping ${categorized.unmatched.length} unmatched SMS campaigns (not creating auto clients)`);
-        logger.info(`   Unmatched campaigns will not be stored. Only matched campaigns will be stored.`);
+        logger.info(`Found ${categorized.unmatched.length} unmatched SMS, creating/finding Mautic client...`);
+
+        // Check if Mautic client with SMS client name already exists
+        autoCreatedClient = await prisma.mauticClient.findFirst({
+          where: {
+            name: smsClient.name
+          }
+        });
+
+        // Create new Mautic client if it doesn't exist
+        if (!autoCreatedClient) {
+          autoCreatedClient = await prisma.mauticClient.create({
+            data: {
+              name: smsClient.name,
+              mauticUrl: smsClient.mauticUrl,
+              username: smsClient.username,
+              password: smsClient.password,
+              reportId: 'sms-only', // Default report ID for SMS-only clients
+              isActive: true
+            }
+          });
+          logger.info(`✅ Created new Mautic client "${smsClient.name}" (ID: ${autoCreatedClient.id}) for unmatched SMS`);
+        } else {
+          logger.info(`✅ Using existing Mautic client "${smsClient.name}" (ID: ${autoCreatedClient.id}) for unmatched SMS`);
+        }
+
+        // Assign auto-created client to unmatched SMS
+        categorized.unmatched = categorized.unmatched.map(sms => ({
+          ...sms,
+          clientId: autoCreatedClient.id,
+          clientName: autoCreatedClient.name
+        }));
       }
 
-      // Store ONLY matched SMS (skip unmatched)
-      const allSms = [...categorized.matched];
+      // Store ALL SMS as matched (now that unmatched have been assigned to auto-created client)
+      const allSms = [...categorized.matched, ...categorized.unmatched];
 
       // ✅ ORIGIN TRACKING: Normalize URL for consistent matching
       const normalizedOriginUrl = smsClient.mauticUrl.trim().replace(/\/$/, '').toLowerCase();
@@ -480,8 +508,8 @@ class SmsService {
       }
 
       logger.info(`SMS storage complete: ${created} created, ${updated} updated`);
-      logger.info(`  - Stored campaigns matched to existing Mautic clients: ${categorized.matched.length}`);
-      logger.info(`  - Skipped unmatched campaigns: ${categorized.unmatched.length}`);
+      logger.info(`  - Matched to existing Mautic clients: ${categorized.matched.length}`);
+      logger.info(`  - Auto-assigned to "${smsClient.name}": ${categorized.unmatched.length}`);
       logger.info(`  - Origin tracked: ${normalizedOriginUrl} / ${originUsername}`);
 
       return {
@@ -489,8 +517,8 @@ class SmsService {
         updated,
         total: created + updated,
         matched: categorized.matched.length,
-        unmatched: categorized.unmatched.length,  // For reference, but not stored
-        autoCreatedClientId: null  // No longer auto-creating clients
+        unmatched: categorized.unmatched.length,
+        autoCreatedClientId: autoCreatedClient?.id
       };
     } catch (error) {
       const errorMsg = error?.message || error?.code || 'SMS storage failed';
