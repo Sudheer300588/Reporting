@@ -196,10 +196,21 @@ class SmsClientSyncService {
    */
   async storeSmsCompaigns(smsClient, smsCampaigns) {
     try {
+      // Find the dedicated placeholder client for unmatched SMS campaigns.
+      // We do NOT include this client in the matching candidates (to avoid accidental matches),
+      // but we DO use it as a safe fallback bucket instead of leaving clientId NULL.
+      const smsOnlyClient = await prisma.mauticClient.findFirst({
+        where: { reportId: 'sms-only' },
+        select: { id: true, name: true }
+      });
+
       // Fetch all MauticClient records for matching
       const mauticClients = await prisma.mauticClient.findMany({
-        where: { isActive: true },
-        select: { id: true, name: true }
+        where: {
+          isActive: true,
+          NOT: { reportId: 'sms-only' }
+        },
+        select: { id: true, name: true, reportId: true }
       });
 
       logger.info(`   🔍 Matching campaigns against ${mauticClients.length} Mautic clients...`);
@@ -237,29 +248,36 @@ class SmsClientSyncService {
           logger.info(`      ✅ "${sms.name}" → MauticClient: ${bestMatch.clientName} (${bestMatch.reason})`);
         } else {
           matchStats.unmatched++;
-          logger.info(`      ⚠️  "${sms.name}" → No MauticClient match (remains SMS-only)`);
+          if (smsOnlyClient?.id) {
+            matchedClientId = smsOnlyClient.id;
+            logger.info(`      ⚠️  "${sms.name}" → No MauticClient match (bucketed under ${smsOnlyClient.name || 'sms-only'})`);
+          } else {
+            logger.warn(`      ⚠️  "${sms.name}" → No MauticClient match and sms-only bucket not found (clientId will be NULL)`);
+          }
         }
 
-        // Upsert campaign with matched clientId
-        // Only update clientId if we found a match (don't overwrite with null)
+        // Upsert campaign with matched clientId.
+        // IMPORTANT: allow clearing wrong previous clientId by setting sms-only (if available)
+        // or NULL (if sms-only bucket is missing).
         const updateData = {
           name: sms.name,
           category: category,
           sentCount: parseInt(sms.sentCount || 0),
           smsClientId: smsClient.id,
+          clientId: matchedClientId,
           updatedAt: new Date()
         };
-        
-        // Only update clientId if we found a new match
-        if (matchedClientId !== null) {
-          updateData.clientId = matchedClientId;
-        }
 
+        // Normalize origin URL once
+        const normalizedOrigin = smsClient.mauticUrl.trim().replace(/\/$/, '').toLowerCase();
+
+        // Use upsert by composite unique (mauticId + originMauticUrl)
+        // so different Mautic instances can safely have the same mauticId.
         const stored = await prisma.mauticSms.upsert({
           where: {
-            mauticId_originMauticUrl: {
+            mauticId_origin_unique: {
               mauticId: sms.id,
-              originMauticUrl: smsClient.mauticUrl.trim().replace(/\/$/, '').toLowerCase()
+              originMauticUrl: normalizedOrigin
             }
           },
           create: {
@@ -269,12 +287,16 @@ class SmsClientSyncService {
             sentCount: parseInt(sms.sentCount || 0),
             smsClientId: smsClient.id,
             clientId: matchedClientId, // Automatically link to MauticClient (or null for SMS-only)
-            originMauticUrl: smsClient.mauticUrl.trim().replace(/\/$/, '').toLowerCase(),
+            originMauticUrl: normalizedOrigin,
             originUsername: smsClient.username,
             createdAt: new Date(),
             updatedAt: new Date()
           },
-          update: updateData
+          update: {
+            ...updateData,
+            originMauticUrl: normalizedOrigin,
+            originUsername: smsClient.username
+          }
         });
 
         storedCampaigns.push(stored);
@@ -326,6 +348,22 @@ class SmsClientSyncService {
       let created = 0;
       let updated = 0;
 
+      // ✅ Incremental behavior:
+      // - Do not re-fetch contact details for leads we already have.
+      // - Only update existing rows when we learn something new (mobile/reply fields).
+      const existingStats = await prisma.mauticSmsStat.findMany({
+        where: { smsId: campaign.id },
+        select: {
+          id: true,
+          leadId: true,
+          mobile: true,
+          replyText: true,
+          replyCategory: true,
+          repliedAt: true
+        }
+      });
+      const existingByLeadId = new Map(existingStats.map((s) => [s.leadId, s]));
+
       // Group sent events by lead ID to handle duplicates
       const leadEvents = new Map();
       sentEvents.forEach(event => {
@@ -340,35 +378,50 @@ class SmsClientSyncService {
         const reply = replyMap.get(leadId) || {};
 
         try {
-          // Fetch lead details to get mobile number
-          const leadData = await this.fetchLead(baseUrl, auth, leadId);
-          const mobile = leadData?.fields?.all?.mobile || leadData?.fields?.core?.mobile || null;
-
-          const existing = await prisma.mauticSmsStat.findUnique({
-            where: {
-              mauticSmsId_leadId: {
-                mauticSmsId: campaign.mauticId,
-                leadId: leadId
-              }
-            }
-          });
+          const existing = existingByLeadId.get(leadId);
 
           if (existing) {
-            await prisma.mauticSmsStat.update({
-              where: { id: existing.id },
-              data: {
-                mobile: mobile || existing.mobile,
-                messageText: campaign.message || existing.messageText,
-                replyText: reply.replyText || existing.replyText,
-                replyCategory: reply.replyCategory || existing.replyCategory,
-                repliedAt: reply.repliedAt || existing.repliedAt,
-                isSynced: true,
-                lastSyncedAt: new Date(),
-                updatedAt: new Date()
+            const updateData = {};
+
+            // Only fetch lead details if we are missing mobile
+            if (!existing.mobile) {
+              const leadData = await this.fetchLead(baseUrl, auth, leadId);
+              const mobile = leadData?.fields?.all?.mobile || leadData?.fields?.core?.mobile || null;
+              if (mobile) {
+                updateData.mobile = mobile;
               }
-            });
-            updated++;
+            }
+
+            // Update reply fields only if we learned something new
+            if (reply.replyText) {
+              const existingRepliedAt = existing.repliedAt ? new Date(existing.repliedAt) : null;
+              const incomingRepliedAt = reply.repliedAt ? new Date(reply.repliedAt) : null;
+              const isNewerReply = incomingRepliedAt && (!existingRepliedAt || incomingRepliedAt > existingRepliedAt);
+
+              if (!existing.replyText || isNewerReply) {
+                updateData.replyText = reply.replyText;
+                updateData.replyCategory = reply.replyCategory || existing.replyCategory;
+                updateData.repliedAt = reply.repliedAt || existing.repliedAt;
+              }
+            }
+
+            if (Object.keys(updateData).length > 0) {
+              await prisma.mauticSmsStat.update({
+                where: { id: existing.id },
+                data: {
+                  ...updateData,
+                  isSynced: true,
+                  lastSyncedAt: new Date(),
+                  updatedAt: new Date()
+                }
+              });
+              updated++;
+            }
           } else {
+            // Fetch lead details for NEW leads only
+            const leadData = await this.fetchLead(baseUrl, auth, leadId);
+            const mobile = leadData?.fields?.all?.mobile || leadData?.fields?.core?.mobile || null;
+
             await prisma.mauticSmsStat.create({
               data: {
                 smsId: campaign.id,
@@ -390,8 +443,10 @@ class SmsClientSyncService {
             created++;
           }
 
-          // Rate limiting - wait between lead fetches
-          await this.delay(100);
+          // Rate limiting - wait between lead fetches (only when we had to call contact API)
+          if (!existing || (existing && !existing.mobile)) {
+            await this.delay(100);
+          }
         } catch (error) {
           logger.error(`      Failed to process lead ${leadId}:`, error.message);
         }

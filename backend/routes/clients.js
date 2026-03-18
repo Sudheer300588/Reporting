@@ -66,11 +66,13 @@ router.get("/unified", authenticate, canViewClients, async (req, res) => {
 
     // 3. Get distinct clientIds that have SMS campaigns
     const smsClients = await prisma.mauticSms.findMany({
-      where: { clientId: { not: null } },
+      where: {},
       distinct: ['clientId'],
-      select: { clientId: true }
+      select: { clientId: true, originMauticUrl: true }
     });
+
     const smsClientIds = new Set(smsClients.map(sc => sc.clientId).filter(Boolean));
+    const smsOriginUrls = new Set(smsClients.map(sc => sc.originMauticUrl).filter(Boolean).map(u => u.trim().replace(/\/$/, '').toLowerCase()));
 
     // 4. Get all Client records with assignments (for permission filtering)
     const clientRecords = await prisma.client.findMany({
@@ -140,11 +142,10 @@ router.get("/unified", authenticate, canViewClients, async (req, res) => {
         services.push('dropcowboy');
       }
 
-      // Check for SMS campaigns
-      if (smsClientIds.has(mc.id)) {
-        if (!services.includes('sms')) {
-          services.push('sms');
-        }
+      // Check for SMS campaigns (by clientId or by matching originMauticUrl)
+      const mcNormalizedUrl = mc.mauticUrl?.trim().replace(/\/$/, '').toLowerCase();
+      if (smsClientIds.has(mc.id) || (mcNormalizedUrl && smsOriginUrls.has(mcNormalizedUrl))) {
+        if (!services.includes('sms')) services.push('sms');
       }
 
       // Get assignments
@@ -159,9 +160,10 @@ router.get("/unified", authenticate, canViewClients, async (req, res) => {
       );
 
       return {
-        id: mc.clientId || mc.id,
+        id: mc.id,  // Always use MauticClient.id as primary identifier
+        clientId: mc.clientId,  // Keep Client.id reference separate
         mauticApiId: mc.id,
-        uniqueId: `mautic-${mc.clientId || mc.id}`,
+        uniqueId: `mautic-${mc.id}`,
         name: mc.name,
         mauticUrl: mc.mauticUrl,
         isActive: mc.isActive,
@@ -217,11 +219,12 @@ router.get("/unified", authenticate, canViewClients, async (req, res) => {
 // ============================================
 router.get("/:clientId/mautic/campaigns", authenticate, canViewClients, async (req, res) => {
   try {
-    const clientId = parseInt(req.params.clientId);
+    const mauticClientId = parseInt(req.params.clientId);
 
-    // Find the MauticClient record
-    const mauticClient = await prisma.mauticClient.findFirst({
-      where: { clientId: clientId },
+    // ⚡ FIXED: Accept mauticClient.id directly (not clientId field)
+    // Frontend passes mauticClient.id from unified endpoint
+    const mauticClient = await prisma.mauticClient.findUnique({
+      where: { id: mauticClientId },
       select: { id: true, name: true }
     });
 
@@ -394,11 +397,12 @@ router.get("/:clientName/dropcowboy/stats", authenticate, canViewClients, async 
 // ============================================
 router.get("/:clientId/sms/campaigns", authenticate, canViewClients, async (req, res) => {
   try {
-    const clientId = parseInt(req.params.clientId);
+    const mauticClientId = parseInt(req.params.clientId);
 
-    // Find the MauticClient record
-    const mauticClient = await prisma.mauticClient.findFirst({
-      where: { clientId: clientId },
+    // ⚡ FIXED: Accept mauticClient.id directly (not clientId field)
+    // Frontend passes mauticClient.id from unified endpoint
+    const mauticClient = await prisma.mauticClient.findUnique({
+      where: { id: mauticClientId },
       select: { id: true }
     });
 
@@ -406,7 +410,6 @@ router.get("/:clientId/sms/campaigns", authenticate, canViewClients, async (req,
       return res.json({ success: true, data: [] });
     }
 
-    // Get SMS campaigns for this Mautic client
     const smsCampaigns = await prisma.mauticSms.findMany({
       where: { clientId: mauticClient.id },
       orderBy: { name: 'asc' }
@@ -427,11 +430,12 @@ router.get("/:clientId/sms/campaigns", authenticate, canViewClients, async (req,
 // ============================================
 router.get("/:clientId/mautic/emails", authenticate, canViewClients, async (req, res) => {
   try {
-    const clientId = parseInt(req.params.clientId);
+    const mauticClientId = parseInt(req.params.clientId);
 
-    // Find the MauticClient record
-    const mauticClient = await prisma.mauticClient.findFirst({
-      where: { clientId: clientId },
+    // ⚡ FIXED: Accept mauticClient.id directly (not clientId field)
+    // Frontend passes mauticClient.id from unified endpoint
+    const mauticClient = await prisma.mauticClient.findUnique({
+      where: { id: mauticClientId },
       select: { id: true }
     });
 
@@ -480,11 +484,12 @@ router.get("/:clientId/mautic/emails", authenticate, canViewClients, async (req,
 // ============================================
 router.get("/:clientId/mautic/segments", authenticate, canViewClients, async (req, res) => {
   try {
-    const clientId = parseInt(req.params.clientId);
+    const mauticClientId = parseInt(req.params.clientId);
 
-    // Find the MauticClient record
-    const mauticClient = await prisma.mauticClient.findFirst({
-      where: { clientId: clientId },
+    // ⚡ FIXED: Accept mauticClient.id directly (not clientId field)
+    // Frontend passes mauticClient.id from unified endpoint
+    const mauticClient = await prisma.mauticClient.findUnique({
+      where: { id: mauticClientId },
       select: { id: true }
     });
 

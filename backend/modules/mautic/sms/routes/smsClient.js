@@ -1073,9 +1073,35 @@ async function syncSmsClientData(smsClientId) {
     for (const campaign of campaignsToSync) {
       try {
         // Find the local SMS ID for this campaign
-        const localSms = await prisma.mauticSms.findUnique({
-          where: { mauticId: campaign.id }
-        });
+        const normalizedOriginUrl = smsClient?.mauticUrl
+          ? smsClient.mauticUrl.trim().replace(/\/$/, '').toLowerCase()
+          : null;
+
+        let localSms = null;
+        if (normalizedOriginUrl) {
+          localSms = await prisma.mauticSms.findUnique({
+            where: {
+              mauticId_origin_unique: {
+                mauticId: campaign.id,
+                originMauticUrl: normalizedOriginUrl
+              }
+            }
+          });
+        }
+
+        if (!localSms) {
+          // Legacy / fallback
+          localSms = await prisma.mauticSms.findFirst({
+            where: {
+              mauticId: campaign.id,
+              OR: [
+                { smsClientId: smsClient.id },
+                { originMauticUrl: normalizedOriginUrl }
+              ]
+            },
+            orderBy: { updatedAt: 'desc' }
+          });
+        }
 
         if (!localSms) {
           logger.warn(`   ⚠️  Skipping stats sync for campaign ${campaign.id} (not found in DB)`);
@@ -1358,6 +1384,91 @@ router.post('/sms-clients/:clientId/campaigns/:smsId/sync-stats', async (req, re
     res.status(500).json({
       success: false,
       message: 'Failed to sync SMS stats',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/mautic/sms-clients/cleanup/orphaned
+ * Remove SMS campaigns that don't match any existing Mautic client
+ * These are unmatched campaigns that were stored under "sms-only" clients
+ * ✅ FIXED: New sync logic only stores matched campaigns, so orphaned ones should be cleaned up
+ */
+router.post('/cleanup/orphaned', async (req, res) => {
+  try {
+    logger.info('🧹 Starting cleanup of orphaned SMS campaigns...');
+
+    // Find campaigns with NO clientId but with smsClientId
+    // These are unmatched campaigns that were stored under "sms-only" clients
+    const orphanedCampaigns = await prisma.mauticSms.findMany({
+      where: {
+        clientId: null,
+        smsClientId: { not: null }
+      },
+      select: {
+        id: true,
+        mauticId: true,
+        name: true,
+        smsClientId: true,
+        _count: {
+          select: { stats: true }
+        }
+      }
+    });
+
+    if (orphanedCampaigns.length === 0) {
+      logger.info('✅ No orphaned campaigns found. Database is clean!');
+      return res.json({
+        success: true,
+        message: 'No orphaned campaigns found',
+        cleaned: 0,
+        campaigns: []
+      });
+    }
+
+    logger.info(`📊 Found ${orphanedCampaigns.length} orphaned campaigns to remove:`);
+    orphanedCampaigns.forEach(c => {
+      logger.info(`   - ${c.name} (mauticId: ${c.mauticId}, smsClientId: ${c.smsClientId}, stats: ${c._count.stats})`);
+    });
+
+    // Delete stats first (foreign key constraint)
+    let statsDeleted = 0;
+    for (const campaign of orphanedCampaigns) {
+      const statsCount = await prisma.mauticSmsStat.deleteMany({
+        where: { smsId: campaign.id }
+      });
+      statsDeleted += statsCount.count;
+    }
+
+    logger.info(`🗑️  Deleted ${statsDeleted} SMS stat records`);
+
+    // Delete campaigns
+    const result = await prisma.mauticSms.deleteMany({
+      where: {
+        id: { in: orphanedCampaigns.map(c => c.id) }
+      }
+    });
+
+    logger.info(`✅ Cleanup complete! Removed ${result.count} orphaned campaigns`);
+
+    res.json({
+      success: true,
+      message: `Cleanup complete! Removed ${result.count} orphaned campaigns`,
+      cleaned: result.count,
+      statsDeleted,
+      campaigns: orphanedCampaigns.map(c => ({
+        name: c.name,
+        mauticId: c.mauticId,
+        smsClientId: c.smsClientId,
+        statsCount: c._count.stats
+      }))
+    });
+  } catch (error) {
+    logger.error('Cleanup failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Cleanup failed',
       error: error.message
     });
   }

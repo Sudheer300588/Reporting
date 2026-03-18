@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import mauticAPI from './mauticAPI.js';
 import dataService from './email/services/dataService.js';
 import prisma from '../../prisma/client.js';
+import smsClientSyncService from './sms/services/smsClientSyncService.js';
 
 class MauticSchedulerService {
   constructor() {
@@ -21,10 +22,55 @@ class MauticSchedulerService {
         take: 10
       });
 
+      // Provide an always-available per-client summary (even when no sync is running).
+      const clients = await prisma.mauticClient.findMany({
+        where: { isActive: true, reportId: { not: 'sms-only' } },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, lastSyncAt: true }
+      });
+
+      const clientSummary = await Promise.all(clients.map(async (c) => {
+        const [
+          emailCount,
+          campaignCount,
+          segmentCount,
+          segmentAgg,
+          emailReportCount,
+          smsCampaignCount,
+          smsStatsCount,
+          smsRepliesCount
+        ] = await Promise.all([
+          prisma.mauticEmail.count({ where: { clientId: c.id } }),
+          prisma.mauticCampaign.count({ where: { clientId: c.id } }),
+          prisma.mauticSegment.count({ where: { clientId: c.id } }),
+          prisma.mauticSegment.aggregate({ where: { clientId: c.id }, _sum: { contactCount: true } }),
+          prisma.mauticEmailReport.count({ where: { clientId: c.id } }),
+          prisma.mauticSms.count({ where: { clientId: c.id } }),
+          prisma.mauticSmsStat.count({ where: { sms: { clientId: c.id } } }),
+          prisma.mauticSmsStat.count({ where: { sms: { clientId: c.id }, replyText: { not: null } } })
+        ]);
+
+        return {
+          clientId: c.id,
+          clientName: c.name,
+          lastSyncAt: c.lastSyncAt,
+          emails: emailCount,
+          campaigns: campaignCount,
+          segments: segmentCount,
+          segmentContacts: (segmentAgg?._sum?.contactCount) || 0,
+          emailReports: emailReportCount,
+          smsCampaigns: smsCampaignCount,
+          smsStats: smsStatsCount,
+          smsReplies: smsRepliesCount
+        };
+      }));
+
       return {
         isRunning: this.isRunning,
         activeClients,
-        recentSyncs
+        recentSyncs,
+        syncProgress: global.syncProgress || null,
+        clientSummary
       };
     } catch (error) {
       console.error('Error fetching sync progress from DB:', error.message);
@@ -88,6 +134,16 @@ class MauticSchedulerService {
     try {
       console.log('🔄 Starting scheduled Mautic sync for all clients...');
 
+      // 🔄 Keep SMS-client sourced campaigns/stats fresh before syncing Mautic clients.
+      // Clients like Century Pharmaceuticals / InsurHealth may rely on sms_clients for SMS campaigns.
+      try {
+        console.log('📱 Starting scheduled SMS client sync (sms_clients)...');
+        await smsClientSyncService.syncAllSmsClients();
+        console.log('✅ Scheduled SMS client sync complete');
+      } catch (smsErr) {
+        console.warn('⚠️  Scheduled SMS client sync failed (continuing Mautic sync):', smsErr?.message || smsErr);
+      }
+
       // Optionally force a full re-fetch by clearing lastSyncAt for active clients
       if (options.forceFull) {
         console.log('⚠️ forceFull requested: clearing lastSyncAt for active clients');
@@ -130,7 +186,10 @@ class MauticSchedulerService {
           emails: 0,
           campaigns: 0,
           segments: 0,
-          emailReports: 0
+          emailReports: 0,
+          smsCampaigns: 0,
+          smsStats: 0,
+          smsReplies: 0
         }))
       };
 
@@ -170,21 +229,48 @@ class MauticSchedulerService {
             if (syncResult.success) {
               console.log(`💾 [${client.name}] Saving data to database...`);
 
-              const saveResults = await Promise.all([
-                dataService.saveCampaigns(client.id, syncResult.data.campaigns),
-                dataService.saveSegments(client.id, syncResult.data.segments)
-              ]);
+              const data = syncResult?.data || {};
+              const isSmsOnly = client.reportId === 'sms-only';
+              const campaigns = Array.isArray(data.campaigns) ? data.campaigns : [];
+              const segments = Array.isArray(data.segments) ? data.segments : [];
+              const emailReports = (data.emailReports && typeof data.emailReports === 'object')
+                ? data.emailReports
+                : { totalRows: 0, created: 0, skipped: 0 };
+
+              const emptySaveResult = {
+                success: true,
+                created: 0,
+                updated: 0,
+                failed: 0,
+                total: 0
+              };
+
+              // SMS-only clients don't have campaign/segment/email report payloads.
+              // For regular clients, still persist campaigns/segments every sync.
+              const saveResults = isSmsOnly
+                ? [emptySaveResult, emptySaveResult]
+                : await Promise.all([
+                    dataService.saveCampaigns(client.id, campaigns),
+                    dataService.saveSegments(client.id, segments)
+                  ]);
 
               const emailsResult = {
                 created: 0,
-                updated: syncResult.data.emails?.length || 0,
-                total: syncResult.data.emails?.length || 0
+                updated: Array.isArray(data.emails) ? data.emails.length : 0,
+                total: Array.isArray(data.emails) ? data.emails.length : 0
               };
 
               await dataService.updateClientSyncTime(client.id);
               const totalReportsInDb = await prisma.mauticEmailReport.count({ where: { clientId: client.id } });
 
-              console.log(`✅ [${client.name}] Synced successfully - Emails: ${emailsResult.total}, Campaigns: ${saveResults[0].total}, Segments: ${saveResults[1].total}, Email Reports: ${syncResult.data.emailReports.created} created, ${syncResult.data.emailReports.skipped} skipped, totalInDb: ${totalReportsInDb}`);
+              // Pull SMS totals from DB so mapped sources are included.
+              const [smsCampaignCount, smsStatsCount, smsRepliesCount] = await Promise.all([
+                prisma.mauticSms.count({ where: { clientId: client.id } }),
+                prisma.mauticSmsStat.count({ where: { sms: { clientId: client.id } } }),
+                prisma.mauticSmsStat.count({ where: { sms: { clientId: client.id }, replyText: { not: null } } })
+              ]);
+
+              console.log(`✅ [${client.name}] Synced successfully - Emails: ${emailsResult.total}, Campaigns: ${saveResults[0].total}, Segments: ${saveResults[1].total}, Email Reports: ${emailReports.created} created, ${emailReports.skipped} skipped, totalInDb: ${totalReportsInDb}`);
 
               // Update progress
               if (clientIndex >= 0) {
@@ -194,6 +280,9 @@ class MauticSchedulerService {
                 global.syncProgress.clientList[clientIndex].campaigns = saveResults[0].total;
                 global.syncProgress.clientList[clientIndex].segments = saveResults[1].total;
                 global.syncProgress.clientList[clientIndex].emailReports = totalReportsInDb;
+                global.syncProgress.clientList[clientIndex].smsCampaigns = smsCampaignCount;
+                global.syncProgress.clientList[clientIndex].smsStats = smsStatsCount;
+                global.syncProgress.clientList[clientIndex].smsReplies = smsRepliesCount;
               }
 
               return {
@@ -203,8 +292,12 @@ class MauticSchedulerService {
                 emails: emailsResult,
                 campaigns: saveResults[0],
                 segments: saveResults[1],
+                smsCampaigns: {
+                  total: smsCampaignCount
+                },
+                smsStats: { total: smsStatsCount, replies: smsRepliesCount },
                 emailReports: {
-                  ...syncResult.data.emailReports,
+                  ...emailReports,
                   totalInDb: totalReportsInDb
                 }
               };

@@ -475,10 +475,10 @@ CREATE TABLE `mautic_sms` (
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
-    UNIQUE INDEX `mautic_sms_mauticId_key`(`mauticId`),
     INDEX `mautic_sms_clientId_idx`(`clientId`),
     INDEX `mautic_sms_smsClientId_idx`(`smsClientId`),
     INDEX `mautic_sms_originMauticUrl_originUsername_idx`(`originMauticUrl`, `originUsername`),
+    UNIQUE INDEX `mautic_sms_mauticId_originMauticUrl_key`(`mauticId`, `originMauticUrl`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 

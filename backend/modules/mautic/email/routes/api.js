@@ -2,6 +2,7 @@ import logger from '../../../../utils/logger.js';
 import express from "express";
 import mauticAPI from "../../mauticAPI.js";
 import dataService from "../services/dataService.js";
+import reportJsonImportService from "../services/reportJsonImportService.js";
 import statsService from "../services/statsService.js";
 import smsService from "../../sms/services/smsService.js";
 import MauticSchedulerService from "../../schedulerService.js";
@@ -248,7 +249,7 @@ router.get("/clients/:clientId/sms", async (req, res) => {
   try {
     const { clientId } = req.params;
     
-    // Get the Mautic client to extract the client name
+    // Get the Mautic client so we can match by origin URL as well.
     const mauticClient = await prisma.mauticClient.findUnique({
       where: { id: parseInt(clientId) },
       include: { client: true }
@@ -257,44 +258,10 @@ router.get("/clients/:clientId/sms", async (req, res) => {
     if (!mauticClient) {
       return res.json({ success: true, data: [] });
     }
-    
-    const clientName = mauticClient.client?.name || mauticClient.name;
-    
-    // Validate clientName exists
-    if (!clientName || typeof clientName !== 'string' || !clientName.trim()) {
-      return res.json({ success: true, data: [] });
-    }
-    
-    const trimmedName = clientName.trim();
-    
-    // Build search patterns based on client name
-    // For "Century Pharmaceuticals", match "Century" in campaign names
-    let searchPatterns = [trimmedName];
-    
-    // Extract first word for matching (e.g., "Century" from "Century Pharmaceuticals")
-    const firstWord = trimmedName.split(' ')[0];
-    if (firstWord && firstWord.length > 3 && firstWord !== trimmedName) {
-      searchPatterns.push(firstWord);
-    }
-    
-    // Match SMS campaigns by:
-    // 1. Direct clientId match, OR
-    // 2. Campaign name starts with any search pattern (more precise than contains)
-    const orConditions = [
-      { clientId: parseInt(clientId) }
-    ];
-    
-    searchPatterns.forEach(pattern => {
-      orConditions.push({
-        name: { startsWith: pattern, mode: 'insensitive' }
-      });
-    });
-    
+
     const smsCampaigns = await prisma.mauticSms.findMany({
-      where: {
-        OR: orConditions
-      },
-      orderBy: { id: 'asc' }
+      where: { clientId: mauticClient.id },
+      orderBy: { sentCount: 'desc' }
     });
     
     res.json({ success: true, data: smsCampaigns });
@@ -313,13 +280,13 @@ router.get("/clients/:clientId/sms", async (req, res) => {
 // OVERALL: Get overall SMS statistics across all active clients (optimized single query)
 router.get("/clients/sms/overall-stats", async (req, res) => {
   try {
-    // ✅ OPTIMIZED: Single query to get all SMS campaigns from active clients
+    // IMPORTANT:
+    // The Services → SMS screen expects *all* SMS campaigns currently stored.
+    // Do NOT filter by linked/active Mautic client here, because campaigns may be:
+    // - Unmatched (stored under sms-only or clientId NULL)
+    // - Sourced via SmsClient credentials
+    // Filtering causes totals to swing (e.g., 58 → 55 → 9) depending on mappings.
     const smsCampaigns = await prisma.mauticSms.findMany({
-      where: {
-        client: {
-          isActive: true
-        }
-      },
       orderBy: { sentCount: 'desc' }
     });
 
@@ -358,48 +325,23 @@ router.post("/clients/sms/bulk", async (req, res) => {
     
     const validClientIds = clientIds.map(id => parseInt(id)).filter(id => !isNaN(id));
     
-    // Get all Mautic clients with their names
+    // Get all Mautic clients so we can match by clientId and origin URL
     const mauticClients = await prisma.mauticClient.findMany({
       where: { id: { in: validClientIds } },
       include: { client: true }
     });
-    
-    // Build OR conditions for matching:
-    // 1. Direct clientId match
-    // 2. Campaign name starts with client name or first word of client name
-    const orConditions = [
-      { clientId: { in: validClientIds } }
-    ];
-    
-    // Add name-based matching for each client (using startsWith for precision)
-    mauticClients.forEach(mc => {
-      const clientName = mc.client?.name || mc.name;
-      
-      // Only proceed if clientName exists and is a non-empty string
-      if (clientName && typeof clientName === 'string' && clientName.trim()) {
-        const trimmedName = clientName.trim();
-        
-        // Match full name
-        orConditions.push({
-          name: { startsWith: trimmedName, mode: 'insensitive' }
-        });
-        
-        // Also match first word if it's meaningful (>3 chars)
-        const firstWord = trimmedName.split(' ')[0];
-        if (firstWord && firstWord.length > 3 && firstWord !== trimmedName) {
-          orConditions.push({
-            name: { startsWith: firstWord, mode: 'insensitive' }
-          });
-        }
-      }
-    });
+
+    // IMPORTANT: Match ONLY by clientId.
+    // originMauticUrl is a Mautic instance identifier shared by multiple clients,
+    // so using it here can leak campaigns across clients.
+    const orConditions = [{ clientId: { in: validClientIds } }];
     
     // Single query to get all SMS campaigns matching any condition
     const smsCampaigns = await prisma.mauticSms.findMany({
       where: { 
         OR: orConditions
       },
-      orderBy: { id: 'asc' }
+      orderBy: { sentCount: 'desc' }
     });
     
     logger.debug(`✅ Bulk SMS fetch: ${smsCampaigns.length} campaigns for ${clientIds.length} clients`);
@@ -788,12 +730,89 @@ router.post("/clients", async (req, res) => {
       });
 
       logger.debug(`✅ Client created. Metadata fetch running in background. Heavy data deferred to sync.`);
+
+      // ✅ AUTO HISTORICAL BACKFILL (email reports + SMS stats) in background
+      // This is heavy, so we run it asynchronously and skip already-fetched months.
+      const autoBackfillEnabled = String(process.env.MAUTIC_AUTO_BACKFILL_ON_CREATE || 'true') === 'true';
+      if (autoBackfillEnabled) {
+        setImmediate(async () => {
+          try {
+            const DEFAULT_START = process.env.MAUTIC_DEFAULT_BACKFILL_START || '2025-01-01';
+            const backfillStart = fromDate ? new Date(fromDate) : new Date(DEFAULT_START);
+            const backfillEnd = toDate ? new Date(toDate) : new Date();
+            const pageLimit = limit || 5000;
+
+            logger.info(`📅 Auto-backfill started for ${client.name} (${backfillStart.toISOString().slice(0, 10)} → ${backfillEnd.toISOString().slice(0, 10)})`);
+
+            function monthsBetween(from, to) {
+              const out = [];
+              let y = from.getFullYear();
+              let m = from.getMonth() + 1;
+              const endY = to.getFullYear();
+              const endM = to.getMonth() + 1;
+              while (y < endY || (y === endY && m <= endM)) {
+                out.push({ year: y, month: m });
+                if (m === 12) {
+                  y++;
+                  m = 1;
+                } else {
+                  m++;
+                }
+              }
+              return out;
+            }
+
+            const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+            const PAUSE_MS = parseInt(process.env.MAUTIC_BACKFILL_PAUSE_MS || '2000', 10);
+
+            // 1) Email report backfill (monthwise) for non-SMS-only clients
+            if (client.reportId && client.reportId !== 'sms-only') {
+              const months = monthsBetween(backfillStart, backfillEnd);
+              for (const mm of months) {
+                const ym = `${mm.year}-${String(mm.month).padStart(2, '0')}`;
+
+                const existing = await prisma.mauticFetchedMonth.findFirst({
+                  where: { clientId: client.id, yearMonth: ym }
+                });
+                if (existing) {
+                  logger.debug(`   ⏭️ Email reports ${ym}: already fetched`);
+                  continue;
+                }
+
+                const from = `${ym}-01 00:00:00`;
+                const lastDay = new Date(mm.year, mm.month, 0).getDate();
+                const to = `${ym}-${String(lastDay).padStart(2, '0')} 23:59:59`;
+
+                try {
+                  await mauticAPI.fetchHistoricalReports(client, from, to, pageLimit);
+                } catch (e) {
+                  logger.error(`   ❌ Email reports backfill failed for ${ym}:`, e.message || e);
+                }
+
+                await sleep(PAUSE_MS);
+              }
+            }
+
+            // 2) SMS campaigns + stats backfill (isolated temp pages)
+            // Uses sync pipeline but skips the heavy email report fetch.
+            try {
+              await mauticAPI.syncAllData(client, { skipEmailReports: true });
+            } catch (e) {
+              logger.error(`   ❌ SMS backfill failed:`, e.message || e);
+            }
+
+            logger.info(`✅ Auto-backfill finished for ${client.name}`);
+          } catch (e) {
+            logger.error(`❌ Auto-backfill crash for ${client.name}:`, e.message || e);
+          }
+        });
+      }
     }
 
     res.json({
       success: true,
       message:
-        "Mautic client created successfully. Metadata is being fetched in background. Heavy report data will be synced during scheduled sync." +
+        "Mautic client created successfully. Metadata is being fetched in background. Historical backfill is running in background." +
         (mainClientId ? " Client linked to main client." : ""),
       data: {
         ...client,
@@ -898,7 +917,7 @@ router.put("/clients/:id", async (req, res) => {
           client,
           fromDate,
           toDate,
-          limit || 200000
+          limit || 5000
         );
         logger.debug(
           `✅ Historical backfill complete: ${historicalResult.created} reports saved`
@@ -1020,7 +1039,7 @@ router.post("/clients/:id/backfill", async (req, res) => {
               client,
               from,
               to,
-              pageLimit || 200000
+              pageLimit || 5000
             );
             logger.debug(
               `   ✅ ${ym} -> created ${r.created} skipped ${r.skipped}`
@@ -1056,6 +1075,164 @@ router.post("/clients/:id/backfill", async (req, res) => {
         message: "Failed to initiate backfill",
         error: error.message,
       });
+  }
+});
+
+/**
+ * POST /api/mautic/clients/backfill-all
+ * Trigger month-by-month historical backfill for ALL non-SMS Mautic clients
+ * Body (optional): { fromDate: 'YYYY-MM-DD', toDate: 'YYYY-MM-DD', pageLimit: 5000 }
+ *
+ * Default range if not provided: from 2025-01-01 to today.
+ */
+router.post("/clients/backfill-all", async (req, res) => {
+  try {
+    const { fromDate, toDate, pageLimit } = req.body || {};
+
+    const DEFAULT_START = new Date(2025, 0, 1); // 2025-01-01
+    const globalStart = fromDate ? new Date(fromDate) : DEFAULT_START;
+    const globalEnd = toDate ? new Date(toDate) : new Date();
+
+    const clients = await prisma.mauticClient.findMany({
+      where: {
+        reportId: { not: "sms-only" },
+      },
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: `Backfill started for ${clients.length} clients from ${globalStart
+        .toISOString()
+        .slice(0, 10)} to ${globalEnd.toISOString().slice(0, 10)}`,
+      clients: clients.map((c) => ({ id: c.id, name: c.name })),
+    });
+
+    // Run the heavy work in background
+    (async () => {
+      try {
+        function monthsBetween(from, to) {
+          const out = [];
+          let y = from.getFullYear();
+          let m = from.getMonth() + 1;
+          const endY = to.getFullYear();
+          const endM = to.getMonth() + 1;
+          while (y < endY || (y === endY && m <= endM)) {
+            out.push({ year: y, month: m });
+            if (m === 12) {
+              y++;
+              m = 1;
+            } else {
+              m++;
+            }
+          }
+          return out;
+        }
+
+        const PAUSE_MS = parseInt(
+          process.env.MAUTIC_BACKFILL_PAUSE_MS || "2000",
+          10
+        );
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+        for (const client of clients) {
+          try {
+            const clientStartRaw = client.createdAt
+              ? new Date(client.createdAt)
+              : globalStart;
+            const clientStart = clientStartRaw < globalStart ? globalStart : clientStartRaw;
+
+            const months = monthsBetween(clientStart, globalEnd).reverse();
+
+            logger.debug(
+              `▶️ Global backfill: client ${client.id} (${client.name}) from ${clientStart
+                .toISOString()
+                .slice(0, 10)} to ${globalEnd.toISOString().slice(0, 10)} (${months.length} months)`
+            );
+
+            for (const mm of months) {
+              const year = mm.year;
+              const month = mm.month;
+              const ym = `${year}-${String(month).padStart(2, "0")}`;
+
+              // Skip if already fetched for this client
+              const existing = await prisma.mauticFetchedMonth.findFirst({
+                where: { clientId: client.id, yearMonth: ym },
+              });
+              if (existing) {
+                logger.debug(
+                  `   ⏭️ [client ${client.id}] Skipping ${ym}, already fetched`
+                );
+                continue;
+              }
+
+              const from = `${ym}-01 00:00:00`;
+              const lastDay = new Date(year, month, 0).getDate();
+              let toDay = lastDay;
+              // If this is the final month in supplied range, cap by globalEnd
+              if (
+                globalEnd.getFullYear() === year &&
+                globalEnd.getMonth() + 1 === month
+              ) {
+                toDay = Math.min(toDay, globalEnd.getDate());
+              }
+              const toStr = `${ym}-${String(toDay).padStart(2, "0")} 23:59:59`;
+
+              try {
+                logger.debug(
+                  `   ▶️ [client ${client.id}] Backfilling ${ym} (${from} → ${toStr})`
+                );
+                const r = await mauticAPI.fetchHistoricalReports(
+                  client,
+                  from,
+                  toStr,
+                  pageLimit || 5000
+                );
+                logger.debug(
+                  `   ✅ [client ${client.id}] ${ym} -> created ${r.created} skipped ${r.skipped}`
+                );
+              } catch (e) {
+                logger.error(
+                  `   ❌ [client ${client.id}] Failed to fetch ${ym}:`,
+                  e && e.message ? e.message : String(e)
+                );
+              }
+
+              try {
+                await sleep(PAUSE_MS);
+              } catch (e) {
+                /* ignore */
+              }
+            }
+
+            logger.debug(
+              `🔁 Global background backfill finished for client ${client.id}`
+            );
+          } catch (clientErr) {
+            logger.error(
+              `Global backfill error for client ${client.id}:`,
+              clientErr && clientErr.message ? clientErr.message : String(clientErr)
+            );
+          }
+        }
+      } catch (bgErr) {
+        logger.error(
+          "Global backfill (all clients) error:",
+          bgErr && bgErr.message ? bgErr.message : String(bgErr)
+        );
+      }
+    })();
+  } catch (error) {
+    logger.error("Error initiating global backfill:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Failed to initiate global backfill",
+      error: error.message,
+    });
   }
 });
 
@@ -1650,12 +1827,35 @@ router.get("/campaigns", async (req, res) => {
  */
 router.get("/reports", async (req, res) => {
   try {
-    const { clientId, page = 1, limit = 100, fromDate, toDate } = req.query;
+    const { clientId, clientIds, page = 1, limit = 100, fromDate, toDate } = req.query;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {};
-    if (clientId) where.clientId = parseInt(clientId);
+    const normalizedClientIds = [];
+
+    if (clientId) {
+      const parsedClientId = parseInt(clientId, 10);
+      if (!Number.isNaN(parsedClientId)) {
+        normalizedClientIds.push(parsedClientId);
+      }
+    }
+
+    if (clientIds) {
+      const parsedClientIds = String(clientIds)
+        .split(',')
+        .map((value) => parseInt(value.trim(), 10))
+        .filter((value) => !Number.isNaN(value));
+
+      normalizedClientIds.push(...parsedClientIds);
+    }
+
+    const uniqueClientIds = [...new Set(normalizedClientIds)];
+    if (uniqueClientIds.length === 1) {
+      where.clientId = uniqueClientIds[0];
+    } else if (uniqueClientIds.length > 1) {
+      where.clientId = { in: uniqueClientIds };
+    }
 
     // Date range filter on dateSent
     if (fromDate || toDate) {
@@ -1677,10 +1877,10 @@ router.get("/reports", async (req, res) => {
         take: parseInt(limit),
         orderBy: { dateSent: "desc" },
         include: {
-          email: {
-            select: { mauticEmailId: true, name: true, subject: true },
-          },
-        },
+          client: {
+            select: { id: true, name: true }
+          }
+        }
       }),
       prisma.mauticEmailReport.count({ where }),
     ]);
@@ -1705,6 +1905,31 @@ router.get("/reports", async (req, res) => {
   }
 });
 
+router.post("/reports/import-json", async (req, res) => {
+  try {
+    const {
+      clientIds = [8, 9],
+      months,
+      baseDir
+    } = req.body || {};
+
+    const result = await reportJsonImportService.importMonthsForClients({
+      clientIds: Array.isArray(clientIds) ? clientIds : [clientIds],
+      months: Array.isArray(months) ? months : [months],
+      baseDir
+    });
+
+    res.json(result);
+  } catch (error) {
+    logger.error('Error importing report JSON:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to import report JSON',
+      error: error.message
+    });
+  }
+});
+
 // ============================================
 // SYNC ROUTES
 // ============================================
@@ -1715,7 +1940,7 @@ router.get("/reports", async (req, res) => {
  */
 router.get("/sync/progress", async (req, res) => {
   try {
-    const progress = schedulerService.getSyncProgress();
+    const progress = await schedulerService.getSyncProgress();
     res.json({
       success: true,
       data: progress
@@ -1849,7 +2074,31 @@ router.post("/sync/all", async (req, res) => {
     schedulerService
       .syncAllClients({ forceFull })
       .then((result) => {
-        logger.debug("✅ Sync completed:", result);
+        const detailsRaw = result?.results?.details;
+        const details = Array.isArray(detailsRaw)
+          ? detailsRaw
+          : (detailsRaw && typeof detailsRaw === 'object')
+            ? Object.values(detailsRaw)
+            : [];
+
+        const lines = details
+          .filter(Boolean)
+          .map((d) => {
+            const name = d.clientName || d.clientId || 'unknown-client';
+            const ok = d.success ? 'OK' : 'FAIL';
+            const emails = d.emails?.total ?? 0;
+            const campaigns = d.campaigns?.total ?? 0;
+            const segments = d.segments?.total ?? 0;
+            const smsStats = d.smsStats?.total ?? 0;
+            const smsReplies = d.smsStats?.replies ?? 0;
+            const repNew = d.emailReports?.created ?? 0;
+            const repSkip = d.emailReports?.skipped ?? 0;
+            const repDb = d.emailReports?.totalInDb ?? 0;
+            return `${ok} | ${name} | emails=${emails} campaigns=${campaigns} segments=${segments} smsStats=${smsStats} replies=${smsReplies} emailReports(new=${repNew}, skipped=${repSkip}, db=${repDb})`;
+          });
+
+        logger.info(`✅ Sync completed: ${result?.successful || 0}/${result?.totalClients || 0} clients | duration=${result?.duration || '?'}s`);
+        for (const line of lines) logger.info(line);
         // Send email notification
         const duration = Math.floor((Date.now() - currentSyncStartTime) / 1000);
         notifyMauticSyncCompleted({
@@ -2013,7 +2262,16 @@ router.post("/sync/:clientId", async (req, res) => {
     schedulerService
       .syncClient(parseInt(clientId))
       .then((result) => {
-        logger.debug("✅ Sync completed:", result);
+        const name = result?.data?.clientName || result?.clientName || clientId;
+        const ok = result?.success ? 'OK' : 'FAIL';
+        const emails = result?.data?.emails?.total ?? result?.emails?.total ?? 0;
+        const campaigns = result?.data?.campaigns?.total ?? result?.campaigns?.total ?? 0;
+        const segments = result?.data?.segments?.total ?? result?.segments?.total ?? 0;
+        const rep = result?.data?.emailReports || result?.emailReports || {};
+        const repNew = rep.created ?? 0;
+        const repSkip = rep.skipped ?? 0;
+        const repDb = rep.totalInDb ?? 0;
+        logger.info(`✅ Sync completed: ${ok} | ${name} | emails=${emails} campaigns=${campaigns} segments=${segments} emailReports(new=${repNew}, skipped=${repSkip}, db=${repDb})`);
         // Send email notification
         const duration = Math.floor((Date.now() - currentSyncStartTime) / 1000);
         notifyMauticSyncCompleted({
@@ -2223,8 +2481,9 @@ router.get("/contact/:id", async (req, res) => {
     }
 
     // Find which client owns this smsId
-    const smsCampaign = await prisma.mauticSms.findUnique({
-      where: { mauticId: parseInt(smsId) },
+    const smsCampaign = await prisma.mauticSms.findFirst({
+      where: { mauticId: parseInt(smsId, 10) },
+      orderBy: { updatedAt: 'desc' },
       include: {
         client: true,           // Grouped Mautic client (e.g., Century)
         smsClient: true         // Original SMS client that fetched this campaign
