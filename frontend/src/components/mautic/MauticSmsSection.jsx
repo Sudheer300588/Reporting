@@ -87,7 +87,7 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
             const stats = response.data.data.stats || {};
             setTotalRecords(stats.total || 0);
             setOverallDelivered(stats.delivered || 0);
-            setOverallFailed(stats.failed || 0);
+            setOverallFailed(stats.totalFailed || 0);
             setOverallReplied(stats.totalWithReplies || 0);
 
             setTotalPages(response.data.pagination?.totalPages || 1);
@@ -280,41 +280,32 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
                                         <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sent</th>
                                         <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+                                        {/* <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th> */}
                                     </tr>
                                 </thead>
-                                {<tbody className="bg-white divide-y divide-gray-200">
+                                <tbody className="bg-white divide-y divide-gray-200">
                                     {smsCampaigns.map((sms) => (
                                         <tr
                                             key={sms.id}
-                                            className={`hover:bg-gray-50 transition-colors ${(sms.sentCount || 0) > 0 ? "cursor-pointer" : "cursor-not-allowed opacity-60"
-                                                }`}
-                                            onClick={() => {
-                                                if ((sms.sentCount || 0) > 0) {
-                                                    openCampaignMessages(sms);
-                                                }
-                                            }}
+                                            className="hover:bg-gray-50 transition-colors cursor-pointer"
+                                            onClick={() => openCampaignMessages(sms)}
                                         >
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center">
                                                     <MessageSquare className="w-5 h-5 text-blue-500 mr-3" />
-                                                    <span className="text-sm font-medium text-gray-900">
-                                                        {sms.name}
-                                                    </span>
+                                                    <span className="text-sm font-medium text-gray-900">{sms.name}</span>
                                                 </div>
                                             </td>
-
                                             <td className="px-6 py-4">
                                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                                    {sms.category?.title || "SMS"}
+                                                    {sms.category?.title || 'SMS'}
                                                 </span>
                                             </td>
-
                                             <td className="px-6 py-4 text-right">
                                                 <span className="text-sm font-semibold text-gray-900">
                                                     {(sms.sentCount || 0).toLocaleString()}
                                                 </span>
                                             </td>
-
                                             <td className="px-6 py-4 text-center">
                                                 {(sms.sentCount || 0) > 0 ? (
                                                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -328,9 +319,19 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                                                     </span>
                                                 )}
                                             </td>
+                                            {/* <td className="px-6 py-4 text-center">
+                                                <button
+                                                    onClick={() => openCampaignMessages(sms)}
+                                                    className="inline-flex items-center gap-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    disabled={(sms.sentCount || 0) === 0}
+                                                >
+                                                    <Activity className="w-4 h-4" />
+                                                    View Messages
+                                                </button>
+                                            </td> */}
                                         </tr>
-                                    ))} 
-                                </tbody>}
+                                    ))}
+                                </tbody>
                             </table>
                         </div>
                     )}
@@ -451,11 +452,12 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reply Text</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reply Date</th>
+                                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
                                     {messages.map((msg, idx) => (
-                                        <tr key={idx} className="hover:bg-gray-50 transition-colors" onClick={() => openLeadActivity(msg.leadId)}>
+                                        <tr key={idx} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-4 py-3">
                                                 <span className="text-sm font-medium text-gray-900">{msg.leadId}</span>
                                             </td>
@@ -479,7 +481,7 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                                             </td>
                                             <td className="px-4 py-3">
                                                 {msg.replyCategory ? (
-                                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${msg.replyCategory === 'Stop' ? 'bg-green-100 text-green-800' :
+                                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${msg.replyCategory === 'Stop' ? 'bg-red-100 text-red-800' :
                                                         'bg-yellow-100 text-yellow-800'
                                                         }`}>
                                                         {msg.replyCategory}
@@ -492,6 +494,15 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                                                 <span className="text-sm text-gray-600">
                                                     {msg.repliedAt ? new Date(msg.repliedAt).toLocaleString() : '-'}
                                                 </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                <button
+                                                    onClick={() => openLeadActivity(msg.leadId)}
+                                                    className="inline-flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 text-xs font-medium transition-colors"
+                                                >
+                                                    <Activity className="w-3 h-3" />
+                                                    View Activity
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}
@@ -564,7 +575,7 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
 
                 <div className="mb-6">
                     <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                        Lead Activity - {leadActivity.mobile || `ID #${leadActivity.leadId}`}
+                        Lead Activity - {(leadActivity.firstName && leadActivity.lastName) || leadActivity.mobile || `ID #${leadActivity.leadId}`}
                     </h2>
                     <p className="text-sm text-gray-600">
                         Campaign: {leadActivity.campaign?.name || selectedCampaign.name}
@@ -583,13 +594,13 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                         </div>
                     </div>
 
-                    <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-6">
+                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-6">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-sm font-medium text-green-600 mb-1">Replies</p>
-                                <p className="text-3xl font-bold text-green-900">{leadActivity.reply ? '1' : '0'}</p>
+                                <p className="text-sm font-medium text-purple-600 mb-1">Replies</p>
+                                <p className="text-3xl font-bold text-purple-900">{leadActivity.reply ? '1' : '0'}</p>
                             </div>
-                            <MessageCircle className="w-10 h-10 text-green-500 opacity-50" />
+                            <MessageCircle className="w-10 h-10 text-purple-500 opacity-50" />
                         </div>
                     </div>
                 </div>
@@ -621,16 +632,16 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                         )}
 
                         {leadActivity.reply && (
-                            <div className="flex gap-4 p-4 rounded-lg border bg-green-50 border-green-200">
+                            <div className="flex gap-4 p-4 rounded-lg border bg-purple-50 border-purple-200">
                                 <div className="flex-shrink-0">
-                                    <MessageCircle className="w-6 h-6 text-green-600" />
+                                    <MessageCircle className="w-6 h-6 text-purple-600" />
                                 </div>
                                 <div className="flex-1">
                                     <div className="flex items-center justify-between mb-2">
                                         <p className="text-sm font-medium text-gray-900">Reply Received</p>
                                         {leadActivity.reply.category && (
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${leadActivity.reply.category === 'Stop' ? 'bg-red-100 text-red-800' :
-                                                'bg-yellow-100 text-yellow-800'
+                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${leadActivity.reply.category === 'Stop' ? 'bg-red-100 border border-red-200 text-red-800' :
+                                                'bg-yellow-100 border border-yellow-500 text-yellow-800'
                                                 }`}>
                                                 {leadActivity.reply.category}
                                             </span>

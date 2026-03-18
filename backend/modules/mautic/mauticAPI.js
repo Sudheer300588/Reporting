@@ -101,12 +101,6 @@ class MauticAPIService {
 
     apiClient.interceptors.response.use(
       (response) => {
-        const duration = Date.now() - (response.config.metadata?.startTime || Date.now());
-        // Keep this log disabled by default to avoid noise.
-        // Enable only when diagnosing performance issues.
-        if (process.env.MAUTIC_LOG_SLOW_API === 'true' && duration > 5000) {
-          logger.warn(`Slow API response: ${response.config.url} took ${duration}ms`);
-        }
         return response;
       },
       (error) => {
@@ -914,35 +908,8 @@ class MauticAPIService {
       let start = 0;
       let pagesFetched = 0;
 
-      // Incremental cursor for reports:
-      // Use newest dateSent already stored in DB (per client) and apply an overlap.
-      // Then fetch newest-first (DESC) and stop once we cross the cursor.
-      // This prevents re-fetching large ranges from offset 0 on every run.
-      let cursorFromDate = null;
-      let cursorFromLabel = null;
-      try {
-        const overlapDays = parseInt(process.env.MAUTIC_EMAIL_REPORT_OVERLAP_DAYS || '3', 10);
-        const latest = await prisma.mauticEmailReport.findFirst({
-          where: { clientId: client.id },
-          orderBy: { dateSent: 'desc' },
-          select: { dateSent: true }
-        });
-
-        if (latest?.dateSent) {
-          const overlapMs = Number.isFinite(overlapDays) && overlapDays > 0
-            ? overlapDays * 24 * 60 * 60 * 1000
-            : 0;
-          const cursor = new Date(latest.dateSent.getTime() - overlapMs);
-          cursorFromDate = cursor;
-          cursorFromLabel = cursor.toISOString();
-        }
-      } catch (e) {
-        // Non-fatal. If we cannot read cursor, we fall back to full sync.
-        cursorFromDate = null;
-        cursorFromLabel = null;
-      }
-
-      const incrementalMode = !!cursorFromDate;
+      // Always fetch fresh data - no incremental cursor
+      const incrementalMode = false;
 
       // Mautic report endpoints sometimes return rows as an object map instead of an array.
       // Normalize to an array so pagination + saving works consistently.
@@ -979,7 +946,7 @@ class MauticAPIService {
         return Number.isNaN(d.getTime()) ? null : d;
       };
 
-      console.log(`📊 Fetching report ID ${reportId} for ${client.name}${incrementalMode ? ` (incremental since ~${cursorFromLabel})` : ' (FULL SYNC - all historical data)'}...`);
+      console.log(`📊 Fetching report ID ${reportId} for ${client.name} (FULL SYNC - all historical data)...`);
       console.log(`   Storage mode: RAW (full detail, one record per email event)`);
       console.log(`   Chunk size: ${limit} records per request (PHP-friendly)`);
 
@@ -1006,7 +973,7 @@ class MauticAPIService {
           start: start,
           limit: limit,
           orderBy: 'date_sent',
-          orderByDir: incrementalMode ? 'desc' : 'asc'
+          orderByDir: 'asc'
         };
 
         const currentPage = Math.floor(start / limit) + 1;
@@ -1062,38 +1029,9 @@ class MauticAPIService {
           break;
         }
 
-        // For incremental mode, keep only rows newer than the cursor.
-        // (We still allow overlap due to cursorFromDate already being "latest - overlap").
-        // Safety: stop only when an entire page is older than the cursor (prevents tie/ordering edge-cases).
+        // For full sync, keep all rows
         let rowsToSave = batchRows;
         let shouldStopAfterThisPage = false;
-        if (incrementalMode && cursorFromDate && fetchedCount > 0) {
-          let newest = null;
-          let anyUnparseable = false;
-
-          for (const row of batchRows) {
-            const raw = row?.date_sent ?? row?.dateSent;
-            const d = parseDateSent(raw);
-            if (!raw) continue;
-            if (!d) {
-              anyUnparseable = true;
-              continue;
-            }
-            if (!newest || d > newest) newest = d;
-          }
-
-          // Stop only if everything in this page is strictly older than the cursor.
-          // If there are unparseable timestamps, don't cursor-stop (avoid missing data).
-          if (!anyUnparseable && newest && newest < cursorFromDate) {
-            shouldStopAfterThisPage = true;
-          }
-
-          rowsToSave = batchRows.filter((row) => {
-            const d = parseDateSent(row?.date_sent ?? row?.dateSent);
-            // If we can't parse, keep it to avoid missing data.
-            return d ? d >= cursorFromDate : true;
-          });
-        }
 
         // Save batch immediately (per-batch processing for raw storage)
         if (rowsToSave.length > 0) {
@@ -1120,9 +1058,6 @@ class MauticAPIService {
         // ⚡ FIXED: Use fetchedCount to determine next offset (not batchRows.length which was cleared!)
         if (fetchedCount === 0) {
           console.log(`✅ Stopping: No more data returned`);
-          hasMore = false;
-        } else if (incrementalMode && shouldStopAfterThisPage) {
-          console.log(`✅ Stopping: crossed incremental cursor boundary (${cursorFromLabel})`);
           hasMore = false;
         } else if (totalAvailable > 0 && (start + fetchedCount) >= totalAvailable) {
           console.log(`✅ Stopping: Reached total (${start + fetchedCount}/${totalAvailable})`);
@@ -1655,6 +1590,11 @@ class MauticAPIService {
       } catch (saveErr) {
         console.warn('   ⚠️ Failed to save fetched emails to DB (non-fatal):', saveErr.message || saveErr);
       }
+      // Safety: ensure saveEmailsResult is always an object to avoid undefined access in production
+      if (!saveEmailsResult || typeof saveEmailsResult !== 'object') {
+        console.warn('   ⚠️ saveEmailsResult missing or invalid — using safe defaults to avoid runtime errors');
+        saveEmailsResult = { newEmailIds: [], changedEmailIds: [] };
+      }
 
       // ✅ Persist campaigns to DB (always update to get latest data)
       if (campaigns && campaigns.length > 0) {
@@ -1702,86 +1642,59 @@ class MauticAPIService {
         console.warn('Failed to fetch unique contacts count from Mautic (non-fatal):', countErr.message || countErr);
       }
 
-      // Fetch click trackables for emails (if we fetched metadata)
+      // Fetch click trackables for all emails (always fetch latest stats)
       try {
         if (emails && emails.length > 0) {
-          const forceFullClickSync = String(process.env.MAUTIC_FORCE_FULL_CLICK_SYNC || 'false') === 'true';
-          const lookbackDays = parseInt(process.env.MAUTIC_CLICK_STATS_LOOKBACK_DAYS || '7', 10);
-          const lookbackMs = Number.isFinite(lookbackDays) && lookbackDays > 0
-            ? lookbackDays * 24 * 60 * 60 * 1000
-            : 0;
-          const lookbackFrom = lookbackMs > 0 ? new Date(Date.now() - lookbackMs) : null;
+          console.log(`\n📊 Processing click trackables for ${emails.length}/${emails.length} emails (ALL emails)...`);
 
-          const idsToSync = new Set([
-            ...((saveEmailsResult?.newEmailIds) || []),
-            ...((saveEmailsResult?.changedEmailIds) || [])
-          ].map((v) => String(v)));
-
-          const emailsForClickSync = forceFullClickSync
-            ? emails
-            : emails.filter((e) => {
-                const id = String(e?.id ?? e?.mauticEmailId ?? '');
-                if (id && idsToSync.has(id)) return true;
-                if (lookbackFrom && e?.dateAdded) {
-                  const d = new Date(e.dateAdded);
-                  return !Number.isNaN(d.getTime()) && d >= lookbackFrom;
-                }
-                return false;
-              });
-
-          if (!forceFullClickSync && emailsForClickSync.length === 0) {
-            console.log(`\n⏭️  Skipping click trackables (no new/changed emails; lookback=${lookbackDays}d)`);
-          } else {
-            console.log(`\n📊 Processing click trackables for ${emailsForClickSync.length}/${emails.length} emails (incremental)...`);
-
-            const clickFetchResult = await this.fetchAllEmailClickStats(client, emailsForClickSync);
+          const clickFetchResult = await this.fetchAllEmailClickStats(client, emails);
 
             if (!clickFetchResult.success) {
               console.warn(`   ⚠️  Click fetch reported failure: ${clickFetchResult.error}`);
             }
 
-            // Aggregate click trackables and update email records with clickedCount AND uniqueClicks
-            console.log(`\n📊 Aggregating click data from database...`);
-            console.log(`   🔍 Looking up click data for ${emailsForClickSync.length} emails...`);
+          // Aggregate click trackables and update email records with clickedCount AND uniqueClicks
+          console.log(`\n📊 Aggregating click data from database...`);
+          console.log(`   🔍 Looking up click data for ${emails.length} emails...`);
 
-            const emailIds = emailsForClickSync.map(e => parseInt(e.id, 10)).filter(Boolean);
+          const emailIds = emails.map(e => parseInt(e.id, 10)).filter(Boolean);
             console.log(`   📧 Valid email IDs to aggregate: ${emailIds.length}`);
 
             if (emailIds.length === 0) {
               console.warn(`   ⚠️  No valid email IDs found - skipping aggregation`);
             } else {
-              const clickAggregates = await prisma.mauticClickTrackable.groupBy({
-                by: ['channelId'],
-                where: { channelId: { in: emailIds }, clientId: client.id },
-                _sum: {
-                  hits: true,        // Total clicks (clickedCount)
-                  uniqueHits: true   // Unique clicks
-                }
-              });
-
-              console.log(`   ✅ Aggregation complete: Found click data for ${clickAggregates.length} emails`);
-
-              if (clickAggregates.length > 0) {
-                const sample = clickAggregates[0];
-                console.log(`   📊 Sample: channelId=${sample.channelId}, totalHits=${sample._sum.hits}, uniqueHits=${sample._sum.uniqueHits}`);
+            const clickAggregates = await prisma.mauticClickTrackable.groupBy({
+              by: ['channelId'],
+              where: { channelId: { in: emailIds }, clientId: client.id },
+              _sum: {
+                hits: true,        // Total clicks (clickedCount)
+                uniqueHits: true   // Unique clicks
               }
+            });
 
-              const clickMap = new Map(clickAggregates.map(agg => [
-                String(agg.channelId),
-                {
-                  clickedCount: parseInt(agg._sum.hits || 0, 10),
-                  uniqueClicks: parseInt(agg._sum.uniqueHits || 0, 10)
-                }
-              ]));
+            console.log(`   ✅ Aggregation complete: Found click data for ${clickAggregates.length} emails`);
 
-              console.log(`   🗺️  Created click map with ${clickMap.size} entries`);
+            if (clickAggregates.length > 0) {
+              const sample = clickAggregates[0];
+              console.log(`   📊 Sample: channelId=${sample.channelId}, totalHits=${sample._sum.hits}, uniqueHits=${sample._sum.uniqueHits}`);
+            }
 
-              let updatedCount = 0;
-              let skippedCount = 0;
+            const clickMap = new Map(clickAggregates.map(agg => [
+              String(agg.channelId),
+              {
+                clickedCount: parseInt(agg._sum.hits || 0, 10),
+                uniqueClicks: parseInt(agg._sum.uniqueHits || 0, 10)
+              }
+            ]));
 
-              console.log(`\n   💾 Updating email records with click data...`);
+            console.log(`   🗺️  Created click map with ${clickMap.size} entries`);
 
-              for (const email of emailsForClickSync) {
+            let updatedCount = 0;
+            let skippedCount = 0;
+
+            console.log(`\n   💾 Updating email records with click data...`);
+
+            for (const email of emails) {
                 const emailId = String(email.id);
                 const clickData = clickMap.get(emailId);
 
@@ -1827,7 +1740,6 @@ class MauticAPIService {
               console.log(`      Updated with clicks: ${updatedCount}`);
               console.log(`      Skipped (no clicks): ${skippedCount}`);
             }
-          }
         } else {
           console.log(`\n   ℹ️  No emails to process for click trackables`);
         }
@@ -2508,16 +2420,13 @@ class MauticAPIService {
       writeClientMeta('mautic-sms-stats', client);
       const clientKey = getClientKey(client, 'mautic-sms-stats');
 
-      // Incremental cursor (used only for messaging here — paging cutoff happens upstream)
+      // Always fetch fresh data - always fetch all stats for latest data
       const latest = await prisma.mauticSmsStat.findFirst({
         where: { mauticSmsId: mauticSmsId },
         orderBy: { dateSent: 'desc' },
         select: { dateSent: true }
       });
-      const overlapMs = parseInt(process.env.MAUTIC_SMS_STATS_OVERLAP_MS || String(48 * 60 * 60 * 1000), 10);
-      const cursorFrom = (!forceFull && latest?.dateSent)
-        ? new Date(latest.dateSent.getTime() - (Number.isFinite(overlapMs) ? overlapMs : 0))
-        : null;
+      const cursorFrom = null; // Always fetch full stats for latest data
 
       // 🔄 Resume from orphaned pages if process was interrupted
       const orphanedPages = smsPageManager.recoverOrphanedPages({ client, clientKey, mauticSmsId });
