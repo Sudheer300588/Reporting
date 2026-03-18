@@ -312,7 +312,7 @@ router.get('/sms-campaigns/:campaignId/stats', async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     // Fetch stats with pagination
-    const [stats, total, totalWithReplies] = await Promise.all([
+    const [stats, total, totalWithReplies, totalFailed] = await Promise.all([
       prisma.mauticSmsStat.findMany({
         where: whereClause,
         orderBy: [
@@ -327,6 +327,12 @@ router.get('/sms-campaigns/:campaignId/stats', async (req, res) => {
         where: {
           smsId: campaignId,
           replyText: { not: null }
+        }
+      }),
+      prisma.mauticSmsStat.count({
+        where: {
+          smsId: campaignId,
+          isFailed: "1"
         }
       })
     ]);
@@ -358,6 +364,7 @@ router.get('/sms-campaigns/:campaignId/stats', async (req, res) => {
         stats: {
           total,
           totalWithReplies,
+          totalFailed,
           delivered: campaign.sentCount
         }
       },
