@@ -509,35 +509,34 @@ class MauticAPIService {
               }
             } catch (pageError) {
               // Handle 403 or other errors with pagination
-              if (pageError.response && pageError.response.data) {
+              if (pageError.response?.status === 403) {
+                // 403 = permission denied. Mautic returns a fixed default set of records
+                // regardless of the 'start' offset, so paginating on 403 is an infinite loop.
+                // Take whatever data came back on page 1 and stop immediately.
+                if (pageNum === 1 && pageError.response.data) {
+                  const errorData = pageError.response.data;
+                  const pageRows = errorData.stats || (Array.isArray(errorData) ? errorData : []);
+                  if (Array.isArray(pageRows) && pageRows.length > 0) {
+                    console.log(`      ⚠️  Got 403 (permission denied) — received ${pageRows.length} records. Check Mautic API user permissions.`);
+                    console.log(`      📊 Sample: redirectId=${pageRows[0].redirect_id}, hits=${pageRows[0].hits}, uniqueHits=${pageRows[0].unique_hits}`);
+                    allRawRows.push(...pageRows);
+                  } else {
+                    console.error(`      ❌ Got 403 with no usable data. Check Mautic API user permissions for channel_url_trackables.`);
+                  }
+                } else if (pageNum > 1) {
+                  console.log(`      ⚠️  Got 403 on page ${pageNum} — stopping pagination (403 responses cannot be paginated).`);
+                }
+                hasMore = false; // Always stop on 403 — never paginate through permission errors
+              } else if (pageError.response && pageError.response.data) {
                 const errorData = pageError.response.data;
                 const pageRows = errorData.stats || (Array.isArray(errorData) ? errorData : []);
-
                 if (Array.isArray(pageRows) && pageRows.length > 0) {
-                  if (pageNum === 1) {
-                    console.log(`      ⚠️  Got ${pageError.response.status} error but received ${pageRows.length} records`);
-                    console.log(`      📊 Processing data despite error status`);
-                    console.log(`      📊 Sample: redirectId=${pageRows[0].redirect_id}, hits=${pageRows[0].hits}, uniqueHits=${pageRows[0].unique_hits}`);
-                  } else {
-                    console.log(`      ⚠️  Page ${pageNum}: Got ${pageError.response.status} error but received ${pageRows.length} more records`);
-                  }
-
+                  console.log(`      ⚠️  Page ${pageNum}: Got ${pageError.response.status} error but received ${pageRows.length} records`);
                   allRawRows.push(...pageRows);
-
-                  // Check if we got a full page (likely more data available)
-                  if (pageRows.length >= 100) {
-                    // 403 responses seem to default to 100 records, try next page
-                    currentStart += pageRows.length;
-                    console.log(`      🔄 Fetching next page (got full page of ${pageRows.length}, might be more)...`);
-                  } else {
-                    // Got less than 100, probably the last page
-                    hasMore = false;
-                  }
                 } else {
-                  // No data in error response
                   console.error(`      ❌ Error with no data: ${pageError.message}`);
-                  hasMore = false;
                 }
+                hasMore = false;
               } else {
                 // Error without response data
                 console.error(`      ❌ Error: ${pageError.message}`);
