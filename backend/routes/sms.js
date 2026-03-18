@@ -12,30 +12,39 @@ const router = express.Router();
 router.get('/sms-clients', async (req, res) => {
   try {
     const smsClients = await prisma.smsClient.findMany({
-      orderBy: { name: 'asc' },
-      include: {
-        _count: {
-          select: { smsCampaigns: true }
-        }
-      }
+      orderBy: { name: 'asc' }
     });
 
-    const clientsWithCounts = smsClients.map(client => ({
-      id: client.id,
-      name: client.name,
-      mauticUrl: client.mauticUrl,
-      username: client.username,
-      isActive: client.isActive,
-      lastSyncAt: client.lastSyncAt,
-      smsCampaignsCount: client._count.smsCampaigns,
-      createdAt: client.createdAt,
-      updatedAt: client.updatedAt
+    // For each sms client compute campaign count matching either smsClientId OR origin (url+username).
+    // originMauticUrl alone is shared by multiple logical clients within the same Mautic instance.
+    const clientsWithCounts = await Promise.all(smsClients.map(async (client) => {
+      const normalizedUrl = client.mauticUrl ? client.mauticUrl.trim().replace(/\/$/, '').toLowerCase() : null;
+
+      const where = normalizedUrl
+        ? {
+            OR: [
+              { smsClientId: client.id },
+              { originMauticUrl: normalizedUrl, originUsername: client.username }
+            ]
+          }
+        : { smsClientId: client.id };
+
+      const count = await prisma.mauticSms.count({ where });
+
+      return {
+        id: client.id,
+        name: client.name,
+        mauticUrl: client.mauticUrl,
+        username: client.username,
+        isActive: client.isActive,
+        lastSyncAt: client.lastSyncAt,
+        smsCampaignsCount: count,
+        createdAt: client.createdAt,
+        updatedAt: client.updatedAt
+      };
     }));
 
-    res.json({
-      success: true,
-      data: clientsWithCounts
-    });
+    res.json({ success: true, data: clientsWithCounts });
   } catch (error) {
     logger.error('Failed to fetch SMS clients:', error);
     res.status(500).json({
@@ -107,7 +116,7 @@ router.post('/sms-clients/:id/sync', async (req, res) => {
 
 /**
  * GET /api/clients/:clientId/sms-campaigns
- * Get SMS campaigns for a regular client (links via Client -> MauticClient)
+ * Get SMS campaigns for a client (accepts MauticClient.id)
  */
 router.get('/clients/:clientId/sms-campaigns', async (req, res) => {
   try {
@@ -115,21 +124,25 @@ router.get('/clients/:clientId/sms-campaigns', async (req, res) => {
     const { page = 1, limit = 50 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // First, find the Client
-    const client = await prisma.client.findUnique({
+    // Try to find MauticClient by id directly (this is what unified endpoint now sends)
+    let mauticClient = await prisma.mauticClient.findUnique({
       where: { id: clientId },
-      include: { mauticClient: true }
+      select: { id: true, name: true, mauticUrl: true }
     });
 
-    if (!client) {
-      return res.status(404).json({
-        success: false,
-        message: 'Client not found'
+    // Fallback: If not found, try to find by Client.id (for backward compatibility)
+    if (!mauticClient) {
+      const client = await prisma.client.findUnique({
+        where: { id: clientId },
+        include: { mauticClient: true }
       });
+
+      if (client?.mauticClient) {
+        mauticClient = client.mauticClient;
+      }
     }
 
-    // Check if this client has a linked MauticClient
-    if (!client.mauticClient) {
+    if (!mauticClient) {
       return res.json({
         success: true,
         data: [],
@@ -142,16 +155,9 @@ router.get('/clients/:clientId/sms-campaigns', async (req, res) => {
       });
     }
 
-    const mauticClient = client.mauticClient;
-
-    // Match campaigns by originMauticUrl OR by clientId
-    const normalizedUrl = mauticClient.mauticUrl.trim().replace(/\/$/, '').toLowerCase();
-    const where = {
-      OR: [
-        { originMauticUrl: normalizedUrl },
-        { clientId: mauticClient.id }
-      ]
-    };
+    // IMPORTANT: Match ONLY by clientId.
+    // originMauticUrl is a Mautic instance identifier and can include other clients' campaigns.
+    const where = { clientId: mauticClient.id };
 
     const [campaigns, total] = await Promise.all([
       prisma.mauticSms.findMany({
@@ -217,12 +223,14 @@ router.get('/sms-clients/:id/campaigns', async (req, res) => {
       });
     }
 
-    // Build filter: match by smsClientId OR by originMauticUrl
+    // Build filter: match by smsClientId OR by origin (url+username).
+    // originMauticUrl alone is too broad (shared instance).
     const where = {
       OR: [
         { smsClientId },
         { 
-          originMauticUrl: smsClient.mauticUrl.trim().replace(/\/$/, '').toLowerCase()
+          originMauticUrl: smsClient.mauticUrl.trim().replace(/\/$/, '').toLowerCase(),
+          originUsername: smsClient.username
         }
       ]
     };

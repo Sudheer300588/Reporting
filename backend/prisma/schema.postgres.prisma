@@ -620,7 +620,7 @@ model SmsClient {
 // ==========================================================
 model MauticSms {
   id              Int       @id @default(autoincrement())
-  mauticId        Int       @unique // Original SMS ID from Mautic
+  mauticId        Int       // Original SMS ID from Mautic
   name            String
   category        Json?     // Store category object { id, title }
   sentCount       Int       @default(0)
@@ -635,6 +635,7 @@ model MauticSms {
   smsClient    SmsClient?    @relation(fields: [smsClientId], references: [id], onDelete: Cascade)
   stats        MauticSmsStat[]
 
+  @@unique([mauticId, originMauticUrl], name: "mauticId_origin_unique")
   @@index([clientId])
   @@index([smsClientId])
   @@index([originMauticUrl, originUsername])

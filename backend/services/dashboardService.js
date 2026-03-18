@@ -186,6 +186,7 @@ class DashboardService {
   /**
    * Get client statistics
    * Filtered by user permissions
+   * Counts from MauticClient table (excluding SMS-only clients)
    */
   async _getClientStats(currentUser) {
     try {
@@ -193,21 +194,41 @@ class DashboardService {
       let inactiveClients = 0;
 
       if (hasFullAccess(currentUser)) {
-        // Full access users see all clients from main Client table
+        // Full access users see all Mautic clients (excluding SMS-only)
         [activeClients, inactiveClients] = await Promise.all([
-          prisma.client.count({ where: { isActive: true } }),
-          prisma.client.count({ where: { isActive: false } })
+          prisma.mauticClient.count({ 
+            where: { 
+              isActive: true,
+              reportId: { not: 'sms-only' }
+            } 
+          }),
+          prisma.mauticClient.count({ 
+            where: { 
+              isActive: false,
+              reportId: { not: 'sms-only' }
+            } 
+          })
         ]);
       } else {
         // Limited users see only clients they have access to
+        // Get accessible Client.ids first
         const accessibleClientIds = await getAccessibleClientIds(currentUser.id, currentUser);
+        
+        // Find MauticClients linked to these Client.ids OR get all if user has broad access
+        const mauticClientsWhere = {
+          reportId: { not: 'sms-only' },
+          OR: [
+            { clientId: { in: accessibleClientIds } },
+            { clientId: null } // Include unlinked mautic clients for now
+          ]
+        };
 
         [activeClients, inactiveClients] = await Promise.all([
-          prisma.client.count({
-            where: { isActive: true, id: { in: accessibleClientIds } }
+          prisma.mauticClient.count({
+            where: { ...mauticClientsWhere, isActive: true }
           }),
-          prisma.client.count({
-            where: { isActive: false, id: { in: accessibleClientIds } }
+          prisma.mauticClient.count({
+            where: { ...mauticClientsWhere, isActive: false }
           })
         ]);
       }
