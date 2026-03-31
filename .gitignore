@@ -30,6 +30,8 @@ backend/.env*
 /backend/data/*
 /backend/modules/.temp_pages
 /backend/modules/.temp_pages/*
+/backend/modules/**/.temp_pages
+/backend/modules/**/.temp_pages/*
 /backend/.temp_pages
 /backend/.temp_pages/*
 
