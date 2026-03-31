@@ -264,6 +264,132 @@ const ClientsTable = () => {
     };
   }, [filteredRecordsForMetrics]);
 
+  // Build export rows from the same view model used by the visible table.
+  const exportConfig = useMemo(() => {
+    if (viewLevel === "root") {
+      const clientGroups = groupBy(
+        allRecords,
+        (r) => (r.client && r.client.trim()) || "Unknown Client"
+      );
+
+      const data = Object.entries(clientGroups).map(([client, records]) => {
+        const total = records.length;
+        const success = records.filter(
+          (r) => r.status?.toLowerCase() === "success"
+        ).length;
+        const failure = records.filter(
+          (r) => r.status?.toLowerCase() === "failure"
+        ).length;
+        const other = records.filter(
+          (r) => !["success", "failure"].includes(r.status)
+        ).length;
+
+        return {
+          client,
+          totalCampaigns: new Set(records.map((r) => r.campaignId)).size,
+          totalVoicemailsSent: total,
+          success,
+          failure,
+          other,
+        };
+      });
+
+      return {
+        data,
+        filename: "voicemail_clients_summary",
+        title: "Voicemail Clients Summary",
+        columns: {
+          client: "Client",
+          totalCampaigns: "Total Campaigns",
+          totalVoicemailsSent: "Total Voicemails sent",
+          success: "Success",
+          failure: "Failure",
+          other: "Other",
+        },
+      };
+    }
+
+    if (viewLevel === "client" && selectedClient) {
+      const campaignGroups = groupBy(
+        filteredRecordsForTable,
+        (r) => r.campaignName || "Unknown Campaign"
+      );
+
+      const data = Object.entries(campaignGroups).map(([campaign, records]) => {
+        const total = records.length;
+        const success = records.filter(
+          (r) => r.status?.toLowerCase() === "success"
+        ).length;
+        const failure = records.filter(
+          (r) => r.status?.toLowerCase() === "failure"
+        ).length;
+        const other = records.filter(
+          (r) => !["success", "failure"].includes(r.status)
+        ).length;
+
+        return {
+          campaign,
+          totalVoicemailsSent: total,
+          success,
+          failure,
+          other,
+        };
+      });
+
+      return {
+        data,
+        filename: "voicemail_campaign_summary",
+        title: "Voicemail Campaign Summary",
+        columns: {
+          campaign: "Campaign",
+          totalVoicemailsSent: "Total Voicemails sent",
+          success: "Success",
+          failure: "Failure",
+          other: "Other",
+        },
+      };
+    }
+
+    if (viewLevel === "campaign" && selectedCampaign) {
+      const data = paginatedRecords.map((record) => ({
+        phoneNumber: record.phoneNumber || "",
+        status: record.status || "",
+        date: record.date || "",
+        firstName: record.firstName || "",
+        lastName: record.lastName || "",
+        email: record.email || "",
+      }));
+
+      return {
+        data,
+        filename: "voicemail_campaign_records",
+        title: "Voicemail Campaign Records",
+        columns: {
+          phoneNumber: "Phone",
+          status: "Status",
+          date: "Date",
+          firstName: "First Name",
+          lastName: "Last Name",
+          email: "Email",
+        },
+      };
+    }
+
+    return {
+      data: [],
+      filename: "voicemail_records",
+      title: "Voicemail Records",
+      columns: {},
+    };
+  }, [
+    allRecords,
+    filteredRecordsForTable,
+    paginatedRecords,
+    selectedCampaign,
+    selectedClient,
+    viewLevel,
+  ]);
+
   useEffect(() => {
     if (!selectedClient || !selectedCampaign || allRecords.length === 0) return;
 
@@ -290,34 +416,13 @@ const ClientsTable = () => {
           </h3>
           <div className="flex items-center gap-2">
             <ExportButton
-              data={filteredRecordsForTable.map((record) => ({
-                client: record.client,
-                campaign: record.campaign || record.campaignName || "",
-                phoneNumber: record.phoneNumber || "",
-                firstName: record.firstName || "",
-                lastName: record.lastName || "",
-                status: record.status || "",
-                callbacks: record.callbacks || 0,
-                smsCount: record.smsCount || 0,
-                cost: record.cost || 0,
-                date: record.date || ""
-              }))}
-              filename="client_voicemail_records"
-              title="Client Voicemail Records"
-              columns={{
-                client: "Client",
-                campaign: "Campaign",
-                phoneNumber: "Phone Number",
-                firstName: "First Name",
-                lastName: "Last Name",
-                status: "Status",
-                callbacks: "Callbacks",
-                smsCount: "SMS Count",
-                cost: "Cost",
-                date: "Date"
-              }}
+              data={exportConfig.data}
+              filename={exportConfig.filename}
+              title={exportConfig.title}
+              columns={exportConfig.columns}
               campaignType="voicemail"
               variant="secondary"
+              disabled={exportConfig.data.length === 0}
             />
             <button
               onClick={async () => {

@@ -24,6 +24,7 @@ export default function VicidialDashboard({ accessibleClientIds = null }) {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [error, setError] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const [exportingAll, setExportingAll] = useState(false);
   const [liveAgentsCount, setLiveAgentsCount] = useState(0);
 
   const loadAgentsData = async (pageNum = 1) => {
@@ -169,148 +170,111 @@ export default function VicidialDashboard({ accessibleClientIds = null }) {
     }));
   };
 
+  const exportDetailedStats = async (agentsToExport, isAll = false) => {
+    if (!agentsToExport.length) {
+      toast.info('No rows to export.', {
+        position: 'top-right',
+        autoClose: 3000
+      });
+      return;
+    }
+
+    // Get date range for stats (last 90 days)
+    const end = new Date();
+    const start = new Date(end.getTime() - (90*24*60*60*1000));
+
+    const fmt = d => {
+      const YYYY = d.getFullYear();
+      const MM = String(d.getMonth() + 1).padStart(2, '0');
+      const DD = String(d.getDate()).padStart(2, '0');
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      const ss = String(d.getSeconds()).padStart(2, '0');
+      return `${YYYY}-${MM}-${DD} ${hh}:${mm}:${ss}`;
+    };
+
+    // Fetch detailed stats for selected agents
+    const agentStatsPromises = agentsToExport.map(async (agent) => {
+      try {
+        const res = await api.get(`/agents/stats/single?agent_user=${encodeURIComponent(agent.user)}&start=${encodeURIComponent(fmt(start))}&end=${encodeURIComponent(fmt(end))}`);
+        const stats = Array.isArray(res?.data?.data) ? res.data.data[0] : res?.data?.data;
+        return { agent, stats: stats || {} };
+      } catch (err) {
+        console.error(`Failed to fetch stats for ${agent.user}:`, err);
+        return { agent, stats: {} };
+      }
+    });
+
+    const agentDataWithStats = await Promise.all(agentStatsPromises);
+
+    const formatDate = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const csvContent = [
+      ['ViciDial Agents Export Report'],
+      [`Export Date: ${formatDate(new Date())}`],
+      [`Statistics Period: ${formatDate(start)} to ${formatDate(end)}`],
+      [`Export Scope: ${isAll ? 'All Agents (filtered by current controls)' : 'Visible Rows'}`],
+      [`Total Agents Exported: ${agentsToExport.length}`],
+      [],
+      [
+        'S.No', 'Status', 'Agent ID', 'Agent Name', 'Campaigns',
+        'Calls', 'Sessions', 'Pauses', 'Pauses/Session',
+        'Login Time', 'Talk Time', 'Pause Time', 'Dispo Time',
+        'Wait Time', 'Dead Time', 'Avg Session', 'Pause %'
+      ],
+      ...agentDataWithStats.map((item, idx) => {
+        const { agent, stats } = item;
+        return [
+          idx + 1,
+          agent.isActive ? 'Active' : 'Inactive',
+          agent.user,
+          agent.name || '—',
+          agent.campaigns,
+          stats.calls || '0',
+          stats.sessions || '0',
+          stats.pauses || '0',
+          stats.pauses_per_session || '0',
+          stats.login_time || '0:00',
+          stats.total_talk_time || stats.talk_time || '0:00',
+          stats.pause_time || '0:00',
+          stats.dispo_time || '0:00',
+          stats.wait_time || '0:00',
+          stats.dead_time || '0:00',
+          stats.avg_session || '0:00',
+          stats.pause_pct || '0%'
+        ];
+      })
+    ].map(row => row.join(',')).join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vicidial-agents-detailed-${isAll ? 'all' : 'visible'}-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    toast.success(`✅ Exported ${agentsToExport.length} agents with detailed statistics!`, {
+      position: 'top-right',
+      autoClose: 4000
+    });
+  };
+
   const handleExport = async () => {
     try {
       setExporting(true);
       setError(null);
-      
-      // Fetch ALL agents from the database (not just current page)
-      const allAgentsResponse = await api.get(`/agents/stats/paginated?page=1&perPage=1000`);
-      const allAgentsPayload = allAgentsResponse?.data?.data || {};
-      const allAgentsList = Array.isArray(allAgentsPayload.data) ? allAgentsPayload.data : [];
-      
-      // Map all agents
-      const allAgents = allAgentsList.map(a => ({
-        user: a.user,
-        name: a.fullName || a.full_name || a.user || '',
-        campaigns: Array.isArray(a.campaigns) ? a.campaigns.length : 0,
-        isActive: a.isActive || false
-      }));
 
-      // Apply current filters to all agents (if any)
-      let agentsToExport = [...allAgents];
-      
-      // Apply search filter
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        agentsToExport = agentsToExport.filter(agent => 
-          agent.user.toLowerCase().includes(query) ||
-          agent.name.toLowerCase().includes(query)
-        );
-      }
-      
-      // Apply status filter
-      if (statusFilter === 'active') {
-        agentsToExport = agentsToExport.filter(agent => agent.isActive);
-      } else if (statusFilter === 'inactive') {
-        agentsToExport = agentsToExport.filter(agent => !agent.isActive);
-      }
-      
-      // Apply sorting
-      if (sortConfig.key) {
-        agentsToExport.sort((a, b) => {
-          const aVal = a[sortConfig.key];
-          const bVal = b[sortConfig.key];
-          
-          if (typeof aVal === 'string') {
-            return sortConfig.direction === 'asc' 
-              ? aVal.localeCompare(bVal)
-              : bVal.localeCompare(aVal);
-          }
-          
-          return sortConfig.direction === 'asc' 
-            ? aVal - bVal
-            : bVal - aVal;
-        });
-      }
-      
-      // Get date range for stats (last 90 days)
-      const end = new Date();
-      const start = new Date(end.getTime() - (90*24*60*60*1000));
-      
-      const fmt = d => {
-        const YYYY = d.getFullYear();
-        const MM = String(d.getMonth() + 1).padStart(2, '0');
-        const DD = String(d.getDate()).padStart(2, '0');
-        const hh = String(d.getHours()).padStart(2, '0');
-        const mm = String(d.getMinutes()).padStart(2, '0');
-        const ss = String(d.getSeconds()).padStart(2, '0');
-        return `${YYYY}-${MM}-${DD} ${hh}:${mm}:${ss}`;
-      };
-
-      // Fetch detailed stats for all agents to export
-      const agentStatsPromises = agentsToExport.map(async (agent) => {
-        try {
-          const res = await api.get(`/agents/stats/single?agent_user=${encodeURIComponent(agent.user)}&start=${encodeURIComponent(fmt(start))}&end=${encodeURIComponent(fmt(end))}`);
-          const stats = Array.isArray(res?.data?.data) ? res.data.data[0] : res?.data?.data;
-          return { agent, stats: stats || {} };
-        } catch (err) {
-          console.error(`Failed to fetch stats for ${agent.user}:`, err);
-          return { agent, stats: {} };
-        }
-      });
-
-      const agentDataWithStats = await Promise.all(agentStatsPromises);
-
-      // Format dates for CSV header
-      const formatDate = (date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      };
-
-      // Create comprehensive CSV with all statistics
-      const csvContent = [
-        ['ViciDial Agents Export Report'],
-        [`Export Date: ${formatDate(new Date())}`],
-        [`Statistics Period: ${formatDate(start)} to ${formatDate(end)}`],
-        [`Total Agents Exported: ${agentsToExport.length}`],
-        [], // Empty row for spacing
-        [
-          'S.No', 'Status', 'Agent ID', 'Agent Name', 'Campaigns',
-          'Calls', 'Sessions', 'Pauses', 'Pauses/Session',
-          'Login Time', 'Talk Time', 'Pause Time', 'Dispo Time',
-          'Wait Time', 'Dead Time', 'Avg Session', 'Pause %'
-        ],
-        ...agentDataWithStats.map((item, idx) => {
-          const { agent, stats } = item;
-          return [
-            idx + 1,
-            agent.isActive ? 'Active' : 'Inactive',
-            agent.user,
-            agent.name || '—',
-            agent.campaigns,
-            stats.calls || '0',
-            stats.sessions || '0',
-            stats.pauses || '0',
-            stats.pauses_per_session || '0',
-            stats.login_time || '0:00',
-            stats.total_talk_time || stats.talk_time || '0:00',
-            stats.pause_time || '0:00',
-            stats.dispo_time || '0:00',
-            stats.wait_time || '0:00',
-            stats.dead_time || '0:00',
-            stats.avg_session || '0:00',
-            stats.pause_pct || '0%'
-          ];
-        })
-      ].map(row => row.join(',')).join('\n');
-
-      const blob = new Blob([csvContent], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `vicidial-agents-detailed-${new Date().toISOString().split('T')[0]}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      
-      toast.success(`✅ Exported ${agentsToExport.length} agents with detailed statistics!`, {
-        position: 'top-right',
-        autoClose: 4000
-      });
+      // Export only the rows currently rendered in the table.
+      const agentsToExport = [...filteredAgents];
+      await exportDetailedStats(agentsToExport, false);
     } catch (err) {
       console.error('Export failed:', err);
       setError('Failed to export data: ' + err.message);
@@ -320,6 +284,67 @@ export default function VicidialDashboard({ accessibleClientIds = null }) {
       });
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleExportAll = async () => {
+    try {
+      setExportingAll(true);
+      setError(null);
+
+      // Fetch all agents, then apply current filters/sort so "Export All" means all matching rows.
+      const allAgentsResponse = await api.get(`/agents/stats/paginated?page=1&perPage=10000`);
+      const allAgentsPayload = allAgentsResponse?.data?.data || {};
+      const allAgentsList = Array.isArray(allAgentsPayload.data) ? allAgentsPayload.data : [];
+
+      let agentsToExport = allAgentsList.map(a => ({
+        user: a.user,
+        name: a.fullName || a.full_name || a.user || '',
+        campaigns: Array.isArray(a.campaigns) ? a.campaigns.length : 0,
+        isActive: a.isActive || false
+      }));
+
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        agentsToExport = agentsToExport.filter(agent =>
+          agent.user.toLowerCase().includes(query) ||
+          agent.name.toLowerCase().includes(query)
+        );
+      }
+
+      if (statusFilter === 'active') {
+        agentsToExport = agentsToExport.filter(agent => agent.isActive);
+      } else if (statusFilter === 'inactive') {
+        agentsToExport = agentsToExport.filter(agent => !agent.isActive);
+      }
+
+      if (sortConfig.key) {
+        agentsToExport.sort((a, b) => {
+          const aVal = a[sortConfig.key];
+          const bVal = b[sortConfig.key];
+
+          if (typeof aVal === 'string') {
+            return sortConfig.direction === 'asc'
+              ? aVal.localeCompare(bVal)
+              : bVal.localeCompare(aVal);
+          }
+
+          return sortConfig.direction === 'asc'
+            ? aVal - bVal
+            : bVal - aVal;
+        });
+      }
+
+      await exportDetailedStats(agentsToExport, true);
+    } catch (err) {
+      console.error('Export all failed:', err);
+      setError('Failed to export all data: ' + err.message);
+      toast.error(`❌ Failed to export all data: ${err.message}`, {
+        position: 'top-right',
+        autoClose: 5000
+      });
+    } finally {
+      setExportingAll(false);
     }
   };
 
@@ -400,10 +425,19 @@ export default function VicidialDashboard({ accessibleClientIds = null }) {
                 onClick={handleExport}
                 disabled={exporting || loading}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2 shadow-sm"
-                title="Export CSV with detailed statistics"
+                title="Export detailed stats for visible rows"
               >
                 <Download size={18} className={exporting ? 'animate-bounce' : ''} />
-                {exporting ? 'Exporting...' : 'Export Stats'}
+                {exporting ? 'Exporting...' : 'Export Visible'}
+              </button>
+              <button 
+                onClick={handleExportAll}
+                disabled={exportingAll || loading}
+                className="px-4 py-2 bg-emerald-700 text-white rounded-lg hover:bg-emerald-800 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2 shadow-sm"
+                title="Export detailed stats for all matching rows"
+              >
+                <Download size={18} className={exportingAll ? 'animate-bounce' : ''} />
+                {exportingAll ? 'Exporting All...' : 'Export All'}
               </button>
               <button 
                 onClick={handleSyncCampaigns} 
