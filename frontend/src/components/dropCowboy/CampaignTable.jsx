@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, Phone, CheckCircle2, XCircle, Calendar, DollarSign, ChevronLeft, ChevronRight, Info } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
+import ExportButton from '../ExportButton';
 
 const CampaignTable = ({ campaigns }) => {
   const { user } = useAuth();
@@ -152,8 +153,48 @@ const CampaignTable = ({ campaigns }) => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Campaigns</h2>
-        <div className="text-xs font-semibold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
-          {campaigns.length} total
+        <div className="flex items-center gap-3">
+          <div className="text-xs font-semibold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
+            {campaigns.length} total
+          </div>
+          <ExportButton
+            data={campaigns.flatMap(campaign => 
+              (campaign.records || []).map(record => ({
+                campaignName: campaign.campaignName,
+                voicemailName: campaign.voicemailName || 'Default VM',
+                phoneNumber: record.phoneNumber,
+                firstName: record.firstName || '',
+                lastName: record.lastName || '',
+                email: record.email || '',
+                carrier: record.carrier || '',
+                lineType: record.lineType || '',
+                status: record.status || '',
+                statusCode: record.statusCode || 0,
+                callbacks: record.callbacks || 0,
+                smsCount: record.smsCount || 0,
+                cost: record.cost || 0,
+                date: record.date || new Date().toISOString()
+              }))
+            )}
+            filename="campaigns_records"
+            title="Campaign Records Report"
+            columns={{
+              'campaignName': 'Campaign',
+              'voicemailName': 'Voicemail',
+              'phoneNumber': 'Phone Number',
+              'firstName': 'First Name',
+              'lastName': 'Last Name',
+              'email': 'Email',
+              'carrier': 'Carrier',
+              'status': 'Status',
+              'callbacks': 'Callbacks',
+              'smsCount': 'SMS Count',
+              'cost': 'Cost ($)',
+              'date': 'Date'
+            }}
+            campaignType="voicemail"
+            variant="secondary"
+          />
         </div>
       </div>
       

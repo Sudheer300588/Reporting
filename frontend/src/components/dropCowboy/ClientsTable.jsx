@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Loader2 } from "lucide-react";
 import MetricsCards from "./MetricsCards";
 import useViewLevel from "../../zustand/useViewLevel";
+import ExportButton from "../ExportButton";
 
 
 const ClientsTable = () => {
@@ -287,29 +288,61 @@ const ClientsTable = () => {
           <h3 className="text-xl font-bold text-gray-900">
             Voicemail Campaign Records
           </h3>
-          <button
-            onClick={async () => {
-              try {
-                setFetchLoading(true);
-                setFetchMessage("Refreshing data...");
-                // await fetchPage(currentPage || 1);
-                setFetchMessage("Data refreshed successfully");
-              } catch (err) {
-                setFetchMessage("Error: " + (err.message || "unknown"));
-              } finally {
-                setFetchLoading(false);
-                setTimeout(() => setFetchMessage(""), 3000);
-              }
-            }}
-            disabled={fetchLoading}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors shadow-sm"
-          >
-            {fetchLoading ? (
-              <Loader2 className="animate-spin" size={16} />
-            ) : (
-              "Refresh Data"
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            <ExportButton
+              data={filteredRecordsForTable.map((record) => ({
+                client: record.client,
+                campaign: record.campaign || record.campaignName || "",
+                phoneNumber: record.phoneNumber || "",
+                firstName: record.firstName || "",
+                lastName: record.lastName || "",
+                status: record.status || "",
+                callbacks: record.callbacks || 0,
+                smsCount: record.smsCount || 0,
+                cost: record.cost || 0,
+                date: record.date || ""
+              }))}
+              filename="client_voicemail_records"
+              title="Client Voicemail Records"
+              columns={{
+                client: "Client",
+                campaign: "Campaign",
+                phoneNumber: "Phone Number",
+                firstName: "First Name",
+                lastName: "Last Name",
+                status: "Status",
+                callbacks: "Callbacks",
+                smsCount: "SMS Count",
+                cost: "Cost",
+                date: "Date"
+              }}
+              campaignType="voicemail"
+              variant="secondary"
+            />
+            <button
+              onClick={async () => {
+                try {
+                  setFetchLoading(true);
+                  setFetchMessage("Refreshing data...");
+                  // await fetchPage(currentPage || 1);
+                  setFetchMessage("Data refreshed successfully");
+                } catch (err) {
+                  setFetchMessage("Error: " + (err.message || "unknown"));
+                } finally {
+                  setFetchLoading(false);
+                  setTimeout(() => setFetchMessage(""), 3000);
+                }
+              }}
+              disabled={fetchLoading}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors shadow-sm"
+            >
+              {fetchLoading ? (
+                <Loader2 className="animate-spin" size={16} />
+              ) : (
+                "Refresh Data"
+              )}
+            </button>
+          </div>
         </div>
 
         {/* All Filters in One Row */}

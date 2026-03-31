@@ -5,6 +5,7 @@ import MetricCard from '../components/MetricCard';
 import LoadingSkeleton from '../components/LoadingSkeleton';
 import AgentCampaignsPanel from '../components/AgentCampaignsPanel';
 import AgentStatsPanel from '../components/AgentStatsPanel';
+import ExportButton from '../../ExportButton';
 import { toast } from 'react-toastify';
 
 export default function VicidialDashboard({ accessibleClientIds = null }) {
@@ -374,13 +375,35 @@ export default function VicidialDashboard({ accessibleClientIds = null }) {
               <p className="text-gray-600">View and manage agent assignments and campaigns</p>
             </div>
             <div className="flex gap-3">
+              <ExportButton
+                data={filteredAgents.map(agent => ({
+                  user: agent.user,
+                  name: agent.name,
+                  isActive: agent.isActive ? 'Active' : 'Inactive',
+                  campaigns: agent.campaigns,
+                  lastUpdated: new Date().toISOString().split('T')[0]
+                }))}
+                filename="vicidial_agents"
+                title="VICIdial Agents Report"
+                columns={{
+                  'user': 'Agent ID',
+                  'name': 'Agent Name',
+                  'isActive': 'Status',
+                  'campaigns': 'Campaigns',
+                  'lastUpdated': 'Last Updated'
+                }}
+                campaignType="vicidial"
+                variant="primary"
+                disabled={loading || filteredAgents.length === 0}
+              />
               <button 
                 onClick={handleExport}
                 disabled={exporting || loading}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2 shadow-sm"
+                title="Export CSV with detailed statistics"
               >
                 <Download size={18} className={exporting ? 'animate-bounce' : ''} />
-                {exporting ? 'Exporting...' : 'Export CSV'}
+                {exporting ? 'Exporting...' : 'Export Stats'}
               </button>
               <button 
                 onClick={handleSyncCampaigns} 

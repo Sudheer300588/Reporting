@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Mail, ArrowLeftCircle, ArrowRightCircle, Eye, Users, TrendingUp, Calendar } from "lucide-react";
 import axios from "axios";
+import ExportButton from "../ExportButton";
 
 
 const MauticEmailsSection = ({ campaigns, selectedCampaign, setSelectedCampaign, goBackToCampaigns }) => {
@@ -219,11 +220,37 @@ const MauticEmailsSection = ({ campaigns, selectedCampaign, setSelectedCampaign,
             </div>
 
             <div className="mb-8">
-                <div className="flex items-center gap-3 mb-2">
-                    <h1 className="text-3xl font-bold text-gray-900">{selectedCampaign?.name}</h1>
-                    {!selectedCampaign?.isPublished && (
-                        <span className="px-3 py-1 text-sm rounded-full bg-gray-200 text-gray-600">Unpublished</span>
-                    )}
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+                    <div className="flex items-center gap-3">
+                        <h1 className="text-3xl font-bold text-gray-900">{selectedCampaign?.name}</h1>
+                        {!selectedCampaign?.isPublished && (
+                            <span className="px-3 py-1 text-sm rounded-full bg-gray-200 text-gray-600">Unpublished</span>
+                        )}
+                    </div>
+                    <ExportButton
+                        data={(selectedCampaign?.emails || []).map((email) => {
+                            const stats = getEmailStats(email);
+                            return {
+                                campaign: selectedCampaign?.name || "",
+                                emailName: email.name,
+                                subject: email.subject || "",
+                                sent: stats.sent,
+                                read: stats.read,
+                                readRate: stats.readRate
+                            };
+                        })}
+                        filename="mautic_campaign_email_details"
+                        title={`${selectedCampaign?.name || "Campaign"} Email Performance`}
+                        columns={{
+                            campaign: "Campaign",
+                            emailName: "Email Name",
+                            subject: "Subject",
+                            sent: "Sent",
+                            read: "Read",
+                            readRate: "Read Rate (%)"
+                        }}
+                        campaignType="email"
+                    />
                 </div>
                 {selectedCampaign?.description && <p className="text-gray-500 mt-2">{selectedCampaign?.description}</p>}
             </div>
