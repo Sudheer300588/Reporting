@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Mail, ArrowLeft, Activity, Users, BarChart3, TrendingUp, Calendar } from "lucide-react";
 import axios from "axios";
+import ExportButton from "../ExportButton";
 
 
 const MauticCampaignsSection = ({ campaigns, selectedClient, loadingCampaigns, goBackToServices, openCampaignDetails }) => {
@@ -132,6 +133,49 @@ const MauticCampaignsSection = ({ campaigns, selectedClient, loadingCampaigns, g
         return uniqueEmailIds.size;
     };
 
+    const getCampaignSentRead = (campaign) => {
+        let campaignSent = 0;
+        let campaignRead = 0;
+
+        if (appliedFromDate || appliedToDate) {
+            campaign.emails.forEach((email) => {
+                campaignSent += reportsForEmailByFieldInRange(email.mauticEmailId, 'dateSent', email).length;
+                campaignRead += reportsForEmailByFieldInRange(email.mauticEmailId, 'dateRead', email).length;
+            });
+        } else {
+            campaignSent = campaign.emails.reduce((a, e) => a + (e.sentCount || 0), 0);
+            campaignRead = campaign.emails.reduce((a, e) => a + (e.readCount || 0), 0);
+        }
+
+        return { campaignSent, campaignRead };
+    };
+
+    const totalCampaigns = campaigns.length;
+    const totalSegments = campaigns[0]?.segments?.length || 0;
+    const totalEmails = getUniqueEmailsCount(campaigns);
+    const totalEmailsSent = getAllCampaignsEmailsSent(campaigns);
+
+    const campaignExportRows = useMemo(() => {
+        return (campaigns || []).map((campaign) => {
+            const { campaignSent, campaignRead } = getCampaignSentRead(campaign);
+            const readPercentage = campaignSent ? ((campaignRead / campaignSent) * 100).toFixed(2) : 0;
+            const campaignUniqueClicks = campaign.emails.reduce((sum, email) => sum + (email.uniqueClicks || 0), 0);
+
+            return {
+                campaignName: campaign.name,
+                emails: campaign.emails.length,
+                emailsSent: campaignSent,
+                readRate: campaign.isPublished ? `${readPercentage}%` : 'N/A',
+                uniqueClicks: campaignUniqueClicks,
+                publishedStatus: campaign.isPublished ? 'Published' : 'Unpublished',
+                totalCampaigns,
+                totalSegments,
+                totalEmails,
+                totalEmailsSent
+            };
+        });
+    }, [campaigns, appliedFromDate, appliedToDate, emailReportsIndex, totalCampaigns, totalSegments, totalEmails, totalEmailsSent]);
+
     return (
         <div className="animate-fade-in">
             <button
@@ -143,8 +187,30 @@ const MauticCampaignsSection = ({ campaigns, selectedClient, loadingCampaigns, g
             </button>
 
             <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900">Autovation Campaigns</h1>
-                <p className="text-gray-500 mt-2">Viewing campaigns for <span className="font-semibold">{selectedClient?.name}</span></p>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-900">Autovation Campaigns</h1>
+                        <p className="text-gray-500 mt-2">Viewing campaigns for <span className="font-semibold">{selectedClient?.name}</span></p>
+                    </div>
+                    <ExportButton
+                        data={campaignExportRows}
+                        filename="mautic_campaigns"
+                        title="Autovation Campaigns Report"
+                        columns={{
+                            campaignName: "Campaign Name",
+                            emails: "Emails",
+                            emailsSent: "Emails Sent",
+                            readRate: "Read Rate",
+                            uniqueClicks: "Unique Clicks",
+                            publishedStatus: "Published Status",
+                            totalCampaigns: "Overall Total Campaigns",
+                            totalSegments: "Overall Total Segments",
+                            totalEmails: "Overall Total Emails",
+                            totalEmailsSent: "Overall Total Emails Sent"
+                        }}
+                        campaignType="email"
+                    />
+                </div>
             </div>
 
             {loadingCampaigns ? (
@@ -310,19 +376,7 @@ const MauticCampaignsSection = ({ campaigns, selectedClient, loadingCampaigns, g
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-100">
                                     {campaigns.map((campaign, index) => {
-                                        // Calculate sent/read using date-filtered reports if filter is active
-                                        let campaignSent, campaignRead;
-                                        if (appliedFromDate || appliedToDate) {
-                                            campaignSent = 0;
-                                            campaignRead = 0;
-                                            campaign.emails.forEach(email => {
-                                                campaignSent += reportsForEmailByFieldInRange(email.mauticEmailId, 'dateSent', email).length;
-                                                campaignRead += reportsForEmailByFieldInRange(email.mauticEmailId, 'dateRead', email).length;
-                                            });
-                                        } else {
-                                            campaignSent = campaign.emails.reduce((a, e) => a + e.sentCount, 0);
-                                            campaignRead = campaign.emails.reduce((a, e) => a + e.readCount, 0);
-                                        }
+                                        const { campaignSent, campaignRead } = getCampaignSentRead(campaign);
                                         const readPercentage = campaignSent ? ((campaignRead / campaignSent) * 100).toFixed(2) : 0;
                                         
                                         // Calculate unique clicks for this campaign

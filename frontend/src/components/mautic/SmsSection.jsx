@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { MessageSquare, CheckCircle, XCircle } from 'lucide-react';
 import axios from 'axios';
+import ExportButton from '../ExportButton';
 
 const SmsSection = ({ clientId, refreshKey, accessibleClientIds }) => {
   const [smsCampaigns, setSmsCampaigns] = useState([]);
@@ -56,6 +57,24 @@ const SmsSection = ({ clientId, refreshKey, accessibleClientIds }) => {
 
   return (
     <div>
+      {/* Header with Export Button */}
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-lg font-semibold text-gray-900">SMS Campaigns</h2>
+        <ExportButton
+          data={smsCampaigns}
+          filename="sms_campaigns"
+          title="SMS Campaigns Report"
+          columns={{
+            'name': 'Campaign Name',
+            'category.title': 'Category',
+            'sentCount': 'Total Sent',
+            'mauticId': 'Mautic ID',
+            'createdAt': 'Created Date'
+          }}
+          campaignType="sms"
+        />
+      </div>
+
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-4">

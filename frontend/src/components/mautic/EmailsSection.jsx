@@ -8,10 +8,14 @@ import React, { useState, useEffect } from 'react';
 import { Mail, TrendingUp, Eye, MousePointerClick, UserX, Users, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { useEmails } from '../../hooks/mautic';
 import { formatNumber, formatPercentage, formatDate } from '../../utils/mautic';
+import ExportButton from '../ExportButton';
+import mauticService from '../../services/mautic/mauticService';
 
 export default function EmailsSection({ clientId, refreshKey, accessibleClientIds }) {
     const [page, setPage] = useState(1);
     const [limit] = useState(20);
+    const [allEmailsForExport, setAllEmailsForExport] = useState([]);
+    const [loadingExportData, setLoadingExportData] = useState(false);
 
     // If clientId is null or undefined, don't pass it (will fetch all clients' emails)
     const { emails, pagination, loading, error, refetch } = useEmails({
@@ -37,6 +41,57 @@ export default function EmailsSection({ clientId, refreshKey, accessibleClientId
         if (refreshKey) refetch();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [refreshKey]);
+
+    // Build full export data (all pages) so export is not limited to current table page
+    useEffect(() => {
+        let cancelled = false;
+
+        const fetchAllEmailsForExport = async () => {
+            if (!pagination) return;
+
+            try {
+                setLoadingExportData(true);
+
+                const paramsBase = {
+                    clientId: clientId || undefined,
+                    clientIds: !clientId && accessibleClientIds?.length > 0 ? accessibleClientIds : undefined
+                };
+
+                const batchLimit = 200;
+                const first = await mauticService.getEmails({ ...paramsBase, page: 1, limit: batchLimit });
+
+                if (!first.success) {
+                    if (!cancelled) setAllEmailsForExport([]);
+                    return;
+                }
+
+                const firstEmails = first.data?.emails || [];
+                const totalPages = first.data?.pagination?.totalPages || 1;
+                const aggregated = [...firstEmails];
+
+                for (let p = 2; p <= totalPages; p += 1) {
+                    const next = await mauticService.getEmails({ ...paramsBase, page: p, limit: batchLimit });
+                    if (next.success) {
+                        aggregated.push(...(next.data?.emails || []));
+                    }
+                }
+
+                if (!cancelled) {
+                    setAllEmailsForExport(aggregated);
+                }
+            } catch (e) {
+                if (!cancelled) setAllEmailsForExport([]);
+            } finally {
+                if (!cancelled) setLoadingExportData(false);
+            }
+        };
+
+        fetchAllEmailsForExport();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [clientId, accessibleClientIds, refreshKey, pagination]);
 
     if (loading) {
         return (
@@ -71,7 +126,35 @@ export default function EmailsSection({ clientId, refreshKey, accessibleClientId
                             {pagination?.total || 0} total emails
                         </p>
                     </div>
+                    <ExportButton
+                                            data={(allEmailsForExport.length > 0 ? allEmailsForExport : paginatedEmails).map(email => ({
+                        ...email,
+                        client: email.client?.name || 'Unknown',
+                        isPublished: email.isPublished ? 'Published' : 'Draft'
+                      }))}
+                      filename="emails_report"
+                      title="Emails Report"
+                      columns={{
+                        'name': 'Email Name',
+                        'subject': 'Subject',
+                        'client': 'Client',
+                        'isPublished': 'Status',
+                        'sentCount': 'Sent',
+                        'readCount': 'Opened',
+                        'readRate': 'Open Rate (%)',
+                        'clickedCount': 'Clicked',
+                        'clickRate': 'Click Rate (%)',
+                        'unsubscribed': 'Unsubscribed',
+                        'bounced': 'Bounced'
+                      }}
+                      campaignType="email"
+                    />
                 </div>
+                <p className="text-xs text-gray-500 mt-2">
+                    {loadingExportData
+                        ? 'Preparing full export data...'
+                        : `Export uses all ${pagination?.total || allEmailsForExport.length || 0} filtered records`}
+                </p>
             </div>
 
             {/* Table */}

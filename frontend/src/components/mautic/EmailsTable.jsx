@@ -7,16 +7,42 @@
 import React from 'react';
 import { Mail, TrendingUp } from 'lucide-react';
 import { formatNumber, formatPercentage, getRateColor } from '../../utils/mautic';
+import ExportButton from '../ExportButton';
 
 export default function EmailsTable({ emails }) {
+  const emailsWithClient = emails.map(email => ({
+    ...email,
+    client: email.client || 'Unknown'
+  }));
+
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
       <div className="px-6 py-4 border-b border-gray-200">
-        <div className="flex items-center gap-2">
-          <TrendingUp className="text-green-600" size={20} />
-          <h2 className="text-lg font-semibold text-gray-900">
-            Top Performing Emails
-          </h2>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="text-green-600" size={20} />
+            <h2 className="text-lg font-semibold text-gray-900">
+              Top Performing Emails
+            </h2>
+          </div>
+          <ExportButton
+            data={emailsWithClient}
+            filename="top_performing_emails"
+            title="Top Performing Emails Report"
+            columns={{
+              'name': 'Email Name',
+              'subject': 'Subject',
+              'client': 'Client',
+              'sentCount': 'Sent',
+              'readCount': 'Opened',
+              'clickedCount': 'Clicked',
+              'bounced': 'Bounced',
+              'unsubscribed': 'Unsubscribed',
+              'readRate': 'Open Rate (%)',
+              'clickRate': 'Click Rate (%)'
+            }}
+            campaignType="email"
+          />
         </div>
       </div>
       

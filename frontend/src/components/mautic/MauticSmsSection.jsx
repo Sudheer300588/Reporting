@@ -1,12 +1,14 @@
 import { useState, useEffect } from "react";
 import { MessageSquare, ArrowLeft, Activity, TrendingUp, CheckCircle, XCircle, MessageCircle } from "lucide-react";
 import axios from "axios";
+import ExportButton from "../ExportButton";
 
 const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients }) => {
     const [view, setView] = useState('list'); // 'list', 'messages', or 'activity'
     const [smsCampaigns, setSmsCampaigns] = useState([]);
     const [selectedCampaign, setSelectedCampaign] = useState(null);
     const [messages, setMessages] = useState([]);
+    const [allMessagesForExport, setAllMessagesForExport] = useState([]);
     const [selectedLead, setSelectedLead] = useState(null);
     const [leadActivity, setLeadActivity] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
@@ -20,6 +22,7 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
     const [overallFailed, setOverallFailed] = useState(0);
     const [overallReplied, setOverallReplied] = useState(0);
     const [replyFilter, setReplyFilter] = useState('all'); // 'all', 'Stop', 'Unsubscribe', 'Other'
+    const [loadingExportData, setLoadingExportData] = useState(false);
 
     // For SMS-only clients, back button should go to clients list
     const isSmsOnlyClient = selectedClient?.reportId === 'sms-only';
@@ -27,6 +30,43 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
     const backButtonText = isSmsOnlyClient ? 'Back to Clients' : `Back to ${selectedClient?.name} Services`;
 
     const baseUrl = import.meta.env.VITE_API_URL || '';
+
+    const fetchAllMessagesForExport = async (campaign, filter = 'all') => {
+        if (!campaign?.id) return;
+
+        try {
+            setLoadingExportData(true);
+            const limit = 500;
+            let page = 1;
+            let totalPageCount = 1;
+            const aggregated = [];
+
+            do {
+                const response = await axios.get(
+                    `${baseUrl}/api/sms-campaigns/${campaign.id}/stats`,
+                    {
+                        params: {
+                            page,
+                            limit,
+                            replyFilter: filter !== 'all' ? filter : undefined
+                        }
+                    }
+                );
+
+                const batch = response.data?.data?.messages || [];
+                aggregated.push(...batch);
+                totalPageCount = response.data?.pagination?.totalPages || 1;
+                page += 1;
+            } while (page <= totalPageCount);
+
+            setAllMessagesForExport(aggregated);
+        } catch (err) {
+            console.error('Error fetching all messages for export:', err);
+            setAllMessagesForExport([]);
+        } finally {
+            setLoadingExportData(false);
+        }
+    };
 
     // Fetch SMS campaigns for the selected client
     useEffect(() => {
@@ -93,6 +133,16 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
             setTotalPages(response.data.pagination?.totalPages || 1);
             setError(null);
             setView('messages');
+
+            const shouldRefreshFullExport =
+                !selectedCampaign ||
+                selectedCampaign.id !== campaign.id ||
+                replyFilter !== filter ||
+                allMessagesForExport.length === 0;
+
+            if (shouldRefreshFullExport) {
+                fetchAllMessagesForExport(campaign, filter);
+            }
         } catch (error) {
             console.error('Error fetching messages:', error);
             setError('Failed to fetch messages');
@@ -155,6 +205,7 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
         setView('list');
         setSelectedCampaign(null);
         setMessages([]);
+        setAllMessagesForExport([]);
         setCurrentPage(1);
         setPageInput('1');
         setError(null);
@@ -259,10 +310,34 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                 {/* SMS Campaigns Table */}
                 <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
                     <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-                        <h3 className="text-lg font-semibold text-gray-900">SMS Campaigns</h3>
-                        <p className="text-sm text-gray-500 mt-1">
-                            Showing all {smsCampaigns.length} campaigns
-                        </p>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                                <h3 className="text-lg font-semibold text-gray-900">SMS Campaigns</h3>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    Showing all {smsCampaigns.length} campaigns
+                                </p>
+                            </div>
+                            <ExportButton
+                                data={smsCampaigns.map((sms) => ({
+                                    campaignName: sms.name,
+                                    category: sms.category?.title || "SMS",
+                                    sentCount: sms.sentCount || 0,
+                                    status: (sms.sentCount || 0) > 0 ? "Active" : "Not Sent",
+                                    mauticId: sms.mauticId || ""
+                                }))}
+                                filename="client_sms_campaigns"
+                                title="Client SMS Campaigns"
+                                columns={{
+                                    campaignName: "Campaign Name",
+                                    category: "Category",
+                                    sentCount: "Sent",
+                                    status: "Status",
+                                    mauticId: "Mautic ID"
+                                }}
+                                campaignType="sms"
+                                variant="secondary"
+                            />
+                        </div>
                     </div>
 
                     {smsCampaigns.length === 0 ? (
@@ -355,7 +430,36 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                 <h2 className="text-2xl font-bold text-gray-900 mb-1">
                     {selectedCampaign.name}
                 </h2>
-                <p className="text-sm text-gray-600 mb-6">Messages for SMS ID #{selectedCampaign.mauticId}</p>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
+                    <p className="text-sm text-gray-600">Messages for SMS ID #{selectedCampaign.mauticId}</p>
+                    <div className="flex flex-col items-end gap-1">
+                        <ExportButton
+                        data={(allMessagesForExport.length > 0 ? allMessagesForExport : messages).map((msg) => ({
+                            leadId: msg.leadId,
+                            mobile: msg.mobile || "",
+                            replyText: msg.replyText || "",
+                            replyCategory: msg.replyCategory || "",
+                            repliedAt: msg.repliedAt || ""
+                        }))}
+                        filename="client_sms_messages"
+                        title={`${selectedCampaign.name} Messages`}
+                        columns={{
+                            leadId: "Lead ID",
+                            mobile: "Mobile",
+                            replyText: "Reply Text",
+                            replyCategory: "Reply Category",
+                            repliedAt: "Reply Date"
+                        }}
+                        campaignType="sms"
+                        variant="secondary"
+                    />
+                        <span className="text-xs text-gray-500">
+                            {loadingExportData
+                                ? 'Preparing full export data...'
+                                : `Export uses all ${totalRecords || 0} filtered records`}
+                        </span>
+                    </div>
+                </div>
 
                 {/* Metric Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
