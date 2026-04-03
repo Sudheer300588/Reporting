@@ -1105,7 +1105,7 @@ router.get(
 // ============================================
 router.post("/:id/assign", authenticate, canManageClients, async (req, res) => {
   try {
-    const clientId = parseInt(req.params.id);
+    const mauticClientId = parseInt(req.params.id);
     const { userId } = req.body;
     const currentUser = req.user;
     const assignedById = currentUser.id;
@@ -1114,13 +1114,21 @@ router.post("/:id/assign", authenticate, canManageClients, async (req, res) => {
       return res.status(400).json({ message: "User ID is required" });
     }
 
-    const client = await prisma.mauticClient.findUnique({
-      where: { id: clientId },
+    const mauticClient = await prisma.mauticClient.findUnique({
+      where: { id: mauticClientId },
     });
 
-    if (!client) {
+    if (!mauticClient) {
       return res.status(404).json({ message: "Client not found" });
     }
+
+    // ClientAssignment.clientId references Client.id, not MauticClient.id
+    if (!mauticClient.clientId) {
+      return res.status(400).json({ message: "Client has no linked Client record for assignment" });
+    }
+
+    const clientId = mauticClient.clientId;
+    const client = mauticClient;
 
     const targetUser = await prisma.user.findUnique({
       where: { id: userId },
@@ -1250,10 +1258,23 @@ router.delete(
   canManageClients,
   async (req, res) => {
     try {
-      const clientId = parseInt(req.params.id);
+      const mauticClientId = parseInt(req.params.id);
       const userId = parseInt(req.params.userId);
       const currentUser = req.user;
       const requesterId = currentUser.id;
+
+      // Resolve MauticClient.id → Client.id for the FK lookup
+      // The frontend may pass either MauticClient.id (from unified endpoint) or Client.id (from employee clients list)
+      const mauticClient = await prisma.mauticClient.findUnique({
+        where: { id: mauticClientId },
+        select: { clientId: true },
+      });
+
+      // If found as a MauticClient with a linked Client, use that Client.id
+      // Otherwise treat the param as a direct Client.id (e.g. from EmployeeClients view)
+      const clientId = (mauticClient && mauticClient.clientId != null)
+        ? mauticClient.clientId
+        : mauticClientId;
 
       const assignment = await prisma.clientAssignment.findUnique({
         where: {

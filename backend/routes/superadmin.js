@@ -1125,7 +1125,7 @@ router.post('/clients', async (req, res) => {
  */
 router.post('/clients/:id/assign', async (req, res) => {
   try {
-    const { id } = req.params;
+    const mauticClientId = parseInt(req.params.id);
     const { userIds } = req.body;
 
     if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
@@ -1135,17 +1135,33 @@ router.post('/clients/:id/assign', async (req, res) => {
       });
     }
 
+    // Resolve MauticClient.id → Client.id (ClientAssignment.clientId is a FK to Client)
+    const mauticClient = await prisma.mauticClient.findUnique({
+      where: { id: mauticClientId },
+      select: { id: true, name: true, clientId: true }
+    });
+
+    if (!mauticClient) {
+      return res.status(404).json({ success: false, message: 'Client not found' });
+    }
+
+    if (!mauticClient.clientId) {
+      return res.status(400).json({ success: false, message: 'Client has no linked Client record for assignment' });
+    }
+
+    const clientId = mauticClient.clientId;
+
     const assignments = await Promise.all(
       userIds.map(userId =>
         prisma.clientAssignment.upsert({
           where: {
             clientId_userId: {
-              clientId: parseInt(id),
+              clientId,
               userId: parseInt(userId)
             }
           },
           create: {
-            clientId: parseInt(id),
+            clientId,
             userId: parseInt(userId),
             assignedById: req.user.id
           },
@@ -1166,21 +1182,14 @@ router.post('/clients/:id/assign', async (req, res) => {
         action: 'client_assigned',
         description: `Assigned ${userIds.length} users to client`,
         entityType: 'Client',
-        entityId: parseInt(id)
+        entityId: clientId
       }
     });
 
     // Send email notifications to each assigned user
-    const client = await prisma.mauticClient.findUnique({
-      where: { id: parseInt(id) },
-      select: { id: true, name: true }
-    });
-    
-    if (client) {
-      for (const assignment of assignments) {
-        notifyClientAssigned(client, assignment.user, req.user)
-          .catch(err => logger.error(`Failed to send assignment email to ${assignment.user.email}:`, err));
-      }
+    for (const assignment of assignments) {
+      notifyClientAssigned(mauticClient, assignment.user, req.user)
+        .catch(err => logger.error(`Failed to send assignment email to ${assignment.user.email}:`, err));
     }
 
     res.json({
@@ -1204,7 +1213,7 @@ router.post('/clients/:id/assign', async (req, res) => {
  */
 router.delete('/clients/:id/unassign', async (req, res) => {
   try {
-    const { id } = req.params;
+    const mauticClientId = parseInt(req.params.id);
     const { userIds } = req.body;
 
     if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
@@ -1214,21 +1223,27 @@ router.delete('/clients/:id/unassign', async (req, res) => {
       });
     }
 
-    // Get client and user details before deletion for email notification
-    const client = await prisma.client.findUnique({
-      where: { id: parseInt(id) },
-      select: { id: true, name: true }
+    // Resolve MauticClient.id → Client.id
+    const mauticClient = await prisma.mauticClient.findUnique({
+      where: { id: mauticClientId },
+      select: { id: true, name: true, clientId: true }
     });
-    
+
+    if (!mauticClient || !mauticClient.clientId) {
+      return res.status(404).json({ success: false, message: 'Client not found or has no linked Client record' });
+    }
+
+    const clientId = mauticClient.clientId;
+
     const users = await prisma.user.findMany({
-      where: { id: { in: userIds.map(id => parseInt(id)) } },
+      where: { id: { in: userIds.map(uid => parseInt(uid)) } },
       select: { id: true, name: true, email: true }
     });
 
     await prisma.clientAssignment.deleteMany({
       where: {
-        clientId: parseInt(id),
-        userId: { in: userIds.map(id => parseInt(id)) }
+        clientId,
+        userId: { in: userIds.map(uid => parseInt(uid)) }
       }
     });
 
@@ -1239,16 +1254,14 @@ router.delete('/clients/:id/unassign', async (req, res) => {
         action: 'client_unassigned',
         description: `Unassigned ${userIds.length} users from client`,
         entityType: 'Client',
-        entityId: parseInt(id)
+        entityId: clientId
       }
     });
 
     // Send email notifications to each unassigned user
-    if (client) {
-      for (const user of users) {
-        notifyClientUnassigned(client, user, req.user)
-          .catch(err => logger.error(`Failed to send unassignment email to ${user.email}:`, err));
-      }
+    for (const user of users) {
+      notifyClientUnassigned(mauticClient, user, req.user)
+        .catch(err => logger.error(`Failed to send unassignment email to ${user.email}:`, err));
     }
 
     res.json({
