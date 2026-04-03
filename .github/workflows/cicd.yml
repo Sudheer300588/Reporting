@@ -7,12 +7,13 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Deploy via SSH (Password)
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -29,53 +30,55 @@ jobs:
             git fetch origin
             git reset --hard origin/main
 
-            # 🔥 LOAD NVM FIRST
+            # =========================
+            # LOAD NVM
+            # =========================
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
             # =========================
             # BACKEND (Node 18)
             # =========================
-            echo "📦 Installing backend dependencies"
             cd backend
-            nvm use 18
+            nvm use 18 || nvm install 18
             npm ci
-
-            echo "⚙️ Generating Prisma client"
             npx prisma generate
 
             # =========================
             # FRONTEND (Node 20)
             # =========================
-            echo "🏗 Building frontend"
             cd ../frontend
-            nvm use 20
+            nvm use 20 || nvm install 20
             npm ci
             npm run build
 
             # =========================
             # MOVE BUILD
             # =========================
-            echo "🧹 Removing old backend dist"
             rm -rf ../backend/dist
-
-            echo "📦 Moving new dist to backend"
             mv dist ../backend/dist
 
             # =========================
             # RESTART BACKEND
             # =========================
-            echo "🚀 Restarting backend"
             cd ../backend
-
             nvm use 18
 
-            # ensure pm2 path works
-            export PATH=$PATH:$HOME/.nvm/versions/node/v18.20.8/bin
+            # ensure pm2 installed
+            command -v pm2 >/dev/null 2>&1 || npm install -g pm2
 
-            pm2 reload ecosystem.config.cjs || $HOME/.nvm/versions/node/v18.20.8/bin/pm2 reload ecosystem.config.cjs
+            # ensure pm2 path
+            export PATH=$PATH:$(npm bin -g)
 
-            echo "💾 Saving PM2 state"
-            pm2 save || $HOME/.nvm/versions/node/v18.20.8/bin/pm2 save
+            # safe restart
+            if pm2 describe hc-development > /dev/null; then
+              echo "🔄 Reloading app"
+              pm2 reload ecosystem.config.cjs
+            else
+              echo "🆕 Starting app"
+              pm2 start ecosystem.config.cjs
+            fi
 
-            echo "🎉 Deployment completed successfully"
+            pm2 save
+
+            echo "✅ Deployment completed"
