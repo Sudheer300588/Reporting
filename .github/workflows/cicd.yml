@@ -29,38 +29,53 @@ jobs:
             git fetch origin
             git reset --hard origin/main
 
+            # 🔥 LOAD NVM FIRST
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+            # =========================
+            # BACKEND (Node 18)
+            # =========================
             echo "📦 Installing backend dependencies"
             cd backend
+            nvm use 18
             npm ci
 
             echo "⚙️ Generating Prisma client"
             npx prisma generate
 
+            # =========================
+            # FRONTEND (Node 20)
+            # =========================
             echo "🏗 Building frontend"
             cd ../frontend
+            nvm use 20
             npm ci
             npm run build
 
+            # =========================
+            # MOVE BUILD
+            # =========================
             echo "🧹 Removing old backend dist"
             rm -rf ../backend/dist
 
             echo "📦 Moving new dist to backend"
             mv dist ../backend/dist
 
+            # =========================
+            # RESTART BACKEND
+            # =========================
             echo "🚀 Restarting backend"
             cd ../backend
 
-            # 🔥 Load NVM
-            export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-
-            # ✅ Use stable Node
             nvm use 18
 
-            # ✅ Restart using ecosystem (NO duplicate processes)
-            pm2 reload ecosystem.config.cjs
+            # ensure pm2 path works
+            export PATH=$PATH:$HOME/.nvm/versions/node/v18.20.8/bin
+
+            pm2 reload ecosystem.config.cjs || $HOME/.nvm/versions/node/v18.20.8/bin/pm2 reload ecosystem.config.cjs
 
             echo "💾 Saving PM2 state"
-            pm2 save
+            pm2 save || $HOME/.nvm/versions/node/v18.20.8/bin/pm2 save
 
             echo "🎉 Deployment completed successfully"
