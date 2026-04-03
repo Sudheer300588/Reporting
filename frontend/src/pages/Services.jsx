@@ -14,11 +14,11 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { DropCowboyDashboard } from '../components/dropCowboy';
 import { MauticDashboard } from '../components/mautic';
-import VicidialDashboard from '../components/vicidial/pages/VicidialDashboard';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../utils/permissions';
 import SmsSection from '../components/mautic/SmsSection';
 import clientService from '../services/clientService';
+import AICallingDashboard from '../components/aicalling/AICallingDashboard';
 
 
 export default function Services() {
@@ -141,16 +141,16 @@ export default function Services() {
                                 <span>Email Marketing</span>
                             </button>
                             <button
-                                onClick={() => setSelectedService('vicidial')}
+                                onClick={() => setSelectedService('aicalling')}
                                 className={`
                   flex items-center gap-2 px-4 py-4 border-b-2 font-medium text-sm transition-colors
-                  ${selectedService === 'vicidial'
+                  ${selectedService === 'aicalling'
                                         ? 'border-blue-500 text-blue-600'
                                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                     }
                 `}
                             >
-                                <span>Telecalling</span>
+                                <span>AI Calling</span>
                             </button>
                             <button
                                 onClick={() => setSelectedService('sms')}
@@ -177,8 +177,8 @@ export default function Services() {
                 {selectedService === 'mautic' && (
                     <MauticDashboard key="mautic" accessibleClientIds={accessibleClientIds} />
                 )}
-                {selectedService === 'vicidial' && (
-                    <VicidialDashboard key="vicidial" accessibleClientIds={accessibleClientIds} />
+                {selectedService === 'aicalling' && (
+                    <AICallingDashboard key="aicalling" accessibleClientIds={accessibleClientIds} />
                 )}
                 {selectedService === 'sms' && (
                     <SmsSection key="sms" accessibleClientIds={accessibleClientIds} />

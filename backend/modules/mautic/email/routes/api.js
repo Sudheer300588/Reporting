@@ -248,13 +248,13 @@ router.get("/clients/:clientId/campaigns", async (req, res) => {
 router.get("/clients/:clientId/sms", async (req, res) => {
   try {
     const { clientId } = req.params;
-    
+
     // Get the Mautic client so we can match by origin URL as well.
     const mauticClient = await prisma.mauticClient.findUnique({
       where: { id: parseInt(clientId) },
       include: { client: true }
     });
-    
+
     if (!mauticClient) {
       return res.json({ success: true, data: [] });
     }
@@ -263,7 +263,7 @@ router.get("/clients/:clientId/sms", async (req, res) => {
       where: { clientId: mauticClient.id },
       orderBy: { sentCount: 'desc' }
     });
-    
+
     res.json({ success: true, data: smsCampaigns });
   } catch (error) {
     logger.error(error);
@@ -286,7 +286,17 @@ router.get("/clients/sms/overall-stats", async (req, res) => {
     // - Unmatched (stored under sms-only or clientId NULL)
     // - Sourced via SmsClient credentials
     // Filtering causes totals to swing (e.g., 58 → 55 → 9) depending on mappings.
+
+    // find existing mautic clients first
+    const mauticClients = await prisma.mauticClient.findMany({
+      where: { reportId: { not: 'sms-only' } },
+      select: { id: true }
+    });
+
+    const mauticClientsIds = mauticClients.map(mc => mc.id);
+
     const smsCampaigns = await prisma.mauticSms.findMany({
+      where: { clientId: { in: mauticClientsIds } },
       orderBy: { sentCount: 'desc' }
     });
 
@@ -298,9 +308,9 @@ router.get("/clients/sms/overall-stats", async (req, res) => {
     };
 
     logger.debug(`✅ Overall SMS stats: ${stats.totalCampaigns} campaigns, ${stats.totalSent} sent, ${stats.activeCampaigns} active`);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       stats,
       data: smsCampaigns
     });
@@ -318,13 +328,13 @@ router.get("/clients/sms/overall-stats", async (req, res) => {
 router.post("/clients/sms/bulk", async (req, res) => {
   try {
     const { clientIds } = req.body;
-    
+
     if (!clientIds || !Array.isArray(clientIds) || clientIds.length === 0) {
       return res.json({ success: true, data: [] });
     }
-    
+
     const validClientIds = clientIds.map(id => parseInt(id)).filter(id => !isNaN(id));
-    
+
     // Get all Mautic clients so we can match by clientId and origin URL
     const mauticClients = await prisma.mauticClient.findMany({
       where: { id: { in: validClientIds } },
@@ -335,15 +345,15 @@ router.post("/clients/sms/bulk", async (req, res) => {
     // originMauticUrl is a Mautic instance identifier shared by multiple clients,
     // so using it here can leak campaigns across clients.
     const orConditions = [{ clientId: { in: validClientIds } }];
-    
+
     // Single query to get all SMS campaigns matching any condition
     const smsCampaigns = await prisma.mauticSms.findMany({
-      where: { 
+      where: {
         OR: orConditions
       },
       orderBy: { sentCount: 'desc' }
     });
-    
+
     logger.debug(`✅ Bulk SMS fetch: ${smsCampaigns.length} campaigns for ${clientIds.length} clients`);
     res.json({ success: true, data: smsCampaigns });
   } catch (error) {

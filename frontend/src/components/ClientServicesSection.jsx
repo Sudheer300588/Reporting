@@ -3,6 +3,7 @@ import { Mail, PhoneOff, MessageSquare, ArrowLeft } from "lucide-react";
 import MauticServiceStats from "./mautic/MauticServiceStats";
 import EmailPerformanceWidget from "./widgets/EmailPerformanceWidget";
 import VoicemailPerformanceWidget from "./widgets/VoicemailPerformanceWidget";
+import SmsPerformanceWidget from "./widgets/SmsPerformanceWidget";
 import useViewLevel from "../zustand/useViewLevel";
 
 const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCampaigns, openDropcowboyCampaigns, openSmsCampaigns }) => {
@@ -77,6 +78,23 @@ const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCamp
                                 </button>
                                 : <></>
                             }
+
+                            {selectedClient.services.includes('sms') ?
+                                <button
+                                    onClick={() => setSelectedService('sms')}
+                                    className={`
+                  flex items-center gap-2 px-4 py-4 border-b-2 font-medium text-sm transition-colors
+                  ${selectedService === 'sms'
+                                            ? 'border-blue-500 text-blue-600'
+                                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        }
+                `}
+                                >
+                                    <span className="text-lg"></span>
+                                    <span>SMS</span>
+                                </button>
+                                : <></>
+                            }
                         </nav>
                     </div>
                 </div>
@@ -98,6 +116,12 @@ const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCamp
                 ) : selectedService === 'dropcowboy' ? (
                     <VoicemailPerformanceWidget
                         key={`voicemail-${selectedClient.name}`}
+                        clientName={selectedClient.name}
+                    />
+                ) : selectedService === 'sms' && selectedClient.mauticApiId ? (
+                    <SmsPerformanceWidget
+                        key={`sms-${selectedClient.mauticApiId}`}
+                        clientId={selectedClient.mauticApiId}
                         clientName={selectedClient.name}
                     />
                 ) : null}

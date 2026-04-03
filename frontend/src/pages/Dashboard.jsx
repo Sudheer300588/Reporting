@@ -5,7 +5,7 @@ import { toast } from 'react-toastify'
 import { 
   Users, FolderOpen, Activity, Mail, Phone, TrendingUp, TrendingDown,
   AlertTriangle, CheckCircle, Clock, RefreshCw, BarChart3, Zap,
-  ArrowRight, Loader2, XCircle
+  ArrowRight, Loader2, XCircle, MessageSquare
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { 
@@ -30,6 +30,7 @@ const Dashboard = () => {
   })
   const [emailMetrics, setEmailMetrics] = useState(null)
   const [voicemailMetrics, setVoicemailMetrics] = useState(null)
+  const [smsMetrics, setSmsMetrics] = useState(null)
   const [syncStatus, setSyncStatus] = useState({ mautic: null, dropCowboy: null, sms: null })
   const [insights, setInsights] = useState([])
   const [isSyncing, setIsSyncing] = useState(false)
@@ -45,7 +46,7 @@ const Dashboard = () => {
       const response = await axios.get('/api/dashboard/overview')
       
       if (response.data?.success && response.data?.data) {
-        const { stats, emailMetrics, voicemailMetrics, syncStatus: syncData } = response.data.data
+        const { stats, emailMetrics, voicemailMetrics, smsMetrics, syncStatus: syncData } = response.data.data
         
         // Update all state at once
         setStats(stats || {
@@ -59,6 +60,7 @@ const Dashboard = () => {
         
         setEmailMetrics(emailMetrics || null)
         setVoicemailMetrics(voicemailMetrics || null)
+        setSmsMetrics(smsMetrics || null)
         
         setSyncStatus({
           mautic: { data: syncData?.mautic || null },
@@ -499,6 +501,63 @@ const Dashboard = () => {
           </div>
         )}
       </div>
+
+      {/* SMS Performance Card */}
+      {smsMetrics && smsMetrics.totalCampaigns > 0 && (
+        <div className="card mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <MessageSquare className="text-purple-600" size={20} />
+              SMS Performance
+            </h2>
+            <button
+              onClick={() => {
+                localStorage.setItem('selectedService', 'sms');
+                navigate('/services');
+              }}
+              className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1"
+            >
+              View All <ArrowRight size={14} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <MetricBox label="Total Sent" value={formatNumber(smsMetrics.totalSent)} icon={MessageSquare} />
+            <MetricBox label="Active Campaigns" value={formatNumber(smsMetrics.activeCampaigns)} icon={Zap} color="purple" />
+            <MetricBox label="Delivered" value={formatNumber(smsMetrics.delivered)} icon={CheckCircle} color="green" />
+            <MetricBox label="Failed" value={formatNumber(smsMetrics.failed)} icon={AlertTriangle} color="red" />
+          </div>
+
+          {(smsMetrics.delivered > 0 || smsMetrics.failed > 0) && (() => {
+            const smsPieData = [
+              smsMetrics.delivered > 0 && { name: 'Delivered', value: smsMetrics.delivered, color: '#10B981' },
+              smsMetrics.failed > 0 && { name: 'Failed', value: smsMetrics.failed, color: '#EF4444' }
+            ].filter(Boolean)
+            return (
+              <div className="h-40 min-h-[180px] flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={smsPieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={60}
+                      dataKey="value"
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {smsPieData.map((entry, index) => (
+                        <Cell key={`sms-cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )
+          })()}
+        </div>
+      )}
 
       {hasFullAccess() && (
         <div className="card">
