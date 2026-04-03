@@ -12,14 +12,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Deploy via SSH
+      - name: Deploy via SSH (Password)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: 22
           script: |
-            set -e  # 🚨 stop if any command fails
+            set -e
 
             echo "➡ Moving to project folder"
             cd ~/htdocs/hcdteam.com/Reporting
@@ -45,7 +46,7 @@ jobs:
 
             echo "🚀 Restarting backend"
             cd ../backend
-            pm2 restart all || pm2 start index.js --name reporting-app
+            pm2 restart reporting-app || pm2 start index.js --name reporting-app
 
             echo "💾 Saving PM2 state"
             pm2 save
