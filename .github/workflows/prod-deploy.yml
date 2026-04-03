@@ -1,0 +1,83 @@
+name: Deploy to VPS (Production - Reporting App)
+
+on:
+  workflow_dispatch:   # manual trigger only
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Deploy to Production via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          password: ${{ secrets.PROD_PASSWORD }}
+          port: 22
+          script: |
+            set -e
+
+            echo "➡ Moving to production folder"
+            cd ~/htdocs/hcdteam.com/Reporting
+
+            echo "⬇ Pull latest code"
+            git fetch origin
+            git reset --hard origin/main
+
+            # =========================
+            # LOAD NVM
+            # =========================
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+            # =========================
+            # BACKEND (Node 18)
+            # =========================
+            cd backend
+            nvm use 18 || nvm install 18
+            npm ci
+            npx prisma generate
+
+            # =========================
+            # FRONTEND (Node 20)
+            # =========================
+            cd ../frontend
+            nvm use 20 || nvm install 20
+            npm ci
+            npm run build
+
+            # =========================
+            # MOVE BUILD
+            # =========================
+            rm -rf ../backend/dist
+            mv dist ../backend/dist
+
+            # =========================
+            # RESTART BACKEND
+            # =========================
+            cd ../backend
+            nvm use 18
+
+            # ensure pm2 installed
+            command -v pm2 >/dev/null 2>&1 || npm install -g pm2
+
+            # ensure pm2 path
+            export PATH=$PATH:$(npm bin -g)
+
+            # safe restart (same as your dev)
+            if pm2 describe hc-development > /dev/null; then
+              echo "🔄 Reloading app"
+              pm2 reload ecosystem.config.cjs
+            else
+              echo "🆕 Starting app"
+              pm2 start ecosystem.config.cjs
+            fi
+
+            pm2 save
+
+            echo "🚀 Production Deployment Completed"
