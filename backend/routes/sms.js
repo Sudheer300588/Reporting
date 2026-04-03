@@ -2,6 +2,7 @@ import express from 'express';
 import prisma from '../prisma/client.js';
 import smsClientSyncService from '../modules/mautic/sms/services/smsClientSyncService.js';
 import logger from '../utils/logger.js';
+import { authenticate, canViewClients, hasFullAccess, getAccessibleClientIds } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -451,6 +452,74 @@ router.get('/sms-campaigns/:campaignId/lead/:leadId/activity', async (req, res) 
       message: 'Failed to fetch lead activity',
       error: error.message
     });
+  }
+});
+
+/**
+ * GET /api/sms/clients/:clientId/stats
+ * Get aggregated SMS stats (sent, delivered, failed) for a MauticClient
+ * Role-based: users can only access clients they have permission to view
+ */
+router.get('/sms/clients/:clientId/stats', authenticate, canViewClients, async (req, res) => {
+  try {
+    const clientId = parseInt(req.params.clientId);
+
+    // Resolve MauticClient
+    let mauticClient = await prisma.mauticClient.findUnique({
+      where: { id: clientId },
+      select: { id: true, clientId: true }
+    });
+
+    if (!mauticClient) {
+      const client = await prisma.client.findUnique({
+        where: { id: clientId },
+        include: { mauticClient: { select: { id: true, clientId: true } } }
+      });
+      mauticClient = client?.mauticClient || null;
+    }
+
+    if (!mauticClient) {
+      return res.json({ success: true, data: { totalSent: 0, delivered: 0, failed: 0, activeCampaigns: 0, totalCampaigns: 0 } });
+    }
+
+    // Role-based access: non-full-access users can only view their assigned clients
+    if (!hasFullAccess(req.user)) {
+      const accessibleClientIds = await getAccessibleClientIds(req.user.id, req.user);
+      const linkedClientId = mauticClient.clientId;
+      if (!linkedClientId || !accessibleClientIds.includes(linkedClientId)) {
+        return res.status(403).json({ success: false, message: 'Access denied to this client' });
+      }
+    }
+
+    const campaigns = await prisma.mauticSms.findMany({
+      where: { clientId: mauticClient.id },
+      select: { id: true, sentCount: true }
+    });
+
+    const campaignIds = campaigns.map(c => c.id);
+    const activeCampaigns = campaigns.filter(c => c.sentCount > 0).length;
+
+    const [totalSent, delivered, failed] = campaignIds.length > 0
+      ? await Promise.all([
+          prisma.mauticSmsStat.count({ where: { smsId: { in: campaignIds } } }),
+          prisma.mauticSmsStat.count({ where: { smsId: { in: campaignIds }, isFailed: '0' } }),
+          prisma.mauticSmsStat.count({ where: { smsId: { in: campaignIds }, isFailed: '1' } })
+        ])
+      : [0, 0, 0];
+
+    res.json({
+      success: true,
+      data: {
+        totalCampaigns: campaigns.length,
+        activeCampaigns,
+        totalSent,
+        delivered,
+        failed
+      }
+    });
+  } catch (error) {
+    logger.error('Failed to fetch SMS client stats:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch SMS stats', error: error.message });
   }
 });
 

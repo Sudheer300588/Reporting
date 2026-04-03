@@ -30,12 +30,14 @@ class DashboardService {
         clientStats,
         emailMetrics,
         voicemailMetrics,
+        smsMetrics,
         syncStatus
       ] = await Promise.all([
         this._getUserStats(user),
         this._getClientStats(user),
         this._getEmailMetrics(user),
         this._getVoicemailMetrics(user),
+        this._getSmsMetrics(user),
         this._getSyncStatus()
       ]);
 
@@ -55,6 +57,7 @@ class DashboardService {
           },
           emailMetrics,
           voicemailMetrics,
+          smsMetrics,
           syncStatus,
           fetchedAt: new Date().toISOString(),
           performanceMs: duration
@@ -196,24 +199,24 @@ class DashboardService {
       if (hasFullAccess(currentUser)) {
         // Full access users see all Mautic clients (excluding SMS-only)
         [activeClients, inactiveClients] = await Promise.all([
-          prisma.mauticClient.count({ 
-            where: { 
+          prisma.mauticClient.count({
+            where: {
               isActive: true,
               reportId: { not: 'sms-only' }
-            } 
+            }
           }),
-          prisma.mauticClient.count({ 
-            where: { 
+          prisma.mauticClient.count({
+            where: {
               isActive: false,
               reportId: { not: 'sms-only' }
-            } 
+            }
           })
         ]);
       } else {
         // Limited users see only clients they have access to
         // Get accessible Client.ids first
         const accessibleClientIds = await getAccessibleClientIds(currentUser.id, currentUser);
-        
+
         // Find MauticClients linked to these Client.ids OR get all if user has broad access
         const mauticClientsWhere = {
           reportId: { not: 'sms-only' },
@@ -775,6 +778,70 @@ class DashboardService {
     }
   }
 
+  /**
+   * Get SMS performance metrics
+   * Filtered by user's accessible clients
+   */
+  async _getSmsMetrics(currentUser) {
+    try {
+      let where = {};
+
+      if (!hasFullAccess(currentUser)) {
+        const accessibleClientIds = await getAccessibleClientIds(currentUser.id, currentUser);
+
+        const mauticClients = await prisma.mauticClient.findMany({
+          where: { clientId: { in: accessibleClientIds }, isActive: true },
+          select: { id: true }
+        });
+        const mauticClientIds = mauticClients.map(c => c.id);
+
+        if (mauticClientIds.length === 0) return this._getEmptySmsMetrics();
+        where = { clientId: { in: mauticClientIds } };
+      } else {
+        // find existing mautic clients first
+        const mauticClients = await prisma.mauticClient.findMany({
+          where: { reportId: { not: 'sms-only' } },
+          select: { id: true }
+        });
+
+        const mauticClientsIds = mauticClients.map(mc => mc.id);
+
+        where = { clientId: { in: mauticClientsIds } };
+      }
+
+      const campaigns = await prisma.mauticSms.findMany({
+        where,
+        select: { id: true, sentCount: true },
+        orderBy: { sentCount: 'desc' }
+      });
+
+      const totalCampaigns = campaigns.length;
+      const activeCampaigns = campaigns.filter(s => s.sentCount > 0).length;
+      const campaignIds = campaigns.map(c => c.id);
+
+      // Use MauticSmsStat counts for consistency with the per-client widget
+      // totalSent = all stat records, delivered = isFailed:'0', failed = isFailed:'1'
+      const [totalSent, delivered, failed] = campaignIds.length > 0
+        ? await Promise.all([
+          prisma.mauticSmsStat.count({ where: { smsId: { in: campaignIds } } }),
+          prisma.mauticSmsStat.count({ where: { smsId: { in: campaignIds }, isFailed: '0' } }),
+          prisma.mauticSmsStat.count({ where: { smsId: { in: campaignIds }, isFailed: '1' } })
+        ])
+        : [0, 0, 0];
+
+      return {
+        totalCampaigns,
+        totalSent,
+        activeCampaigns,
+        delivered,
+        failed
+      };
+    } catch (error) {
+      logger.error('[Dashboard] Error fetching SMS metrics:', error);
+      return this._getEmptySmsMetrics();
+    }
+  }
+
   // Helper method for empty email metrics
   _getEmptyEmailMetrics() {
     return {
@@ -808,6 +875,17 @@ class DashboardService {
       },
       campaigns: [],
       lastUpdated: null
+    };
+  }
+
+  // Helper method for empty SMS metrics
+  _getEmptySmsMetrics() {
+    return {
+      totalCampaigns: 0,
+      totalSent: 0,
+      activeCampaigns: 0,
+      delivered: 0,
+      failed: 0
     };
   }
 }
