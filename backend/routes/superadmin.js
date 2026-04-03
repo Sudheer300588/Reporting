@@ -1171,7 +1171,7 @@ router.post('/clients/:id/assign', async (req, res) => {
     });
 
     // Send email notifications to each assigned user
-    const client = await prisma.client.findUnique({
+    const client = await prisma.mauticClient.findUnique({
       where: { id: parseInt(id) },
       select: { id: true, name: true }
     });
