@@ -33,6 +33,9 @@ jobs:
             cd backend
             npm ci
 
+            echo "⚙️ Generating Prisma client"
+            npx prisma generate
+
             echo "🏗 Building frontend"
             cd ../frontend
             npm ci
@@ -47,11 +50,15 @@ jobs:
             echo "🚀 Restarting backend"
             cd ../backend
 
+            # 🔥 Load NVM
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-            nvm use node
 
-            pm2 restart reporting-app || pm2 start server.js --name reporting-app
+            # ✅ Use stable Node
+            nvm use 18
+
+            # ✅ Restart using ecosystem (NO duplicate processes)
+            pm2 reload ecosystem.config.cjs
 
             echo "💾 Saving PM2 state"
             pm2 save
