@@ -49,7 +49,7 @@ export default function EmployeeClients({ onBack }) {
   const handleUnassign = async (clientId) => {
     if (!confirm('Unassign this client from the employee?')) return;
     try {
-      await axios.delete(`/api/clients/${clientId}/assign/${employeeId}`);
+      await axios.delete(`/api/clients/${clientId}/unassign/${employeeId}`);
       // Re-fetch list
       const clientsRes = await axios.get(`/api/users/${employeeId}/clients`);
       const clientsData = clientsRes.data.success ? clientsRes.data.data : (Array.isArray(clientsRes.data) ? clientsRes.data : []);
