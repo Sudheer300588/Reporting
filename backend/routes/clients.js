@@ -1114,7 +1114,7 @@ router.post("/:id/assign", authenticate, canManageClients, async (req, res) => {
       return res.status(400).json({ message: "User ID is required" });
     }
 
-    const client = await prisma.client.findUnique({
+    const client = await prisma.mauticClient.findUnique({
       where: { id: clientId },
     });
 
