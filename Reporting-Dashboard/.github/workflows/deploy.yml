@@ -1,0 +1,38 @@
+name: Deploy to Hostinger VPS
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Deploy via SSH to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            echo "➡ Entering project directory..."
+            cd /home/hcddev-dev/htdocs/hcdteam.com/dev
+
+            echo "⬇ Pulling latest code..."
+            git pull origin main || true
+
+            echo "🔧 Make scripts executable..."
+            chmod +x setup.sh || true
+            chmod +x deploy.sh || true
+
+            echo "📦 Running setup..."
+            ./setup.sh
+
+            echo "🚀 Running deploy..."
+            ./deploy.sh
+
+            echo "🎉 Done."
