@@ -134,7 +134,7 @@ export default function ManagerClients({ onBack }) {
   const handleUnassignManager = async (clientId) => {
     if (!confirm('Unassign this manager from the client?')) return;
     try {
-      await axios.delete(`/api/clients/${clientId}/assign/${managerId}`);
+      await axios.delete(`/api/clients/${clientId}/unassign/${managerId}`);
       await fetchClients();
     } catch (err) {
       console.error('Error unassigning manager:', err);

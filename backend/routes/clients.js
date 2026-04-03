@@ -1245,7 +1245,7 @@ router.post("/:id/assign", authenticate, canManageClients, async (req, res) => {
 // Uses permission-based checks instead of hardcoded roles
 // ============================================
 router.delete(
-  "/:id/assign/:userId",
+  "/:id/unassign/:userId",
   authenticate,
   canManageClients,
   async (req, res) => {
