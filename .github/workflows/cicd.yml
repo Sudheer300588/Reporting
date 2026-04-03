@@ -18,11 +18,12 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
+          port: 22
           script: |
             set -e
 
             echo "➡ Moving to project folder"
-            cd ~/htdocs/dev.hcdteam.com/Reporting
+            cd ~/htdocs/hcdteam.com/Reporting
 
             echo "⬇ Pull latest code"
             git fetch origin
