@@ -1,0 +1,53 @@
+name: Deploy to VPS (Reporting App)
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e  # 🚨 stop if any command fails
+
+            echo "➡ Moving to project folder"
+            cd ~/htdocs/hcdteam.com/Reporting
+
+            echo "⬇ Pull latest code"
+            git fetch origin
+            git reset --hard origin/main
+
+            echo "📦 Installing backend dependencies"
+            cd backend
+            npm install
+
+            echo "🏗 Building frontend"
+            cd ../frontend
+            npm install
+            npm run build
+
+            echo "🧹 Removing old backend dist"
+            rm -rf ../backend/dist
+
+            echo "📦 Moving new dist to backend"
+            mv dist ../backend/dist
+
+            echo "🚀 Restarting backend"
+            cd ../backend
+            pm2 restart all || pm2 start index.js --name reporting-app
+
+            echo "💾 Saving PM2 state"
+            pm2 save
+
+            echo "🎉 Deployment completed successfully"
