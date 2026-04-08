@@ -17,36 +17,14 @@ class DataService {
       logger.debug(`💾 Saving ${campaignData.length} campaigns to database...`);
       let totalRecordsInserted = 0;
 
-      // Get already imported files
-      const importedFiles = await prisma.importedFile.findMany({
-        select: { filename: true },
-      });
-      const importedFilenames = new Set(importedFiles.map((f) => f.filename));
-
       for (const campaign of campaignData) {
-        // If this file was already imported, skip — UNLESS the campaign has no records
-        // (handles the case where a previous run created the campaign but failed on records)
-        if (importedFilenames.has(campaign.filename)) {
-          // Check if any campaign from this file has records
-          const campaignId = campaign.records[0]?.campaignId || "unknown";
-          const existingCampaign = await prisma.dropCowboyCampaign.findUnique({
-            where: { campaignId },
-            select: { recordCount: true, _count: { select: { records: true } } },
-          });
-          const hasRecords = (existingCampaign?._count?.records ?? 0) > 0;
-          if (hasRecords) {
-            logger.debug(
-              `   ⏩ Skipping already imported file: ${campaign.filename}`
-            );
-            continue;
-          }
-          logger.debug(
-            `   ♻️  Re-importing ${campaign.filename} — campaign exists but has no records`
-          );
-        }
 
-        // Extract campaign ID from records
-        const campaignId = campaign.records[0]?.campaignId || "unknown";
+        // campaignId comes directly from the grouped campaign object (set by parseLocalFiles)
+        const campaignId = campaign.campaignId;
+        if (!campaignId || campaignId === 'unknown') {
+          logger.warn(`   ⚠️  Skipping campaign with no campaignId: ${campaign.campaignName}`);
+          continue;
+        }
 
         // ONLY match to Mautic clients (do NOT auto-create dropcowboy clients)
         let clientId = null;
@@ -72,11 +50,21 @@ class DataService {
             );
 
             const campaignNameLower = campaign.campaignName.toLowerCase();
+            // Normalized version for fuzzy matching (strips spaces, underscores, hyphens)
+            const campaignNameNorm = campaignNameLower.replace(/[\s_\-]+/g, '');
 
             // Strategy 1: Try exact prefix match (case-insensitive)
             let matchedClient = sortedClients.find((client) =>
               campaignNameLower.startsWith(client.name.toLowerCase())
             );
+
+            // Strategy 1b: Normalized prefix match (handles "1TouchOffice" vs "1 Touch Office_")
+            if (!matchedClient) {
+              matchedClient = sortedClients.find((client) => {
+                const clientNorm = client.name.toLowerCase().replace(/[\s_\-]+/g, '');
+                return clientNorm.length >= 3 && campaignNameNorm.startsWith(clientNorm);
+              });
+            }
 
             // Strategy 2: Try matching first word/token of client name
             if (!matchedClient) {
@@ -119,12 +107,14 @@ class DataService {
           update: {
             campaignName: campaign.campaignName,
             clientId: clientId,
+            recordCount: campaign.records.length,
             updatedAt: new Date(),
           },
           create: {
             campaignName: campaign.campaignName,
             campaignId,
             clientId: clientId,
+            recordCount: campaign.records.length,
           },
         });
 
@@ -257,12 +247,6 @@ class DataService {
           }
         }
 
-        // Mark file as imported
-        await prisma.importedFile.upsert({
-          where: { filename: campaign.filename },
-          update: { importedAt: new Date() },
-          create: { filename: campaign.filename },
-        });
       }
 
       logger.debug(`✅ Total records inserted: ${totalRecordsInserted}`);
