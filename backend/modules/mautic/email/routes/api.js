@@ -561,12 +561,10 @@ router.post("/clients", async (req, res) => {
     // Auto-create or find corresponding Client
     let mainClientId = null;
     try {
-      // Check if client with this name already exists
+      // Check if client with this name already exists (any clientType)
       let mainClient = await prisma.client.findFirst({
-        where: {
-          name: name,
-          clientType: "general",
-        },
+        where: { name: name },
+        orderBy: { id: 'asc' }, // prefer the oldest record if duplicates exist
       });
 
       if (!mainClient) {
