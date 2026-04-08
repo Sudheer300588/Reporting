@@ -24,12 +24,25 @@ class DataService {
       const importedFilenames = new Set(importedFiles.map((f) => f.filename));
 
       for (const campaign of campaignData) {
-        // If this file was already imported, skip
+        // If this file was already imported, skip — UNLESS the campaign has no records
+        // (handles the case where a previous run created the campaign but failed on records)
         if (importedFilenames.has(campaign.filename)) {
+          // Check if any campaign from this file has records
+          const campaignId = campaign.records[0]?.campaignId || "unknown";
+          const existingCampaign = await prisma.dropCowboyCampaign.findUnique({
+            where: { campaignId },
+            select: { recordCount: true, _count: { select: { records: true } } },
+          });
+          const hasRecords = (existingCampaign?._count?.records ?? 0) > 0;
+          if (hasRecords) {
+            logger.debug(
+              `   ⏩ Skipping already imported file: ${campaign.filename}`
+            );
+            continue;
+          }
           logger.debug(
-            `   ⏩ Skipping already imported file: ${campaign.filename}`
+            `   ♻️  Re-importing ${campaign.filename} — campaign exists but has no records`
           );
-          continue;
         }
 
         // Extract campaign ID from records
@@ -52,8 +65,11 @@ class DataService {
               where: { clientType: "mautic" },
             });
 
-            // Sort by name length (longest first) to prioritize more specific matches
-            const sortedClients = mauticClients.sort((a, b) => b.name.length - a.name.length);
+            // Sort by name length (longest first) to prioritize more specific matches,
+            // then by id ascending so the oldest (canonical) record wins on ties
+            const sortedClients = mauticClients.sort((a, b) =>
+              b.name.length - a.name.length || a.id - b.id
+            );
 
             const campaignNameLower = campaign.campaignName.toLowerCase();
 
