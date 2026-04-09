@@ -45,7 +45,6 @@ const MauticCampaignsContainer = ({ clientId }) => {
         setCampaigns(campaignsWithDetails);
         setLoading(false);
       } catch (err) {
-        console.error(err);
         setLoading(false);
       }
     };

@@ -35,7 +35,6 @@ class MauticService {
         error: null
       };
     } catch (error) {
-      console.error('Error fetching clients:', error);
       return {
         success: false,
         data: null,
@@ -59,7 +58,6 @@ class MauticService {
         error: null
       };
     } catch (error) {
-      console.error('Error creating client:', error);
       return {
         success: false,
         data: null,
@@ -84,7 +82,6 @@ class MauticService {
         error: null
       };
     } catch (error) {
-      console.error('Error updating client:', error);
       return {
         success: false,
         data: null,
@@ -107,7 +104,6 @@ class MauticService {
         error: null
       };
     } catch (error) {
-      console.error('Error deleting client:', error);
       return {
         success: false,
         error: error.response?.data?.message || error.message || 'Failed to delete client'
@@ -129,7 +125,6 @@ class MauticService {
         error: null
       };
     } catch (error) {
-      console.error('Error permanently deleting client:', error);
       return {
         success: false,
         error: error.response?.data?.message || error.message || 'Failed to permanently delete client'
@@ -151,7 +146,6 @@ class MauticService {
         error: null
       };
     } catch (error) {
-      console.error('Error testing connection:', error);
       return {
         success: false,
         message: error.response?.data?.message || error.message || 'Connection test failed',
@@ -174,7 +168,6 @@ class MauticService {
         error: null
       };
     } catch (error) {
-      console.error('Error fetching dashboard metrics:', error);
       return {
         success: false,
         data: null,
@@ -197,7 +190,6 @@ class MauticService {
         error: null
       };
     } catch (error) {
-      console.error('Error fetching contacts:', error);
       return {
         success: false,
         data: null,
@@ -220,7 +212,6 @@ class MauticService {
         error: null
       };
     } catch (error) {
-      console.error('Error fetching emails:', error);
       return {
         success: false,
         data: null,
@@ -244,7 +235,6 @@ class MauticService {
         error: null
       };
     } catch (error) {
-      console.error('Error fetching segments:', error);
       return {
         success: false,
         data: null,
@@ -269,7 +259,6 @@ class MauticService {
         error: null
       };
     } catch (error) {
-      console.error('Error fetching campaigns:', error);
       return {
         success: false,
         data: null,
@@ -293,7 +282,6 @@ class MauticService {
         error: null
       };
     } catch (error) {
-      console.error('Error syncing all clients:', error);
       
       // Handle 409 Conflict (sync already in progress)
       if (error.response?.status === 409) {
@@ -329,7 +317,6 @@ class MauticService {
         error: null
       };
     } catch (error) {
-      console.error('Error syncing client:', error);
       
       // Handle 409 Conflict (sync already in progress)
       if (error.response?.status === 409) {
@@ -363,7 +350,6 @@ class MauticService {
         error: null
       };
     } catch (error) {
-      console.error('Error fetching sync status:', error);
       return {
         success: false,
         data: { isSyncing: false },

@@ -40,7 +40,6 @@ const AISettings = () => {
         setModels(res.data.models || {});
       }
     } catch (error) {
-      console.error('Failed to fetch AI settings', error);
     } finally {
       setLoading(false);
     }
@@ -54,7 +53,6 @@ const AISettings = () => {
         setVoices(res.data.voices || []);
       }
     } catch (error) {
-      console.error('Failed to fetch voices', error);
     } finally {
       setLoadingVoices(false);
     }

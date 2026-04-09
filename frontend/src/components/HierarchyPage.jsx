@@ -55,7 +55,10 @@ export default function HierarchyPage() {
           setManagers(managerUsers);
           setAllUsers(users);
         })
-        .catch(err => console.error("Error fetching managers:", err))
+        .catch(() => {
+          setManagers([]);
+          setAllUsers([]);
+        })
         .finally(() => setLoading(false));
     }
   }, [view]);

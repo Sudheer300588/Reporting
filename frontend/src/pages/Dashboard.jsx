@@ -70,11 +70,8 @@ const Dashboard = () => {
         
         // Generate insights based on metrics
         generateInsights(emailMetrics, voicemailMetrics)
-        
-        console.log(`✅ Dashboard data loaded in ${response.data.data.performanceMs}ms`)
       }
     } catch (error) {
-      console.error('Error fetching dashboard data:', error)
     } finally {
       setLoading(false)
     }
@@ -596,7 +593,6 @@ const Dashboard = () => {
                     toast.error('Sync completed with errors')
                   }
                 } catch (error) {
-                  console.error('Error starting sync:', error)
                   toast.error(error.response?.data?.error?.message || 'Failed to sync. Please try again.')
                 } finally {
                   setIsSyncing(false)

@@ -37,7 +37,6 @@ const AIChatWidget = () => {
         setStatus(res.data);
       }
     } catch (error) {
-      console.error('Failed to check AI status', error);
     }
   };
 
@@ -84,7 +83,6 @@ const AIChatWidget = () => {
         audio.play();
       }
     } catch (error) {
-      console.error('TTS error', error);
     }
   };
 

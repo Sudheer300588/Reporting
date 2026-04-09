@@ -319,7 +319,6 @@ export function useSync() {
                     syncRef.current = false;
                 }
             } catch (err) {
-                console.error('Failed to check sync status:', err);
             }
         };
 

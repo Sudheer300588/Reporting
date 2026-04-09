@@ -115,7 +115,6 @@ const NotificationsSettings = () => {
       setEmailEnabled(fetchedSettings.notifEmailNotifications !== false);
       setActivityEmailEnabled(fetchedSettings.notifActivityEmails !== false);
     } catch (error) {
-      console.error('Failed to fetch settings', error);
     }
   };
 
@@ -126,7 +125,6 @@ const NotificationsSettings = () => {
       if (res.data?.data) setNotifications(res.data.data || []);
       else if (res.data) setNotifications(res.data || []);
     } catch (err) {
-      console.warn('Failed to fetch notifications', err);
     } finally {
       setNotifLoading(false);
     }
@@ -145,7 +143,6 @@ const NotificationsSettings = () => {
         toast.error(res.data?.message || 'Failed to create notification');
       }
     } catch (err) {
-      console.error('Create notification failed', err);
       toast.error(err.response?.data?.message || 'Failed to create notification');
     }
   };
@@ -161,7 +158,6 @@ const NotificationsSettings = () => {
         toast.error(res.data?.message || 'Failed to update notification');
       }
     } catch (err) {
-      console.error('Update notification failed', err);
       toast.error(err.response?.data?.message || 'Failed to update notification');
     }
   };
@@ -177,7 +173,6 @@ const NotificationsSettings = () => {
         toast.error(res.data?.message || 'Failed to delete notification');
       }
     } catch (err) {
-      console.error('Delete notification failed', err);
       toast.error(err.response?.data?.message || 'Failed to delete notification');
     }
   };
@@ -199,7 +194,6 @@ const NotificationsSettings = () => {
         toast.error(res.data?.message || 'Failed to update settings');
       }
     } catch (err) {
-      console.error('Toggle email notifications failed', err);
       toast.error(err.response?.data?.message || 'Failed to update settings');
     } finally {
       setEmailEnableSaving(false);
@@ -218,7 +212,6 @@ const NotificationsSettings = () => {
         toast.error(res.data?.message || 'Failed to update settings');
       }
     } catch (err) {
-      console.error('Toggle activity emails failed', err);
       toast.error(err.response?.data?.message || 'Failed to update settings');
     } finally {
       setActivityEmailSaving(false);
@@ -231,7 +224,6 @@ const NotificationsSettings = () => {
       const res = await axios.get('/api/superadmin/notifications/logs?limit=50');
       if (res.data?.data) setEmailLogs(res.data.data);
     } catch (err) {
-      console.error('Failed to fetch email logs', err);
       toast.error('Failed to load email logs');
     } finally {
       setEmailLogsLoading(false);
@@ -243,7 +235,6 @@ const NotificationsSettings = () => {
       const res = await axios.get('/api/superadmin/notifications/stats');
       if (res.data?.data) setEmailStats(res.data.data);
     } catch (err) {
-      console.error('Failed to fetch email stats', err);
     }
   };
 
@@ -281,7 +272,6 @@ const NotificationsSettings = () => {
         });
       }
     } catch (err) {
-      console.error('Test notification failed', err);
       toast.update(toastId, {
         render: err.response?.data?.message || 'Failed to send test email',
         type: 'error',

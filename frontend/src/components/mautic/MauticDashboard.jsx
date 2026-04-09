@@ -34,13 +34,9 @@ export default function MauticDashboard({ clientId = null, clientName = null, ac
   // Filter clients by accessible IDs if provided (for access control)
   // Memoize to prevent re-filtering on every parent render
   const accessibleClients = React.useMemo(() => {
-    console.log("accessible clients ids", accessibleClientIds);
-    console.log("clients", mauticOnlyClients);
-
     if (!accessibleClientIds || accessibleClientIds.length === 0) {
       return clients || [];
     }
-    console.log("accessible clients", (mauticOnlyClients || []).filter(c => accessibleClientIds.includes(c.id)));
     return (mauticOnlyClients || []).filter(c => accessibleClientIds.includes(c.id));
   }, [clients, accessibleClientIds]);
 

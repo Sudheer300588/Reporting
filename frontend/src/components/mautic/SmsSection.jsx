@@ -25,7 +25,6 @@ const SmsSection = ({ clientId, refreshKey, accessibleClientIds }) => {
           setSmsCampaigns(response.data.data || []);
         }
       } catch (err) {
-        console.error('Error fetching SMS campaigns:', err);
         setError(err.message || 'Failed to load SMS campaigns');
       } finally {
         setLoading(false);

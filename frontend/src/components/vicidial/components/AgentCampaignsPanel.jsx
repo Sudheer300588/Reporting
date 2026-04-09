@@ -20,7 +20,6 @@ export default function AgentCampaignsPanel({ agentUser, agentName, onBack, onSh
       setPage(pageNum);
       setPageInput(String(pageNum));
     } catch (err) {
-      console.error(err);
     } finally {
       setLoading(false);
     }

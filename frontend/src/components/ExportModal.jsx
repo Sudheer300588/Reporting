@@ -193,7 +193,6 @@ export default function ExportModal({
       toast.success(`✓ Exported ${filteredData.length} records as ${selectedFormat.toUpperCase()}`);
       onClose();
     } catch (error) {
-      console.error('Export error:', error);
       toast.error(`Failed to export: ${error.message}`);
     } finally {
       setIsExporting(false);

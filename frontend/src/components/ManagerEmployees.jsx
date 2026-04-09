@@ -34,7 +34,6 @@ export default function ManagerEmployees({ onBack, onEmployeeClick }) {
         setEmployees(managerEmployees);
         setManager(managerRes.data.user || managerRes.data);
       } catch (err) {
-        console.error("Error fetching data:", err);
       } finally {
         setLoading(false);
       }

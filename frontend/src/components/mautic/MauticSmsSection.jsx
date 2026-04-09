@@ -61,7 +61,6 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
 
             setAllMessagesForExport(aggregated);
         } catch (err) {
-            console.error('Error fetching all messages for export:', err);
             setAllMessagesForExport([]);
         } finally {
             setLoadingExportData(false);
@@ -91,7 +90,6 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                 const response = await axios.get(endpoint);
                 setSmsCampaigns(response.data.data || []);
             } catch (err) {
-                console.error('Error fetching SMS campaigns:', err);
                 setError(err.message || 'Failed to load SMS campaigns');
             } finally {
                 setLoading(false);
@@ -116,8 +114,6 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                     }
                 }
             );
-
-            console.log('Campaign stats response:', response.data);
 
             setSelectedCampaign(campaign);
             setCurrentPage(page);
@@ -144,7 +140,6 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                 fetchAllMessagesForExport(campaign, filter);
             }
         } catch (error) {
-            console.error('Error fetching messages:', error);
             setError('Failed to fetch messages');
         } finally {
             setLoading(false);
@@ -194,7 +189,6 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
             setView("activity");
             setError(null);
         } catch (error) {
-            console.error("Error fetching lead activity:", error);
             setError("Failed to fetch lead activity");
         } finally {
             setLoading(false);

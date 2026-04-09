@@ -29,9 +29,7 @@ export default function EmployeeClients({ onBack }) {
         setClients(Array.isArray(clientsData) ? clientsData : []);
         setEmployee(employeeData);
       } catch (err) {
-        console.error("Error fetching employee clients or details:", err);
         if (err.response?.status === 403) {
-          console.error("Access denied. You may not have permission to view this employee's clients.");
         }
         setClients([]);
       } finally {
@@ -55,7 +53,6 @@ export default function EmployeeClients({ onBack }) {
       const clientsData = clientsRes.data.success ? clientsRes.data.data : (Array.isArray(clientsRes.data) ? clientsRes.data : []);
       setClients(clientsData || []);
     } catch (err) {
-      console.error('Error unassigning client from employee:', err);
       alert(err.response?.data?.message || 'Failed to unassign client');
     }
   };

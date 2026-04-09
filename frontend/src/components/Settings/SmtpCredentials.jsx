@@ -31,7 +31,6 @@ const SmtpCredentials = () => {
       const res = await axios.get('/api/superadmin/smtp-credentials');
       if (res.data?.data) setSmtp({ ...smtpDefault, ...res.data.data });
     } catch (err) {
-      console.error("Error fetching SMTP credentials", err);
     } finally {
       setLoading(false);
     }

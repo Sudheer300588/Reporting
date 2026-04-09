@@ -26,7 +26,6 @@ export async function getWithCache(url, { ttl = DEFAULT_TTL } = {}) {
     cache.set(key, { value: res, ts: Date.now() });
     return res;
   } catch (err) {
-    console.error(err);
     throw err;
   }
 }

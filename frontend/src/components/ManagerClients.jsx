@@ -54,7 +54,6 @@ export default function ManagerClients({ onBack }) {
       setClients(managerClients);
       setManager(managerRes.data.user || managerRes.data);
     } catch (err) {
-      console.error("Error fetching data:", err);
     } finally {
       setLoading(false);
     }
@@ -80,7 +79,6 @@ export default function ManagerClients({ onBack }) {
       setEmployeesForManager(employees);
       return employees;
     } catch (err) {
-      console.error('Error fetching employees for manager:', err);
       setEmployeesForManager([]);
       return [];
     }
@@ -93,7 +91,6 @@ export default function ManagerClients({ onBack }) {
       const notAssigned = allClients.filter(c => !c.assignments?.some(a => a.user.id == managerId && a.user.role === 'manager'));
       setAvailableClientsForManager(notAssigned);
     } catch (err) {
-      console.error('Error fetching available clients for manager assign:', err);
       setAvailableClientsForManager([]);
     }
   };
@@ -115,7 +112,6 @@ export default function ManagerClients({ onBack }) {
       );
       setClients(managerClients);
     } catch (err) {
-      console.error('Error assigning employee:', err);
       alert(err.response?.data?.message || 'Failed to assign employee');
     }
   };
@@ -126,7 +122,6 @@ export default function ManagerClients({ onBack }) {
       await fetchClients();
       await fetchAvailableClientsToAssign();
     } catch (err) {
-      console.error('Error assigning manager to client:', err);
       alert(err.response?.data?.message || 'Failed to assign manager');
     }
   };
@@ -137,7 +132,6 @@ export default function ManagerClients({ onBack }) {
       await axios.delete(`/api/clients/${clientId}/unassign/${managerId}`);
       await fetchClients();
     } catch (err) {
-      console.error('Error unassigning manager:', err);
       alert(err.response?.data?.message || 'Failed to unassign manager');
     }
   };

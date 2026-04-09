@@ -48,7 +48,6 @@ const Activities = () => {
             setActivities(response.data.activities);
             setPagination(response.data.pagination);
         } catch (error) {
-            console.error('Error fetching activities:', error);
         } finally {
             setLoading(false);
         }

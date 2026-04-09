@@ -46,7 +46,6 @@ const Employees = () => {
       )
       setAvailableManagers(managers)
     } catch (error) {
-      console.error('Error fetching managers:', error)
       setAvailableManagers([])
     }
   };
@@ -58,7 +57,6 @@ const Employees = () => {
         setOwnerId(response.data.data.id)
       }
     } catch (error) {
-      console.error('Error fetching owner info:', error)
     }
   }
 
@@ -81,7 +79,6 @@ const Employees = () => {
       
       setAvailableRoles(filteredRoles);
     } catch (error) {
-      console.error('Error fetching roles:', error);
       setAvailableRoles([]);
     } finally {
       setRolesLoading(false);
@@ -99,7 +96,6 @@ const Employees = () => {
       setEmployees(response.data.users || [])
     } catch (error) {
       toast.error('Error fetching employees')
-      console.error(error)
     } finally {
       setLoading(false)
     }

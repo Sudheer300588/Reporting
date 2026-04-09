@@ -34,7 +34,6 @@ const MaintenanceEmail = () => {
         setSmtpConfigured(true);
       }
     } catch (err) {
-      console.warn('Failed to check SMTP status', err);
     }
   };
 
@@ -50,7 +49,6 @@ const MaintenanceEmail = () => {
       const raw = localStorage.getItem('maintenance_templates');
       if (raw) setSavedTemplates(JSON.parse(raw));
     } catch (e) {
-      console.warn('Failed to load saved templates', e);
     }
   };
 
@@ -65,7 +63,6 @@ const MaintenanceEmail = () => {
       setTemplateName('');
       toast.success('Template saved locally');
     } catch (e) {
-      console.error('Failed to save template locally', e);
       toast.error('Failed to save template');
     }
   };
@@ -85,7 +82,6 @@ const MaintenanceEmail = () => {
       setSavedTemplates(list);
       toast.success(`Deleted: ${removed[0]?.name || 'template'}`);
     } catch (e) {
-      console.error('Failed to delete template', e);
       toast.error('Failed to delete template');
     }
   };
@@ -116,7 +112,6 @@ const MaintenanceEmail = () => {
         toast.error(errorMsg);
       }
     } catch (err) {
-      console.error('Send maintenance email failed:', err);
       const errorMsg = err.response?.data?.message || 'Failed to send maintenance email';
       setMaintenanceResult({ success: false, message: errorMsg });
       toast.error(errorMsg);

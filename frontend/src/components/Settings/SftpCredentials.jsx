@@ -35,7 +35,6 @@ const SftpCredentials = () => {
       const res = await axios.get('/api/superadmin/sftp-credentials');
       if (res.data?.data) setSftp({ ...sftpDefault, ...res.data.data });
     } catch (err) {
-      console.error("Error fetching SFTP credentials", err);
     } finally {
       setLoading(false);
     }
@@ -67,7 +66,6 @@ const SftpCredentials = () => {
           await refetchMetrics();
           await refetchSyncLogs();
         } catch (e) {
-          console.warn('Failed to refresh DropCowboy data after fetch', e);
         }
 
         if (result.data?.warning) {
@@ -142,7 +140,6 @@ const SftpCredentials = () => {
           await refetchMetrics();
           await refetchSyncLogs();
         } catch (e) {
-          console.warn('Failed to refetch dropCowboy data', e);
         }
 
         if (result.data?.warning) {
@@ -156,7 +153,6 @@ const SftpCredentials = () => {
         toast.error('Failed to fetch data: ' + (result.error || 'Unknown error'), { autoClose: 5000 });
       }
     } catch (err) {
-      console.error('Error while triggering manual fetch', err);
       toast.error('Failed to start SFTP sync');
     }
   };

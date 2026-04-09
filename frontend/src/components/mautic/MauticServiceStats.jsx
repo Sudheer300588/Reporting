@@ -28,7 +28,6 @@ const MauticServiceStats = ({ selectedClient }) => {
                     });
                 }
             } catch (error) {
-                console.error('Error fetching Mautic stats:', error);
                 setStats({
                     totalContacts: 0,
                     totalEmails: 0,

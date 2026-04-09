@@ -50,7 +50,6 @@ const Clients = () => {
             
             setClients(unifiedClients);
         } catch (error) {
-            console.error("Error fetching clients:", error);
         } finally {
             setLoading(false);
         }
@@ -69,7 +68,6 @@ const Clients = () => {
             const managers = await clientService.getManagers();
             setManagers(managers);
         } catch (error) {
-            console.error("Error fetching managers:", error);
         }
     };
 
@@ -80,7 +78,6 @@ const Clients = () => {
             setEmployeesForManager((prev) => ({ ...prev, [managerId]: employees }));
             return employees;
         } catch (error) {
-            console.error("Error fetching employees for manager:", error);
             return [];
         }
     };
@@ -98,7 +95,6 @@ const Clients = () => {
             setEmployeesForManager((prev) => ({ ...prev, all: employees }));
             return employees;
         } catch (err) {
-            console.error("Error fetching all employees:", err);
             return [];
         }
     };
@@ -115,7 +111,6 @@ const Clients = () => {
         try {
             const clientId = selectedClient.id;
             if (!clientId) {
-                console.warn("No client ID found");
                 setLoadingCampaigns(false);
                 return;
             }
@@ -136,7 +131,6 @@ const Clients = () => {
 
             setCampaigns(campaignsWithDetails);
         } catch (error) {
-            console.error("Error fetching Mautic campaigns:", error);
             setCampaigns([]);
         } finally {
             setLoadingCampaigns(false);
@@ -190,7 +184,6 @@ const Clients = () => {
                 try {
                     await clientService.assignClient(selectedClientForAssign.id, { userId: mgrId });
                 } catch (mgrErr) {
-                    console.warn('Manager assign warning:', mgrErr?.response?.data || mgrErr.message);
                 }
             }
 
@@ -199,7 +192,6 @@ const Clients = () => {
                 try {
                     await clientService.assignClient(selectedClientForAssign.id, { userId: uid });
                 } catch (uErr) {
-                    console.warn('Employee assign warning:', uErr?.response?.data || uErr.message);
                 }
             }
 
@@ -208,7 +200,6 @@ const Clients = () => {
             setSelectedClientForAssign(null);
             fetchClients();
         } catch (error) {
-            console.error("Error assigning client:", error);
             alert(error.response?.data?.message || "Error assigning client");
         }
     };
@@ -220,7 +211,6 @@ const Clients = () => {
             await clientService.unassignClient(clientId, userId, assignmentClientId);
             fetchClients();
         } catch (err) {
-            console.error('Error unassigning user:', err);
             alert(err.response?.data?.message || 'Failed to unassign user');
         }
     };
