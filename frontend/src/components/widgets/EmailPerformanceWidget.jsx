@@ -69,7 +69,6 @@ const EmailPerformanceWidget = ({ clientId, clientName }) => {
           setError('Failed to load email stats')
         }
       } catch (err) {
-        console.error('Error fetching client email stats:', err)
         setError(err.response?.data?.message || 'Failed to load email stats')
       } finally {
         setLoading(false)

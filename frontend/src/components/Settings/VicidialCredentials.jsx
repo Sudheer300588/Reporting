@@ -28,7 +28,6 @@ const VicidialCredentials = () => {
       const res = await axios.get('/api/superadmin/vicidial-credentials');
       if (res.data?.data) setVicidial({ ...vicidialDefault, ...res.data.data });
     } catch (err) {
-      console.error("Error fetching Vicidial credentials", err);
     } finally {
       setLoading(false);
     }

@@ -27,7 +27,6 @@ class DropCowboyService {
         error: null
       };
     } catch (error) {
-      console.error('Error fetching metrics:', error);
       return {
         success: false,
         data: null,
@@ -49,7 +48,6 @@ class DropCowboyService {
         error: null
       };
     } catch (error) {
-      console.error('Error triggering manual fetch:', error);
       
       // Handle 409 Conflict (sync already in progress)
       if (error.response?.status === 409) {
@@ -84,7 +82,6 @@ class DropCowboyService {
         error: null
       };
     } catch (error) {
-      console.error('Error fetching sync logs:', error);
       return {
         success: false,
         data: null,
@@ -107,7 +104,6 @@ class DropCowboyService {
         error: null
       };
     } catch (error) {
-      console.error('Error fetching campaign details:', error);
       return {
         success: false,
         data: null,
@@ -129,7 +125,6 @@ class DropCowboyService {
         error: null
       };
     } catch (error) {
-      console.error('Error fetching sync status:', error);
       return {
         success: false,
         data: { isSyncing: false },
@@ -151,7 +146,6 @@ class DropCowboyService {
         error: null
       };
     } catch (error) {
-      console.error('Error fetching dashboard summary:', error);
       return {
         success: false,
         data: null,
@@ -184,7 +178,6 @@ class DropCowboyService {
         error: data.message || null
       };
     } catch (error) {
-      console.error('Error fetching client campaigns:', error);
       return {
         success: false,
         data: [],

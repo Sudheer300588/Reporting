@@ -37,7 +37,6 @@ const RolesAndPermissions = () => {
       setRoles(response.data.data || []);
       setError(null);
     } catch (err) {
-      console.error("Error loading roles:", err);
       setError(err.response?.data?.message || "Failed to load roles");
     } finally {
       setLoading(false);
@@ -100,7 +99,6 @@ const RolesAndPermissions = () => {
       await loadRoles();
       setView("list");
     } catch (err) {
-      console.error("Error saving role:", err);
       alert(err.response?.data?.message || "Failed to save role");
     } finally {
       setSaving(false);
@@ -135,7 +133,6 @@ const RolesAndPermissions = () => {
       alert("Role deleted successfully!");
       await loadRoles();
     } catch (err) {
-      console.error("Error deleting role:", err);
       alert(err.response?.data?.message || "Failed to delete role");
     }
   };
@@ -151,7 +148,6 @@ const RolesAndPermissions = () => {
       setRoleToDelete(null);
       await loadRoles();
     } catch (err) {
-      console.error("Error deleting role with reassignment:", err);
       alert(err.response?.data?.message || "Failed to delete role and reassign users");
     } finally {
       setReassignmentLoading(false);

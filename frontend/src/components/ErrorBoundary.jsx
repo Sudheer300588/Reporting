@@ -23,7 +23,6 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     // Log error to console in development
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
     
     // You can also log the error to an error reporting service here
     // Example: Sentry.captureException(error, { extra: errorInfo });
@@ -36,7 +35,6 @@ class ErrorBoundary extends React.Component {
 
     // Auto-refresh if too many errors (possible infinite loop)
     if (this.state.errorCount >= 3) {
-      console.error('Too many errors, reloading page...');
       setTimeout(() => window.location.reload(), 3000);
     }
   }

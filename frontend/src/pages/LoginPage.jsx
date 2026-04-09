@@ -27,7 +27,6 @@ const LoginPage = () => {
         const res = await axios.get('/api/auth/signup-allowed');
         setSignupAllowed(res.data.allowed);
       } catch (err) {
-        console.error('Error checking signup status:', err);
         setSignupAllowed(false);
       }
     };
@@ -129,7 +128,6 @@ const LoginPage = () => {
         setLoading(false);
       }
     } catch (error) {
-      console.error('Login error:', error);
       toast.error(getErrorMessage(error, 'Login failed'));
       setLoading(false);
     }

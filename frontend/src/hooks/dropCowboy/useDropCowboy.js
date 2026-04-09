@@ -118,7 +118,6 @@ export function useManualFetch() {
                     setIsFetching(true);
                 }
             } catch (err) {
-                console.error('Failed to check sync status:', err);
             }
         };
 

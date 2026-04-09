@@ -61,7 +61,7 @@ export default function AgentStatsPanel({ agentUser, agentName, onBack }){
         } else {
           setData(payload || null);
         }
-      }catch(err){ console.error(err); }
+      }catch(err){}
       finally{ if(mounted) setLoading(false); }
     }
     load();

@@ -33,7 +33,6 @@ export const fetchMetrics = async (filters = {}) => {
     const response = await api.get(`/metrics?${params.toString()}`);
     return response.data;
   } catch (error) {
-    console.error("Error fetching metrics:", error);
     throw error;
   }
 };
@@ -43,7 +42,6 @@ export const triggerManualFetch = async () => {
     const response = await api.post("/fetch");
     return response.data;
   } catch (error) {
-    console.error("Error triggering manual fetch:", error);
     throw error;
   }
 };
@@ -53,7 +51,6 @@ export const fetchSyncLogs = async (limit = 20) => {
     const response = await api.get(`/sync-logs?limit=${limit}`);
     return response.data;
   } catch (error) {
-    console.error("Error fetching sync logs:", error);
     throw error;
   }
 };
@@ -63,7 +60,6 @@ export const fetchCampaignDetails = async (campaignName) => {
     const response = await api.get(`/campaigns/${campaignName}`);
     return response.data;
   } catch (error) {
-    console.error("Error fetching campaign details:", error);
     throw error;
   }
 };
@@ -74,7 +70,6 @@ export const fetchRecordings = async (forceRefresh = false) => {
     const response = await api.get(`/recordings${params}`);
     return response.data;
   } catch (error) {
-    console.error("Error fetching recordings:", error);
     throw error;
   }
 };
@@ -85,7 +80,6 @@ export const fetchBrands = async (forceRefresh = false) => {
     const response = await api.get(`/brands${params}`);
     return response.data;
   } catch (error) {
-    console.error("Error fetching brands:", error);
     throw error;
   }
 };
@@ -96,7 +90,6 @@ export const fetchPools = async (forceRefresh = false) => {
     const response = await api.get(`/pools${params}`);
     return response.data;
   } catch (error) {
-    console.error("Error fetching pools:", error);
     throw error;
   }
 };
@@ -107,7 +100,6 @@ export const fetchAllDropCowboyData = async (forceRefresh = false) => {
     const response = await api.get(`/dropcowboy/all${params}`);
     return response.data;
   } catch (error) {
-    console.error("Error fetching Ringless Voicemail data:", error);
     throw error;
   }
 };

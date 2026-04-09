@@ -71,7 +71,6 @@ const SiteBranding = () => {
         if (data.loginBgGradientTo) setLoginBgGradientTo(data.loginBgGradientTo);
       }
     } catch (err) {
-      console.warn('Failed to fetch site customization', err);
     }
   };
 
@@ -206,7 +205,6 @@ const SiteBranding = () => {
         toast.error(res.data?.message || 'Failed to save customization');
       }
     } catch (err) {
-      console.error('Error saving site customization', err);
       toast.error(err.response?.data?.message || 'Failed to save customization');
     } finally {
       setLoading(false);
@@ -252,7 +250,6 @@ const SiteBranding = () => {
 
       toast.success('Site customization cleared');
     } catch (err) {
-      console.error('Failed to reset site customization', err);
       toast.error(err.response?.data?.message || 'Failed to reset site customization');
     } finally {
       setLoading(false);

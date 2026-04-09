@@ -69,7 +69,6 @@ export default function AddClientModal({ isOpen, onClose, onSuccess, editClient 
             setManagers(managersList);
             setEmployees(employeesList);
         } catch (error) {
-            console.error('Error fetching users:', error);
         }
     };
 

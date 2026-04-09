@@ -63,7 +63,6 @@ export default function ClientsDropCowboyDashboard({ clientCampaigns = null, cli
                     setError(result.error);
                 }
             } catch (err) {
-                console.error('Error fetching client campaigns:', err);
                 setError(err.message || 'Failed to fetch campaigns');
             } finally {
                 setLoading(false);

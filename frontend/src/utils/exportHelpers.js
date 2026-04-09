@@ -210,7 +210,6 @@ export const exportToPDF = (data, filename, title, columns) => {
 
         doc.save(`${filename}.pdf`);
     } catch (error) {
-        console.error('Error generating PDF:', error);
         throw new Error('Failed to generate PDF: ' + error.message);
     }
 };
@@ -310,7 +309,6 @@ export const exportToWord = async (data, filename, title, columns) => {
         const blob = await Packer.toBlob(doc);
         downloadBlob(blob, `${filename}.docx`);
     } catch (error) {
-        console.error('Error generating Word document:', error);
         throw new Error('Failed to generate Word document: ' + error.message);
     }
 };
@@ -339,7 +337,6 @@ export const exportData = async (data, filename, title, columns, format) => {
                 throw new Error(`Unsupported format: ${format}`);
         }
     } catch (error) {
-        console.error('Export error:', error);
         throw error;
     }
 };

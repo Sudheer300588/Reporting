@@ -330,19 +330,14 @@ const RecordsTable = ({ campaigns, accessibleClientIds = [] }) => {
           };
         });
 
-        console.log("🔍 Sample record:", rows[0]);
-        console.log("accessibleClientIds:", accessibleClientIds);
-
         // ✅ Backend already filtered by clientIds and calculated metrics for ALL records
         // Use backend's total for proper pagination
         setServerRecords(normalized);
         setTotalRecords(total);
         setCurrentPage(page);
       } else {
-        console.error("Failed to fetch records:", json.error);
       }
     } catch (err) {
-      console.error("Error fetching records:", err);
     } finally {
       setLoadingPage(false);
     }

@@ -36,7 +36,7 @@ const MauticCampaignsSection = ({ campaigns, selectedClient, loadingCampaigns, g
     const openPicker = (ref) => {
         if (!ref?.current) return;
         if (typeof ref.current.showPicker === 'function') {
-            try { ref.current.showPicker(); } catch (err) { console.debug(err); }
+            try { ref.current.showPicker(); } catch (err) {}
         }
         if (typeof ref.current.focus === 'function') ref.current.focus();
     };
@@ -74,7 +74,6 @@ const MauticCampaignsSection = ({ campaigns, selectedClient, loadingCampaigns, g
                 setEmailReportsIndex(reportIndex);
 
             } catch (error) {
-                console.error('Error fetching email reports:', error);
                 setEmailReports([]);
             } finally {
                 setLoadingReports(false);

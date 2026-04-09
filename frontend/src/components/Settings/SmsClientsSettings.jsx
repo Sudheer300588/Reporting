@@ -35,7 +35,6 @@ const SmsClientsSettings = () => {
       const response = await axios.get(`${baseUrl}/api/mautic/sms-clients`);
       setClients(response.data.data || []);
     } catch (error) {
-      console.error('Error fetching SMS clients:', error);
       toast.error('Failed to load SMS clients');
     } finally {
       setLoading(false);
@@ -68,7 +67,6 @@ const SmsClientsSettings = () => {
       setFormData({ name: '', mauticUrl: '', username: '', password: '' });
       await fetchClients();
     } catch (error) {
-      console.error('Error saving SMS client:', error);
       toast.update(toastId, {
         render: `❌ ${error.response?.data?.message || 'Failed to save SMS client'}`,
         type: 'error',
@@ -111,7 +109,6 @@ const SmsClientsSettings = () => {
       
       await fetchClients();
     } catch (error) {
-      console.error('Error deleting SMS client:', error);
       toast.update(toastId, {
         render: `❌ ${error.response?.data?.message || 'Failed to delete SMS client'}`,
         type: 'error',
@@ -134,7 +131,6 @@ const SmsClientsSettings = () => {
       toast.update(toastId, { render: '✅ SMS campaigns synced successfully!', type: 'success', isLoading: false, autoClose: 3000 });
       await fetchClients();
     } catch (error) {
-      console.error('Error syncing SMS client:', error);
       toast.update(toastId, {
         render: `❌ ${error.response?.data?.message || 'Failed to sync SMS client'}`,
         type: 'error',
@@ -164,7 +160,6 @@ const SmsClientsSettings = () => {
           await axios.post(`${baseUrl}/api/mautic/sms-clients/${client.id}/sync`);
           successCount++;
         } catch (error) {
-          console.error(`Error syncing client ${client.name}:`, error);
           failCount++;
         }
       }
@@ -187,7 +182,6 @@ const SmsClientsSettings = () => {
 
       await fetchClients();
     } catch (error) {
-      console.error('Error syncing SMS clients:', error);
       toast.update(toastId, {
         render: `❌ ${error.response?.data?.message || 'Failed to sync SMS clients'}`,
         type: 'error',

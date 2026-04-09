@@ -27,7 +27,7 @@ export default function ManagerPage({ onBack, onEmployees, onClients }) {
       .then(res => {
         setManager(res.data.user || res.data);
       })
-      .catch(err => console.error("Error fetching manager:", err))
+      .catch(() => setManager(null))
       .finally(() => setLoading(false));
   }, [managerId]);
 

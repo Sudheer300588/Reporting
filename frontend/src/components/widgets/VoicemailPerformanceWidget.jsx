@@ -62,7 +62,6 @@ const VoicemailPerformanceWidget = ({ clientName }) => {
           setError('Failed to load voicemail stats')
         }
       } catch (err) {
-        console.error('Error fetching voicemail stats:', err)
         setError(err.response?.data?.message || 'Failed to load voicemail stats')
       } finally {
         setLoading(false)

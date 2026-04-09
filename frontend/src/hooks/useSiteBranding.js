@@ -30,7 +30,6 @@ export const useSiteBranding = () => {
             document.getElementsByTagName('head')[0].appendChild(link);
           }
         } catch (e) {
-          console.warn('Failed to set favicon', e);
         }
 
         // Apply login background
@@ -63,7 +62,6 @@ export const useSiteBranding = () => {
           document.getElementsByTagName('head')[0].appendChild(link);
         }
       } catch (e) {
-        console.warn('Failed to set favicon', e);
       }
 
       applyLoginBackground(site);

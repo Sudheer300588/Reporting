@@ -39,7 +39,7 @@ const MauticEmailsSection = ({ campaigns, selectedCampaign, setSelectedCampaign,
         if (!ref?.current) return;
         // showPicker is supported in some Chromium browsers; fallback to focus().
         if (typeof ref.current.showPicker === 'function') {
-            try { ref.current.showPicker(); } catch (err) { console.debug(err); }
+            try { ref.current.showPicker(); } catch (err) {}
         }
         if (typeof ref.current.focus === 'function') {
             ref.current.focus();
@@ -79,7 +79,6 @@ const MauticEmailsSection = ({ campaigns, selectedCampaign, setSelectedCampaign,
                 setEmailReportsIndex(reportIndex);
 
             } catch (error) {
-                console.error('Error fetching email data:', error);
                 setEmailReports([]);
             } finally {
                 setLoadingReports(false);

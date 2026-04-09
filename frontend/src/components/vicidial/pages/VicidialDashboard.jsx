@@ -62,7 +62,6 @@ export default function VicidialDashboard({ accessibleClientIds = null }) {
         const countsMap = countsRes?.data?.data || {};
         totalCampaigns = Object.values(countsMap).reduce((sum, v) => sum + Number(v || 0), 0);
       } catch (err) {
-        console.warn('counts fetch failed', err);
       }
 
       // Set all totals at once to avoid race conditions
@@ -76,7 +75,6 @@ export default function VicidialDashboard({ accessibleClientIds = null }) {
       setPageInput(String(payload.pagination?.page || pageNum));
 
     }catch(err){
-      console.error(err);
       setError('Failed to load agents data. Please try again.');
     }finally{ setLoading(false); }
   };
@@ -88,7 +86,6 @@ export default function VicidialDashboard({ accessibleClientIds = null }) {
       const count = res?.data?.data?.count || 0;
       setLiveAgentsCount(count);
     } catch (err) {
-      console.warn('Failed to fetch live agents count:', err);
       setLiveAgentsCount(0);
     }
   };
@@ -109,7 +106,6 @@ export default function VicidialDashboard({ accessibleClientIds = null }) {
         autoClose: 5000 
       });
     } catch (err) {
-      console.error('Sync failed:', err);
       setError('Failed to sync campaigns. Please try again.');
       toast.update(toastId, { 
         render: `❌ Failed to sync campaigns: ${err.message}`, 
@@ -200,7 +196,6 @@ export default function VicidialDashboard({ accessibleClientIds = null }) {
         const stats = Array.isArray(res?.data?.data) ? res.data.data[0] : res?.data?.data;
         return { agent, stats: stats || {} };
       } catch (err) {
-        console.error(`Failed to fetch stats for ${agent.user}:`, err);
         return { agent, stats: {} };
       }
     });
@@ -276,7 +271,6 @@ export default function VicidialDashboard({ accessibleClientIds = null }) {
       const agentsToExport = [...filteredAgents];
       await exportDetailedStats(agentsToExport, false);
     } catch (err) {
-      console.error('Export failed:', err);
       setError('Failed to export data: ' + err.message);
       toast.error(`❌ Failed to export data: ${err.message}`, {
         position: 'top-right',
@@ -337,7 +331,6 @@ export default function VicidialDashboard({ accessibleClientIds = null }) {
 
       await exportDetailedStats(agentsToExport, true);
     } catch (err) {
-      console.error('Export all failed:', err);
       setError('Failed to export all data: ' + err.message);
       toast.error(`❌ Failed to export all data: ${err.message}`, {
         position: 'top-right',

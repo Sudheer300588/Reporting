@@ -28,7 +28,6 @@ const MauticSettings = () => {
         try {
           window.dispatchEvent(new CustomEvent('mautic:sync-complete', { detail: result }));
         } catch (e) {
-          console.warn('Failed to dispatch sync event', e);
         }
 
         await refetchClients();

@@ -53,7 +53,6 @@ export async function getUnifiedClients() {
     setInCache(cacheKey, data);
     return data;
   } catch (error) {
-    console.error('Error fetching unified clients:', error);
     throw error;
   }
 }
@@ -72,7 +71,6 @@ export async function getMauticCampaigns(clientId) {
     setInCache(cacheKey, data);
     return data;
   } catch (error) {
-    console.error('Error fetching Mautic campaigns:', error);
     throw error;
   }
 }
@@ -91,7 +89,6 @@ export async function getMauticEmails(clientId) {
     setInCache(cacheKey, data);
     return data;
   } catch (error) {
-    console.error('Error fetching Mautic emails:', error);
     throw error;
   }
 }
@@ -110,7 +107,6 @@ export async function getMauticSegments(clientId) {
     setInCache(cacheKey, data);
     return data;
   } catch (error) {
-    console.error('Error fetching Mautic segments:', error);
     throw error;
   }
 }
@@ -130,7 +126,6 @@ export async function getDropcowboyCampaigns(clientName) {
     setInCache(cacheKey, data);
     return data;
   } catch (error) {
-    console.error('Error fetching DropCowboy campaigns:', error);
     throw error;
   }
 }
@@ -149,7 +144,6 @@ export async function getSmsCampaigns(clientId) {
     setInCache(cacheKey, data);
     return data;
   } catch (error) {
-    console.error('Error fetching SMS campaigns:', error);
     throw error;
   }
 }
@@ -184,7 +178,6 @@ export async function getClientData(client) {
         result.emails = emails;
         result.segments = segments;
       }).catch(error => {
-        console.error('Error fetching Mautic data:', error);
       })
     );
   }
@@ -194,7 +187,6 @@ export async function getClientData(client) {
       getDropcowboyCampaigns(client.name).then(campaigns => {
         result.dropcowboyCampaigns = campaigns;
       }).catch(error => {
-        console.error('Error fetching DropCowboy data:', error);
       })
     );
   }
@@ -204,7 +196,6 @@ export async function getClientData(client) {
       getSmsCampaigns(client.id).then(campaigns => {
         result.smsCampaigns = campaigns;
       }).catch(error => {
-        console.error('Error fetching SMS data:', error);
       })
     );
   }
@@ -222,7 +213,6 @@ export async function assignClient(clientId, assignData) {
     clearClientCache(); // Clear cache after mutation
     return response.data;
   } catch (error) {
-    console.error('Error assigning client:', error);
     throw error;
   }
 }
@@ -239,7 +229,6 @@ export async function unassignClient(clientId, userId, assignmentClientId = null
     clearClientCache(); // Clear cache after mutation
     return response.data;
   } catch (error) {
-    console.error('Error unassigning client:', error);
     throw error;
   }
 }
@@ -252,7 +241,6 @@ export async function getManagers() {
     const response = await axios.get(`${BASE_URL}/api/clients/assignment/managers`);
     return response.data.managers || response.data || [];
   } catch (error) {
-    console.error('Error fetching managers:', error);
     throw error;
   }
 }
@@ -267,7 +255,6 @@ export async function getEmployeesForManager(managerId) {
     );
     return response.data.employees || [];
   } catch (error) {
-    console.error('Error fetching employees for manager:', error);
     throw error;
   }
 }

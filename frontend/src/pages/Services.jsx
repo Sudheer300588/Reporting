@@ -54,7 +54,6 @@ export default function Services() {
                 
                 setError(null);
             } catch (err) {
-                console.error('Error fetching accessible clients:', err);
                 setError('Failed to load accessible clients');
                 setAccessibleClientIds([]);
             } finally {

@@ -28,7 +28,6 @@ const SignupPage = () => {
         const res = await axios.get('/api/auth/signup-allowed');
         setSignupAllowed(res.data.allowed);
       } catch (err) {
-        console.error('Error checking signup status:', err);
         setSignupAllowed(false);
       }
     };
@@ -116,7 +115,6 @@ const SignupPage = () => {
         setLoading(false);
       }
     } catch (error) {
-      console.error('Signup error:', error);
       toast.error(getErrorMessage(error, 'Registration failed'));
       setLoading(false);
     }
