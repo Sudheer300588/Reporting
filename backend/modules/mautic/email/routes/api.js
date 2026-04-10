@@ -3,7 +3,7 @@ import express from "express";
 import mauticAPI from "../../mauticAPI.js";
 import dataService from "../services/dataService.js";
 import reportJsonImportService from "../services/reportJsonImportService.js";
-import statsService from "../services/statsService.js";
+import simpleEmailStatsService from "../services/simpleEmailStatsService.js";
 import smsService from "../../sms/services/smsService.js";
 import MauticSchedulerService from "../../schedulerService.js";
 import encryptionService from "../../encryption.js";
@@ -1491,21 +1491,95 @@ router.post("/clients/test-connection", async (req, res) => {
  * GET /api/mautic/dashboard
  * Get dashboard metrics (legacy - use /stats/overview for new code)
  */
-router.get("/dashboard", async (req, res) => {
+router.get("/dashboard", authenticate, async (req, res) => {
   try {
-    const { clientId } = req.query;
+    const { clientId, refresh } = req.query;
 
-    const metrics = await dataService.getDashboardMetrics(
-      clientId ? parseInt(clientId) : null
-    );
+    const shouldRefresh = String(refresh || '').toLowerCase() === 'true';
+    let allowedClientIds = null;
 
-    res.json(metrics);
+    if (!hasFullAccess(req.user)) {
+      allowedClientIds = await getAccessibleClientIds(req.user.id, req.user);
+    }
+
+    if (clientId) {
+      const selectedClientId = parseInt(clientId, 10);
+      if (Number.isNaN(selectedClientId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid clientId'
+        });
+      }
+
+      if (allowedClientIds && !allowedClientIds.includes(selectedClientId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied for selected client'
+        });
+      }
+
+      allowedClientIds = [selectedClientId];
+    }
+
+    const data = shouldRefresh
+      ? await simpleEmailStatsService.refreshAndStoreStats({ clientIds: allowedClientIds })
+      : await simpleEmailStatsService.getStoredStats({ clientIds: allowedClientIds });
+
+    res.json({
+      success: true,
+      data
+    });
   } catch (error) {
     logger.error("Error fetching dashboard metrics:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch dashboard metrics",
       error: error.message,
+    });
+  }
+});
+
+router.post('/simple-email-stats/sync', authenticate, async (req, res) => {
+  try {
+    const { clientId } = req.body || {};
+
+    let allowedClientIds = null;
+    if (!hasFullAccess(req.user)) {
+      allowedClientIds = await getAccessibleClientIds(req.user.id, req.user);
+    }
+
+    if (clientId) {
+      const selectedClientId = parseInt(clientId, 10);
+      if (Number.isNaN(selectedClientId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid clientId'
+        });
+      }
+
+      if (allowedClientIds && !allowedClientIds.includes(selectedClientId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied for selected client'
+        });
+      }
+
+      allowedClientIds = [selectedClientId];
+    }
+
+    const data = await simpleEmailStatsService.refreshAndStoreStats({ clientIds: allowedClientIds });
+
+    res.json({
+      success: true,
+      message: 'Simple email stats sync completed',
+      data
+    });
+  } catch (error) {
+    logger.error('Error syncing simple email stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to sync simple email stats',
+      error: error.message
     });
   }
 });
@@ -1522,7 +1596,8 @@ router.get("/dashboard", async (req, res) => {
  */
 router.get("/stats/overview", authenticate, async (req, res) => {
   try {
-    const { fromDate, toDate } = req.query;
+    const { clientId, refresh } = req.query;
+    const shouldRefresh = String(refresh || '').toLowerCase() === 'true';
 
     // Get accessible client IDs for current user
     let clientIds = null;
@@ -1531,122 +1606,35 @@ router.get("/stats/overview", authenticate, async (req, res) => {
       clientIds = accessibleClientIds;
     }
 
-    // ⚡ CRITICAL FIX: Filter out SMS-only clients to prevent duplicate email stats
-    // Even if user has access to SMS-only clients, exclude them from email stats
-    if (clientIds) {
-      const validClients = await prisma.mauticClient.findMany({
-        where: {
-          id: { in: clientIds },
-          reportId: { not: 'sms-only' }
-        },
-        select: { id: true }
-      });
-      clientIds = validClients.map(c => c.id);
+    if (clientId) {
+      const selectedClientId = parseInt(clientId, 10);
+      if (Number.isNaN(selectedClientId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid clientId'
+        });
+      }
+
+      if (clientIds && !clientIds.includes(selectedClientId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied for selected client'
+        });
+      }
+
+      clientIds = [selectedClientId];
     }
 
-    const result = await statsService.getApplicationStats({ fromDate, toDate, clientIds });
-    res.json(result);
+    const data = shouldRefresh
+      ? await simpleEmailStatsService.refreshAndStoreStats({ clientIds })
+      : await simpleEmailStatsService.getStoredStats({ clientIds });
+
+    res.json({ success: true, data });
   } catch (error) {
     logger.error("Error fetching application stats:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch application stats",
-      error: error.message,
-    });
-  }
-});
-
-/**
- * GET /api/mautic/clients/:clientId/stats
- * Client-level stats - all campaigns for this client
- * Query params: fromDate, toDate, includeCampaigns, page, limit
- */
-router.get("/clients/:clientId/stats", async (req, res) => {
-  try {
-    const { clientId } = req.params;
-    const { fromDate, toDate, includeCampaigns, page, limit } = req.query;
-
-    const result = await statsService.getClientStats(parseInt(clientId), {
-      fromDate,
-      toDate,
-      includeCampaigns: includeCampaigns !== 'false',
-      page: page ? parseInt(page) : 1,
-      limit: limit ? parseInt(limit) : 20
-    });
-
-    if (!result.success) {
-      return res.status(404).json(result);
-    }
-
-    res.json(result);
-  } catch (error) {
-    logger.error("Error fetching client stats:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch client stats",
-      error: error.message,
-    });
-  }
-});
-
-/**
- * GET /api/mautic/campaigns/:campaignId/stats
- * Campaign-level stats - all emails in this campaign
- * Query params: fromDate, toDate, page, limit
- */
-router.get("/campaigns/:campaignId/stats", async (req, res) => {
-  try {
-    const { campaignId } = req.params;
-    const { fromDate, toDate, page, limit } = req.query;
-
-    const result = await statsService.getCampaignStats(parseInt(campaignId), {
-      fromDate,
-      toDate,
-      page: page ? parseInt(page) : 1,
-      limit: limit ? parseInt(limit) : 50
-    });
-
-    if (!result.success) {
-      return res.status(404).json(result);
-    }
-
-    res.json(result);
-  } catch (error) {
-    logger.error("Error fetching campaign stats:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch campaign stats",
-      error: error.message,
-    });
-  }
-});
-
-/**
- * GET /api/mautic/emails/:emailId/stats
- * Email-level stats - individual email (granular entry point)
- * Query params: includeHistory, fromDate, toDate
- */
-router.get("/emails/:emailId/stats", async (req, res) => {
-  try {
-    const { emailId } = req.params;
-    const { includeHistory, fromDate, toDate } = req.query;
-
-    const result = await statsService.getEmailStats(parseInt(emailId), {
-      includeHistory: includeHistory === 'true',
-      fromDate,
-      toDate
-    });
-
-    if (!result.success) {
-      return res.status(404).json(result);
-    }
-
-    res.json(result);
-  } catch (error) {
-    logger.error("Error fetching email stats:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch email stats",
       error: error.message,
     });
   }
@@ -2068,126 +2056,43 @@ router.post("/sync/all", async (req, res) => {
 
     logger.debug("Manual sync triggered for all clients");
 
-    // Respond immediately to avoid frontend timeout
-    res.json({
-      success: true,
-      message: "Sync started in background",
-      isSyncing: true,
-    });
+    // Run sync synchronously so the UI only refreshes after all stats are stored.
+    const result = await simpleEmailStatsService.refreshAndStoreStats();
 
-    // Read optional query param `forceFull=true` to force full re-fetch
-    const forceFull = String(req.query.forceFull || "false") === "true";
-
-    // Run sync in background
-    schedulerService
-      .syncAllClients({ forceFull })
-      .then((result) => {
-        const detailsRaw = result?.results?.details;
-        const details = Array.isArray(detailsRaw)
-          ? detailsRaw
-          : (detailsRaw && typeof detailsRaw === 'object')
-            ? Object.values(detailsRaw)
-            : [];
-
-        const lines = details
-          .filter(Boolean)
-          .map((d) => {
-            const name = d.clientName || d.clientId || 'unknown-client';
-            const ok = d.success ? 'OK' : 'FAIL';
-            const emails = d.emails?.total ?? 0;
-            const campaigns = d.campaigns?.total ?? 0;
-            const segments = d.segments?.total ?? 0;
-            const smsStats = d.smsStats?.total ?? 0;
-            const smsReplies = d.smsStats?.replies ?? 0;
-            const repNew = d.emailReports?.created ?? 0;
-            const repSkip = d.emailReports?.skipped ?? 0;
-            const repDb = d.emailReports?.totalInDb ?? 0;
-            return `${ok} | ${name} | emails=${emails} campaigns=${campaigns} segments=${segments} smsStats=${smsStats} replies=${smsReplies} emailReports(new=${repNew}, skipped=${repSkip}, db=${repDb})`;
-          });
-
-        logger.info(`✅ Sync completed: ${result?.successful || 0}/${result?.totalClients || 0} clients | duration=${result?.duration || '?'}s`);
-        for (const line of lines) logger.info(line);
-        // Send email notification
-        const duration = Math.floor((Date.now() - currentSyncStartTime) / 1000);
-        notifyMauticSyncCompleted({
-          type: "all",
-          totalClients: result.totalClients || 0,
-          successful: result.successful || 0,
-          failed: result.failed || 0,
-          durationSeconds: duration,
-        }).catch((err) =>
-          logger.error("Failed to send sync completion email:", err)
-        );
-
-        // After successful Mautic sync, trigger DropCowboy data refresh to re-match clients
-        // ✅ Only if SFTP credentials are configured AND user explicitly requested it
-        // ⚡ OPTIMIZATION: Skip DropCowboy sync by default to avoid unnecessary overhead
-        const triggerDropCowboy = String(req.query.syncDropCowboy || "false") === "true";
-
-        if (triggerDropCowboy) {
-          (async () => {
-            try {
-              // Check if SFTP credentials exist before triggering DropCowboy sync
-              const sftpCred = await prisma.sFTPCredential.findFirst({
-                orderBy: { updatedAt: 'desc' }
-              });
-
-              if (!sftpCred || !sftpCred.host || !sftpCred.username || !sftpCred.password) {
-                logger.debug("⏭️  Skipping DropCowboy sync: No SFTP credentials configured");
-                return;
-              }
-
-              logger.debug(
-                "🔄 Triggering DropCowboy data refresh after Mautic sync..."
-              );
-              const dropCowboyDataService = new DropCowboyDataService();
-              const dropCowboyScheduler = new DropCowboyScheduler();
-
-              // Clear all existing DropCowboy data
-              const clearResult =
-                await dropCowboyDataService.clearAllDropCowboyData();
-              logger.debug("DropCowboy data cleared:", clearResult);
-
-              // Trigger SFTP sync to re-fetch and re-match data to Mautic clients
-              const syncResult = await dropCowboyScheduler.fetchAndProcessData();
-
-              if (syncResult.skipped) {
-                logger.debug(`⏭️  DropCowboy sync skipped: ${syncResult.reason}`);
-              } else {
-                logger.debug(
-                  "DropCowboy SFTP sync completed after Mautic sync:",
-                  syncResult
-                );
-              }
-            } catch (syncError) {
-              logger.error(
-                "Failed to refresh DropCowboy data after Mautic sync:",
-                syncError
-              );
-            }
-          })();
-        } else {
-          logger.debug("⏭️  Skipping DropCowboy sync (not requested via ?syncDropCowboy=true)");
-        }
-      })
-      .catch((error) => {
-        logger.error("❌ Sync failed:", error);
-        // Send email notification
-        notifyMauticSyncFailed({
-          type: "all",
-          error: error.message || String(error),
-        }).catch((err) =>
-          logger.error("Failed to send sync failure email:", err)
-        );
-      })
-      .finally(() => {
-        // Always reset sync status
-        isSyncInProgress = false;
-        currentSyncStartTime = null;
-        currentSyncType = null;
-        // Invalidate cache so next status check gets fresh data
-        syncStatusCache.lastUpdated = 0;
+    const triggerDropCowboy = String(req.query.syncDropCowboy || "false") === "true";
+    if (triggerDropCowboy) {
+      const sftpCred = await prisma.sFTPCredential.findFirst({
+        orderBy: { updatedAt: 'desc' }
       });
+
+      if (sftpCred && sftpCred.host && sftpCred.username && sftpCred.password) {
+        const dropCowboyDataService = new DropCowboyDataService();
+        const dropCowboyScheduler = new DropCowboyScheduler();
+        await dropCowboyDataService.clearAllDropCowboyData();
+        await dropCowboyScheduler.fetchAndProcessData();
+        logger.debug("✅ DropCowboy sync completed after simple Mautic stats sync");
+      }
+    }
+
+    const duration = Math.floor((Date.now() - currentSyncStartTime) / 1000);
+    await notifyMauticSyncCompleted({
+      type: "all",
+      totalClients: result?.overview?.totalClients || 0,
+      successful: result?.syncSummary?.syncedClients || 0,
+      failed: 0,
+      durationSeconds: duration,
+    }).catch((err) => logger.error("Failed to send sync completion email:", err));
+
+    isSyncInProgress = false;
+    currentSyncStartTime = null;
+    currentSyncType = null;
+
+    return res.json({
+      success: true,
+      message: "Sync completed successfully",
+      isSyncing: false,
+      data: result
+    });
   } catch (error) {
     logger.error("Error syncing all clients:", error);
 
