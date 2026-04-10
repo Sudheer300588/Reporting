@@ -1,8 +1,8 @@
 import prisma from '../prisma/client.js';
 import logger from '../utils/logger.js';
 import { hasFullAccess, getAccessibleClientIds, userHasPermission } from '../middleware/auth.js';
-import MauticSchedulerService from '../modules/mautic/schedulerService.js';
 import DropCowboyScheduler from '../modules/dropCowboy/services/schedulerService.js';
+import simpleEmailStatsService from '../modules/mautic/email/services/simpleEmailStatsService.js';
 
 /**
  * Dashboard Service
@@ -11,7 +11,6 @@ import DropCowboyScheduler from '../modules/dropCowboy/services/schedulerService
  */
 class DashboardService {
   constructor() {
-    this.mauticScheduler = new MauticSchedulerService();
     this.dropCowboyScheduler = new DropCowboyScheduler();
   }
 
@@ -257,115 +256,35 @@ class DashboardService {
    */
   async _getEmailMetrics(currentUser) {
     try {
-      // Get accessible client IDs
-      let clientIds = null;
+      let allowedClientIds = null;
       if (!hasFullAccess(currentUser)) {
-        const accessibleClientIds = await getAccessibleClientIds(currentUser.id, currentUser);
-        clientIds = accessibleClientIds;
+        allowedClientIds = await getAccessibleClientIds(currentUser.id, currentUser);
       }
 
-      // Filter out SMS-only clients
-      let validClientIds = null;
-      if (clientIds) {
-        const validClients = await prisma.mauticClient.findMany({
-          where: {
-            clientId: { in: clientIds },
-            isActive: true
-          },
-          select: { id: true }
-        });
-        validClientIds = validClients.map(c => c.id);
-      } else {
-        const allClients = await prisma.mauticClient.findMany({
-          where: { isActive: true },
-          select: { id: true }
-        });
-        validClientIds = allClients.map(c => c.id);
-      }
+      const metrics = await simpleEmailStatsService.getStoredStats({
+        clientIds: allowedClientIds
+      });
 
-      if (validClientIds.length === 0) {
+      if (!metrics?.emailStats) {
         return this._getEmptyEmailMetrics();
       }
 
-      // Aggregate email stats
-      const emailStats = await prisma.mauticEmail.aggregate({
-        where: { clientId: { in: validClientIds } },
-        _sum: {
-          sentCount: true,
-          readCount: true,
-          clickedCount: true,
-          unsubscribed: true,
-          bounced: true,
-          uniqueClicks: true
-        },
-        _count: { id: true }
-      });
-
-      // Get click summary
-      const clickSummary = await prisma.mauticClickTrackable.aggregate({
-        where: { clientId: { in: validClientIds } },
-        _sum: {
-          uniqueHits: true,
-          hits: true
-        }
-      });
-
-      // Get top performing emails (limit to 6 for dashboard chart)
-      const topEmails = await prisma.mauticEmail.findMany({
-        where: {
-          clientId: { in: validClientIds },
-          sentCount: { gt: 0 }
-        },
-        include: {
-          client: {
-            select: { name: true }
-          }
-        },
-        orderBy: { readCount: 'desc' },
-        take: 6
-      });
-
-      // Calculate rates
-      const totalSent = emailStats._sum.sentCount || 0;
-      const totalRead = emailStats._sum.readCount || 0;
-      const totalClicked = emailStats._sum.clickedCount || 0;
-      const totalUniqueClicks = clickSummary._sum.uniqueHits || 0;
-      const totalBounced = emailStats._sum.bounced || 0;
-      const totalUnsubscribed = emailStats._sum.unsubscribed || 0;
-
-      const openRate = totalSent > 0 ? (totalRead / totalSent) * 100 : 0;
-      const clickRate = totalSent > 0 ? (totalClicked / totalSent) * 100 : 0;
-      const bounceRate = totalSent > 0 ? (totalBounced / totalSent) * 100 : 0;
-      const unsubscribeRate = totalSent > 0 ? (totalUnsubscribed / totalSent) * 100 : 0;
-
+      const emailStats = metrics.emailStats;
       return {
-        totalSent,
-        totalRead,
-        totalClicked,
-        totalUniqueClicks,
-        totalBounced,
-        totalUnsubscribed,
-        openRate: parseFloat(openRate.toFixed(2)),
-        clickRate: parseFloat(clickRate.toFixed(2)),
-        bounceRate: parseFloat(bounceRate.toFixed(2)),
-        unsubscribeRate: parseFloat(unsubscribeRate.toFixed(2)),
-        avgReadRate: openRate,
-        avgClickRate: clickRate,
-        avgUnsubscribeRate: unsubscribeRate,
-        topEmails: topEmails.map(email => ({
-          id: email.id,
-          name: email.name,
-          clientName: email.client?.name || 'Unknown',
-          sentCount: email.sentCount,
-          readCount: email.readCount,
-          clickedCount: email.clickedCount,
-          uniqueClicks: email.uniqueClicks || 0,
-          bounced: email.bounced,
-          unsubscribed: email.unsubscribed,
-          readRate: parseFloat(email.readRate?.toFixed(2) || 0),
-          clickRate: parseFloat(email.clickRate?.toFixed(2) || 0),
-          unsubscribeRate: parseFloat(email.unsubscribeRate?.toFixed(2) || 0)
-        }))
+        totalSent: emailStats.totalSent || 0,
+        totalRead: emailStats.totalRead || 0,
+        totalClicked: emailStats.totalClicked || 0,
+        totalUniqueClicks: emailStats.totalUniqueClicks || 0,
+        totalBounced: emailStats.totalBounced || 0,
+        totalUnsubscribed: emailStats.totalUnsubscribed || 0,
+        openRate: emailStats.openRate || 0,
+        clickRate: emailStats.clickRate || 0,
+        bounceRate: emailStats.bounceRate || 0,
+        unsubscribeRate: emailStats.unsubscribeRate || 0,
+        avgReadRate: emailStats.avgReadRate || 0,
+        avgClickRate: emailStats.avgClickRate || 0,
+        avgUnsubscribeRate: emailStats.avgUnsubscribeRate || 0,
+        topEmails: (emailStats.topEmails || []).slice(0, 6)
       };
     } catch (error) {
       logger.error('[Dashboard] Error fetching email metrics:', error);
@@ -718,14 +637,16 @@ class DashboardService {
    */
   async _triggerMauticSync(forceFull = false) {
     try {
-      logger.info('[Dashboard] Starting Mautic automation clients sync...', { forceFull });
-      const result = await this.mauticScheduler.syncAllClients({ forceFull });
+      logger.info('[Dashboard] Starting simple Mautic email stats sync...', { forceFull });
+      const result = await simpleEmailStatsService.refreshAndStoreStats();
 
-      if (result.success) {
-        logger.info(`[Dashboard] Mautic sync completed: ${result.successful}/${result.totalClients} clients synced`);
+      if (result && result.emailStats) {
+        const syncedClients = result?.syncSummary?.syncedClients || 0;
+        const totalClients = result?.overview?.totalClients || 0;
+        logger.info(`[Dashboard] Simple Mautic sync completed: ${syncedClients}/${totalClients} clients synced`);
         return {
           success: true,
-          message: `Synced ${result.successful}/${result.totalClients} Mautic automation clients`,
+          message: `Synced ${syncedClients}/${totalClients} Mautic clients`,
           isSyncing: false,
           details: result
         };
