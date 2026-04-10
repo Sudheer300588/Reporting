@@ -54,6 +54,9 @@ export const testConnection = (credentials) =>
 export const fetchDashboardMetrics = (clientId = null) =>
   mauticAPI.get("/dashboard", { params: { clientId } });
 
+export const syncSimpleEmailStats = (clientId = null) =>
+  mauticAPI.post('/simple-email-stats/sync', { clientId });
+
 export const fetchContacts = (params = {}) =>
   mauticAPI.get("/contacts", { params });
 

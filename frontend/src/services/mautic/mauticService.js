@@ -17,8 +17,7 @@ import mauticAPI, {
   fetchEmails as apiFetchEmails,
   fetchSegments as apiFetchSegments,
   fetchCampaigns as apiFetchCampaigns,
-  syncAllClients as apiSyncAllClients,
-  syncClient as apiSyncClient
+  syncSimpleEmailStats as apiSyncSimpleEmailStats
 } from './api';
 
 class MauticService {
@@ -274,10 +273,10 @@ class MauticService {
    */
   async syncAllClients() {
     try {
-      const response = await apiSyncAllClients();
+      const response = await apiSyncSimpleEmailStats();
       return {
         success: response.data.success,
-        data: response.data.results,
+        data: response.data.data,
         message: response.data.message,
         error: null
       };
@@ -309,7 +308,7 @@ class MauticService {
    */
   async syncClient(clientId) {
     try {
-      const response = await apiSyncClient(clientId);
+      const response = await apiSyncSimpleEmailStats(clientId);
       return {
         success: response.data.success,
         data: response.data.data,
