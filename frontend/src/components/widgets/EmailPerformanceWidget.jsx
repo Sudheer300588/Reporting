@@ -62,9 +62,44 @@ const EmailPerformanceWidget = ({ clientId, clientName }) => {
       setError(null)
       
       try {
-        const response = await axios.get(`/api/mautic/clients/${clientId}/stats`)
+        const response = await axios.get('/api/mautic/dashboard', {
+          params: { clientId }
+        })
         if (response.data?.success) {
-          setStats(response.data.data)
+          const data = response.data.data || {}
+          setStats({
+            stats: {
+              sent: data.emailStats?.totalSent || 0,
+              read: data.emailStats?.totalRead || 0,
+              clicked: data.emailStats?.totalClicked || 0,
+              bounced: data.emailStats?.totalBounced || 0,
+              unsubscribed: data.emailStats?.totalUnsubscribed || 0,
+              openRate: data.emailStats?.openRate || 0,
+              clickRate: data.emailStats?.clickRate || 0,
+              unsubscribeRate: data.emailStats?.unsubscribeRate || 0,
+              avgOpenRate: data.emailStats?.avgReadRate || 0,
+              avgClickRate: data.emailStats?.avgClickRate || 0,
+              avgUnsubscribeRate: data.emailStats?.avgUnsubscribeRate || 0
+            },
+            clickSummary: {
+              totalUniqueClicks: data.emailStats?.totalUniqueClicks || 0
+            },
+            topEmails: (data.emailStats?.topEmails || []).map(email => ({
+              id: email.id,
+              name: email.name,
+              uniqueHits: email.uniqueClicks || 0,
+              stats: {
+                sent: email.sent || 0,
+                read: email.read || 0,
+                clicked: email.clicked || 0,
+                bounced: email.bounced || 0,
+                unsubscribed: email.unsubscribed || 0,
+                openRate: email.openRate || 0,
+                clickRate: email.clickRate || 0,
+                unsubscribeRate: email.unsubscribeRate || 0
+              }
+            }))
+          })
         } else {
           setError('Failed to load email stats')
         }

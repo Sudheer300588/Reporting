@@ -16,10 +16,12 @@ const MauticServiceStats = ({ selectedClient }) => {
 
             try {
                 setLoading(true);
-                const response = await axios.get(`/api/mautic/clients/${selectedClient.mauticApiId}/stats`);
+                const response = await axios.get('/api/mautic/dashboard', {
+                    params: { clientId: selectedClient.mauticApiId }
+                });
                 
                 if (response.data?.success) {
-                    const clientData = response.data.data.client;
+                    const clientData = response.data.data?.overview?.clientsData?.[0] || {};
                     setStats({
                         totalContacts: clientData.totalContacts || 0,
                         totalEmails: clientData.totalEmails || 0,

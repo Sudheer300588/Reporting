@@ -8,7 +8,6 @@ import React, { useState } from 'react';
 import { RefreshCw, AlertCircle, Mail, List, Target } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useDashboardMetrics, useClients, useSync } from '../../hooks/mautic';
-import { waitForSyncCompletion } from '../../utils/syncHelper';
 import MetricsCards from './MetricsCards';
 import ClientSelector from './ClientSelector';
 import CampaignsSection from './CampaignsSection';
@@ -68,10 +67,6 @@ export default function MauticDashboard({ clientId = null, clientName = null, ac
         ? `Sync completed! ${result.data.results.successful}/${result.data.results.totalClients} clients synced successfully.`
         : result.message || 'Sync completed successfully!';
       toast.success(message, { autoClose: 5000 });
-      
-      // Wait for backend to finish all DB writes before refetching
-      await waitForSyncCompletion();
-      
       refetch();
       refetchClients();
     } else {
