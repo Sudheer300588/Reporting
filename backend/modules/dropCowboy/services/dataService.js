@@ -1,9 +1,6 @@
 import logger from '../../../utils/logger.js';
-import { format, parseISO, isWithinInterval } from "date-fns";
 import prisma from "../../../prisma/client.js";
 import { Prisma } from "@prisma/client";
-import { ca } from "zod/v4/locales";
-import { cli } from "winston/lib/winston/config/index.js";
 
 // Simple in-memory cache for frequently accessed data
 const cache = {
@@ -329,184 +326,129 @@ class DataService {
       const campaigns = await prisma.dropCowboyCampaign.findMany({
         where: whereClause,
         include: {
-          client: {
-            select: {
-              name: true,
-            },
-          },
+          client: { select: { name: true } },
         },
       });
 
-      // For each campaign, calculate metrics
-      const campaignsWithDetails = await Promise.all(
-        campaigns.map(async (campaign) => {
-          // Build record filters
-          const recordWhere = {
-            campaignId: campaign.campaignId,
-          };
+      // Build shared date filter for records
+      const dateFilter = {};
+      if (filters.startDate) {
+        dateFilter.gte = new Date(filters.startDate + "T00:00:00.000Z");
+      }
+      if (filters.endDate) {
+        dateFilter.lte = new Date(filters.endDate + "T23:59:59.999Z");
+      }
+      const hasDateFilter = Object.keys(dateFilter).length > 0;
 
-          if (filters.startDate) {
-            // Convert YYYY-MM-DD to ISO-8601 DateTime (start of day)
-            recordWhere.date = {
-              gte: new Date(filters.startDate + "T00:00:00.000Z"),
-            };
-          }
-          if (filters.endDate) {
-            // Convert YYYY-MM-DD to ISO-8601 DateTime (end of day)
-            recordWhere.date = {
-              ...recordWhere.date,
-              lte: new Date(filters.endDate + "T23:59:59.999Z"),
-            };
-          }
+      // ✅ OPTIMIZED: Single groupBy query to get status counts per campaign
+      // instead of N×5 individual queries
+      const campaignIds = campaigns.map(c => c.campaignId);
 
-          // Get total count of records for accurate metrics (no limit)
-          const totalSent = await prisma.dropCowboyCampaignRecord.count({
-            where: recordWhere,
-          });
+      const recordWhere = {
+        campaignId: { in: campaignIds },
+        ...(hasDateFilter ? { date: dateFilter } : {}),
+      };
 
-          // Get records for display (no limit - pagination handled at API level)
-          const records = await prisma.dropCowboyCampaignRecord.findMany({
-            where: recordWhere,
-            orderBy: { createdAt: "desc" },
-          });
+      const [statusGroups, costAgg, carrierGroups, lineTypeGroups, dateRanges] = await Promise.all([
+        // Status counts grouped by campaignId + status
+        prisma.dropCowboyCampaignRecord.groupBy({
+          by: ["campaignId", "status"],
+          where: recordWhere,
+          _count: { _all: true },
+        }),
+        // Cost aggregates grouped by campaignId
+        prisma.dropCowboyCampaignRecord.groupBy({
+          by: ["campaignId"],
+          where: recordWhere,
+          _sum: { cost: true, complianceFee: true, ttsFee: true },
+          _count: { _all: true },
+        }),
+        // Carrier distribution grouped by campaignId + carrier
+        prisma.dropCowboyCampaignRecord.groupBy({
+          by: ["campaignId", "carrier"],
+          where: { ...recordWhere, carrier: { not: "" } },
+          _count: { _all: true },
+        }),
+        // Line type distribution grouped by campaignId + lineType
+        prisma.dropCowboyCampaignRecord.groupBy({
+          by: ["campaignId", "lineType"],
+          where: { ...recordWhere, lineType: { not: "" } },
+          _count: { _all: true },
+        }),
+        // Date ranges per campaign (min/max date)
+        prisma.dropCowboyCampaignRecord.groupBy({
+          by: ["campaignId"],
+          where: recordWhere,
+          _min: { date: true },
+          _max: { date: true },
+        }),
+      ]);
 
-          // Calculate metrics from full aggregate (for accurate stats)
-          const metricsAgg = await prisma.dropCowboyCampaignRecord.aggregate({
-            where: recordWhere,
-            _count: true,
-            _sum: {
-              cost: true,
-              complianceFee: true,
-              ttsFee: true,
-            },
-          });
+      const SUCCESS_STATUSES = ["sent", "success", "delivered", "SENT", "SUCCESS", "DELIVERED"];
+      const FAILURE_STATUSES = ["failed", "failure", "error", "FAILED", "FAILURE", "ERROR"];
 
-          const successCount = await prisma.dropCowboyCampaignRecord.count({
-            where: {
-              ...recordWhere,
-              status: {
-                in: [
-                  "sent",
-                  "success",
-                  "delivered",
-                ],
-              },
-            },
-          });
+      // Index all results by campaignId for O(1) lookup
+      const statusByCampaign = {};
+      for (const row of statusGroups) {
+        if (!statusByCampaign[row.campaignId]) statusByCampaign[row.campaignId] = {};
+        statusByCampaign[row.campaignId][row.status] = row._count._all;
+      }
 
-          const failureCount = await prisma.dropCowboyCampaignRecord.count({
-            where: {
-              ...recordWhere,
-              status: {
-                in: ["failed", "failure", "error"],
-              },
-            },
-          });
+      const costByCampaign = {};
+      for (const row of costAgg) {
+        costByCampaign[row.campaignId] = row;
+      }
 
-          const otherStatusCount = await prisma.dropCowboyCampaignRecord.count({
-            where: {
-              ...recordWhere,
-              status: {
-                notIn: [
-                  "sent",
-                  "success",
-                  "delivered",
-                  "failed",
-                  "failure",
-                  "error"
-                ],
-              },
-            },
-          });
+      const carrierByCampaign = {};
+      for (const row of carrierGroups) {
+        if (!carrierByCampaign[row.campaignId]) carrierByCampaign[row.campaignId] = {};
+        carrierByCampaign[row.campaignId][row.carrier || "Unknown"] = row._count._all;
+      }
 
-          const successfulDeliveries = successCount;
-          const failedSends = failureCount;
-          const otherStatus = otherStatusCount;
-          const totalCost =
-            parseFloat(metricsAgg._sum.cost || 0) +
-            parseFloat(metricsAgg._sum.complianceFee || 0) +
-            parseFloat(metricsAgg._sum.ttsFee || 0);
+      const lineTypeByCampaign = {};
+      for (const row of lineTypeGroups) {
+        if (!lineTypeByCampaign[row.campaignId]) lineTypeByCampaign[row.campaignId] = {};
+        lineTypeByCampaign[row.campaignId][row.lineType || "Unknown"] = row._count._all;
+      }
 
-          const successRate =
-            totalSent > 0
-              ? ((successfulDeliveries / totalSent) * 100).toFixed(2)
-              : 0;
+      const dateRangeByCampaign = {};
+      for (const row of dateRanges) {
+        dateRangeByCampaign[row.campaignId] = { start: row._min.date, end: row._max.date };
+      }
 
-          // Get carrier distribution
-          const carriers = await prisma.dropCowboyCampaignRecord.groupBy({
-            by: ["carrier"],
-            where: { ...recordWhere, carrier: { not: "" } },
-            _count: true,
-          });
+      // Build campaign details from aggregated data (no per-campaign DB queries)
+      const campaignsWithDetails = campaigns.map((campaign) => {
+        const statuses = statusByCampaign[campaign.campaignId] || {};
+        const costs = costByCampaign[campaign.campaignId];
 
-          const carrierDistribution = {};
-          carriers.forEach((c) => {
-            carrierDistribution[c.carrier || "Unknown"] = c._count;
-          });
+        const totalSent = costs?._count._all || 0;
+        const successfulDeliveries = SUCCESS_STATUSES.reduce((sum, s) => sum + (statuses[s] || 0), 0);
+        const failedSends = FAILURE_STATUSES.reduce((sum, s) => sum + (statuses[s] || 0), 0);
+        const otherStatus = totalSent - successfulDeliveries - failedSends;
+        const totalCost =
+          parseFloat(costs?._sum.cost || 0) +
+          parseFloat(costs?._sum.complianceFee || 0) +
+          parseFloat(costs?._sum.ttsFee || 0);
+        const successRate = totalSent > 0 ? ((successfulDeliveries / totalSent) * 100).toFixed(2) : 0;
 
-          // Get line type distribution
-          const lineTypes = await prisma.dropCowboyCampaignRecord.groupBy({
-            by: ["lineType"],
-            where: { ...recordWhere, lineType: { not: "" } },
-            _count: true,
-          });
-
-          const lineTypeDistribution = {};
-          lineTypes.forEach((l) => {
-            lineTypeDistribution[l.lineType || "Unknown"] = l._count;
-          });
-
-          // Get date range
-          const dateRange =
-            records.length > 0
-              ? {
-                  start: records[records.length - 1].date,
-                  end: records[0].date,
-                }
-              : { start: null, end: null };
-
-          return {
-            campaignName: campaign.campaignName,
-            campaignId: campaign.campaignId,
-            client: campaign.client?.name || null,
-            totalSent,
-            successfulDeliveries,
-            failedSends,
-            otherStatus,
-            pendingSends: 0, // Deprecated
-            successRate: parseFloat(successRate),
-            totalCost: parseFloat(totalCost.toFixed(4)),
-            averageCost:
-              totalSent > 0
-                ? parseFloat((totalCost / totalSent).toFixed(4))
-                : 0,
-            carriers: carrierDistribution,
-            lineTypes: lineTypeDistribution,
-            dateRange,
-            records: records.map((r) => ({
-              campaignName: r.campaignName,
-              campaignId: r.campaignId,
-              phoneNumber: r.phoneNumber,
-              carrier: r.carrier,
-              lineType: r.lineType,
-              status: r.status,
-              statusCode: r.statusCode,
-              statusReason: r.statusReason,
-              date: r.date,
-              callbacks: r.callbacks,
-              smsCount: r.smsCount,
-              cost: parseFloat(r.cost),
-              complianceFee: parseFloat(r.complianceFee),
-              ttsFee: parseFloat(r.ttsFee),
-              firstName: r.firstName,
-              lastName: r.lastName,
-              company: r.company,
-              email: r.email,
-              recordId: r.recordId,
-            })),
-          };
-        })
-      );
+        return {
+          campaignName: campaign.campaignName,
+          campaignId: campaign.campaignId,
+          client: campaign.client?.name || null,
+          totalSent,
+          successfulDeliveries,
+          failedSends,
+          otherStatus: Math.max(0, otherStatus),
+          pendingSends: 0,
+          successRate: parseFloat(successRate),
+          totalCost: parseFloat(totalCost.toFixed(4)),
+          averageCost: totalSent > 0 ? parseFloat((totalCost / totalSent).toFixed(4)) : 0,
+          carriers: carrierByCampaign[campaign.campaignId] || {},
+          lineTypes: lineTypeByCampaign[campaign.campaignId] || {},
+          dateRange: dateRangeByCampaign[campaign.campaignId] || { start: null, end: null },
+          records: [], // Records are loaded separately via /records endpoint (paginated)
+        };
+      });
 
       // Calculate overall metrics
       // Build record-level where clause that matches the campaign filter
