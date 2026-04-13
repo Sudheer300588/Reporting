@@ -107,6 +107,6 @@ jobs:
             pm2 logs hc-development --lines 20 --nostream
 
             echo "🌐 Checking server response"
-            curl -f http://localhost:3000 || echo "⚠️ App might not be responding on port 3000"
+            curl --fail --silent --show-error --connect-timeout 5 --max-time 10 --retry 3 --retry-delay 2 --retry-connrefused http://localhost:3000 || echo "⚠️ App might not be responding on port 3000"
 
             echo "✅ Deployment completed successfully"
