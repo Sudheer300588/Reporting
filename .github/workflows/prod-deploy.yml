@@ -42,7 +42,7 @@ jobs:
             cd backend
             nvm use 18 || nvm install 18
 
-            rm -rf node_modules package-lock.json
+            rm -rf node_modules
             npm install
 
             npx prisma generate
@@ -60,7 +60,7 @@ jobs:
             cd ../frontend
             nvm use 20 || nvm install 20
 
-            rm -rf node_modules package-lock.json
+            rm -rf node_modules
             npm install
             npm run build
 
