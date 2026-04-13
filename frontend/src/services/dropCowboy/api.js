@@ -18,6 +18,20 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Catch HTML error pages (e.g. 502 nginx gateway errors) before they cause
+// "Unexpected token '<'" JSON parse crashes in the UI
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const contentType = error.response?.headers?.["content-type"] || "";
+    if (contentType.includes("text/html")) {
+      error.message =
+        "Server is temporarily unavailable (502). Please try again in a moment.";
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const fetchMetrics = async (filters = {}) => {
   try {
     const params = new URLSearchParams();

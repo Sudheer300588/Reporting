@@ -227,7 +227,7 @@ router.get("/metrics", authenticate, async (req, res) => {
 });
 
 // Manual fetch from SFTP
-router.post("/fetch", async (req, res) => {
+router.post("/fetch", authenticate, async (req, res) => {
   try {
     // Check if sync is already in progress
     if (isSyncInProgress) {
@@ -251,6 +251,16 @@ router.post("/fetch", async (req, res) => {
     try {
       // Download files from SFTP
       const downloadResult = await sftpService.downloadAllFiles();
+
+      // Handle skipped sync (no SFTP credentials configured)
+      if (downloadResult.skipped) {
+        return res.json({
+          success: true,
+          message: downloadResult.reason || "Sync skipped - no SFTP credentials configured",
+          warning: downloadResult.reason,
+          data: { filesDownloaded: 0, campaignsProcessed: 0 },
+        });
+      }
 
       if (!downloadResult.success) {
         throw new Error("Failed to download files from SFTP");
@@ -497,7 +507,7 @@ router.get("/campaigns/:campaignName", async (req, res) => {
 
     res.json({
       success: true,
-      data: campaigns,
+      data: campaign,
     });
   } catch (error) {
     logger.error("Error fetching DropCowboy campaigns list", {
