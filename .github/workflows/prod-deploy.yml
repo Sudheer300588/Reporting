@@ -1,7 +1,7 @@
 name: Deploy to VPS (Production - Reporting App)
 
 on:
-  workflow_dispatch:   # manual trigger only
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -36,48 +36,74 @@ jobs:
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
             # =========================
-            # BACKEND (Node 18)
+            # BACKEND SETUP (Node 18)
             # =========================
+            echo "🔧 Backend setup"
             cd backend
             nvm use 18 || nvm install 18
-            npm ci
+
+            rm -rf node_modules package-lock.json
+            npm install
+
             npx prisma generate
 
+            # ensure .env exists
+            if [ ! -f .env ]; then
+              echo "❌ ERROR: .env file missing"
+              exit 1
+            fi
+
             # =========================
-            # FRONTEND (Node 20)
+            # FRONTEND BUILD (Node 20)
             # =========================
+            echo "🎨 Frontend build"
             cd ../frontend
             nvm use 20 || nvm install 20
-            npm ci
+
+            rm -rf node_modules package-lock.json
+            npm install
             npm run build
 
             # =========================
             # MOVE BUILD
             # =========================
+            echo "📦 Moving build"
             rm -rf ../backend/dist
             mv dist ../backend/dist
 
             # =========================
-            # RESTART BACKEND
+            # PM2 RESTART (SAFE)
             # =========================
+            echo "🚀 Starting backend"
             cd ../backend
             nvm use 18
 
-            # ensure pm2 installed
             command -v pm2 >/dev/null 2>&1 || npm install -g pm2
-
-            # ensure pm2 path
             export PATH=$PATH:$(npm bin -g)
 
-            # safe restart (same as your dev)
             if pm2 describe hc-development > /dev/null; then
               echo "🔄 Reloading app"
-              pm2 reload ecosystem.config.cjs
+              pm2 reload ecosystem.config.cjs || pm2 restart ecosystem.config.cjs
             else
               echo "🆕 Starting app"
               pm2 start ecosystem.config.cjs
             fi
 
+            # ensure correct app
+            pm2 restart hc-development
+
             pm2 save
 
-            echo "🚀 Production Deployment Completed"
+            # =========================
+            # HEALTH CHECK
+            # =========================
+            echo "🔍 Checking PM2 status"
+            pm2 status
+
+            echo "📜 Last logs"
+            pm2 logs hc-development --lines 20
+
+            echo "🌐 Checking app response"
+            curl -f http://localhost:3000 || (echo "❌ App not responding" && exit 1)
+
+            echo "✅ Production Deployment Successful"
