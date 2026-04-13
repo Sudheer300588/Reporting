@@ -101,7 +101,7 @@ jobs:
             pm2 status
 
             echo "📜 Last logs"
-            pm2 logs hc-development --lines 20
+            pm2 logs hc-development --lines 20 --nostream
 
             echo "🌐 Checking app response"
             curl -f --connect-timeout 5 --max-time 10 --retry 3 --retry-delay 2 http://localhost:3000 || (echo "❌ App not responding" && exit 1)
