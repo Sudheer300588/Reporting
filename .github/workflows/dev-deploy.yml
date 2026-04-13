@@ -107,7 +107,7 @@ jobs:
             pm2 status
 
             echo "📜 Last logs"
-            pm2 logs hc-development --lines 20
+            pm2 logs hc-development --lines 20 --nostream
 
             echo "🌐 Checking server response"
             curl -f http://localhost:3000 || echo "⚠️ App might not be responding on port 3000"
