@@ -104,6 +104,6 @@ jobs:
             pm2 logs hc-development --lines 20
 
             echo "🌐 Checking app response"
-            curl -f http://localhost:3000 || (echo "❌ App not responding" && exit 1)
+            curl -f --connect-timeout 5 --max-time 10 --retry 3 --retry-delay 2 http://localhost:3000 || (echo "❌ App not responding" && exit 1)
 
             echo "✅ Production Deployment Successful"
