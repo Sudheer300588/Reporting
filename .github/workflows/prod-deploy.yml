@@ -89,9 +89,6 @@ jobs:
               pm2 start ecosystem.config.cjs
             fi
 
-            # ensure correct app
-            pm2 restart hc-development
-
             pm2 save
 
             # =========================
