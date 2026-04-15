@@ -2,8 +2,7 @@ import logger from '../../../utils/logger.js';
 import { format, parseISO, isWithinInterval } from "date-fns";
 import prisma from "../../../prisma/client.js";
 import { Prisma } from "@prisma/client";
-import { ca } from "zod/v4/locales";
-import { cli } from "winston/lib/winston/config/index.js";
+
 
 // Simple in-memory cache for frequently accessed data
 const cache = {
@@ -122,38 +121,8 @@ class DataService {
           `   ✓ Campaign: ${campaign.campaignName} (${campaign.recordCount} records)`
         );
 
-        // OPTIMIZED: Use IN clause for bulk lookup (much faster than OR)
-        const uniquePhoneNumbers = [
-          ...new Set(campaign.records.map((r) => r.phoneNumber)),
-        ];
-        // Filter out invalid dates (empty strings, null, undefined)
-        const uniqueDates = [
-          ...new Set(
-            campaign.records
-              .map((r) => r.date)
-              .filter((d) => d && d.trim() !== "")
-          ),
-        ];
-
-        logger.debug(
-          `     - Checking ${uniquePhoneNumbers.length} unique phones × ${uniqueDates.length} unique dates`
-        );
-
-        // Fetch existing records using IN clauses (MySQL optimized)
-        const existingRecords = await prisma.dropCowboyCampaignRecord.findMany({
-          where: {
-            campaignId: campaignId,
-            phoneNumber: { in: uniquePhoneNumbers },
-            date: uniqueDates.length > 0 ? { in: uniqueDates } : undefined,
-          },
-          select: {
-            campaignId: true,
-            phoneNumber: true,
-            date: true,
-          },
-        });
-
-        // Helper function to parse dates consistently
+        // Helper function to parse dates consistently — normalise to UTC midnight
+        // so that "2024-03-15" and "2024-03-15T00:00:00.000Z" produce the same key.
         const parseDate = (dateStr) => {
           if (!dateStr || dateStr.trim() === "") return null;
           try {
@@ -164,7 +133,29 @@ class DataService {
           }
         };
 
-        // Create Set of existing composite keys for O(1) lookup
+        // Fetch ALL existing records for this campaign (not filtered by phone/date)
+        // so we never miss a duplicate caused by a partial IN-clause intersection.
+        // We only need the three fields that form the unique key.
+        const existingRecords = await prisma.dropCowboyCampaignRecord.findMany({
+          where: { campaignId: campaignId },
+          select: {
+            campaignId: true,
+            phoneNumber: true,
+            date: true,
+            recordId: true,
+          },
+        });
+
+        logger.debug(
+          `     - ${existingRecords.length} existing records already in DB for campaign ${campaignId}`
+        );
+
+        // Build two Sets for O(1) dedup:
+        //   1. recordId-based (most reliable when present)
+        //   2. composite (campaignId|phoneNumber|date) as fallback
+        const existingRecordIds = new Set(
+          existingRecords.filter((r) => r.recordId).map((r) => r.recordId)
+        );
         const existingKeys = new Set(
           existingRecords.map(
             (r) =>
@@ -174,13 +165,26 @@ class DataService {
           )
         );
 
-        // Filter out duplicates using Set lookup (O(n) complexity)
+        // Filter out duplicates — prefer recordId match, fall back to composite key.
+        // Also deduplicate within the incoming batch itself (multiple files can carry
+        // the same phone+null-date record, which MySQL's unique constraint won't catch
+        // because NULL != NULL in standard SQL equality).
+        const seenInBatch = new Set();
         const newRecords = campaign.records.filter((record) => {
+          // If both sides have a recordId, use it as the authoritative dedup key
+          if (record.recordId && existingRecordIds.has(record.recordId)) {
+            return false;
+          }
           const parsedDate = parseDate(record.date);
           const key = `${record.campaignId}|${record.phoneNumber}|${
             parsedDate || "null"
           }`;
-          return !existingKeys.has(key);
+          // Skip if already in DB
+          if (existingKeys.has(key)) return false;
+          // Skip if already seen in this batch (handles NULL-date duplicates across files)
+          if (seenInBatch.has(key)) return false;
+          seenInBatch.add(key);
+          return true;
         });
 
         logger.debug(
