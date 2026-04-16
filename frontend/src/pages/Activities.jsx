@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTimezone } from '../contexts/TimezoneContext';
 import axios from 'axios';
 import {
     Activity,
@@ -16,6 +17,7 @@ import {
 import { usePermissions } from '../utils/permissions';
 
 const Activities = () => {
+    const { formatDateTime } = useTimezone();
     const { user } = useAuth();
     const { hasFullAccess, canViewActivities } = usePermissions(user);
     const [activities, setActivities] = useState([]);
@@ -205,7 +207,7 @@ const Activities = () => {
                                             </div>
                                             <div className="flex items-center text-xs text-gray-500">
                                                 <Calendar size={12} className="mr-1" />
-                                                {new Date(activity.createdAt).toLocaleString()}
+                                                {formatDateTime(activity.createdAt)}
                                             </div>
                                         </div>
 

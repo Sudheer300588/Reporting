@@ -10,6 +10,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
+import { useTimezone } from "../../contexts/TimezoneContext";
 import { hasFullAccess } from "../../utils/permissions";
 
 // Backend API base URL - uses relative path for same-origin requests
@@ -17,6 +18,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || "";
 
 const RecordsTable = ({ campaigns, accessibleClientIds = [] }) => {
   const { user } = useAuth();
+  const { formatShortDate } = useTimezone();
   const [serverRecords, setServerRecords] = useState([]);
   const [totalRecords, setTotalRecords] = useState(0);
   const [availableClients, setAvailableClients] = useState([]);
@@ -672,10 +674,7 @@ const RecordsTable = ({ campaigns, accessibleClientIds = [] }) => {
                       />
                       <span className="font-medium">
                         {record.date
-                          ? new Date(record.date).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                          })
+                          ? formatShortDate(record.date)
                           : "-"}
                       </span>
                     </div>

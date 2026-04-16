@@ -205,6 +205,7 @@ router.post('/login', authLimiter, validate(loginSchema), async (req, res) => {
         role: true,
         isActive: true,
         tokenVersion: true,
+        timezone: true,
         customRoleId: true,
         customRole: {
           select: {
@@ -263,6 +264,7 @@ router.post('/login', authLimiter, validate(loginSchema), async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        timezone: user.timezone,
         customRoleId: user.customRoleId,
         customRole: user.customRole
       }
@@ -343,6 +345,7 @@ router.get('/me', authenticate, async (req, res) => {
         name: true,
         email: true,
         role: true,
+        timezone: true,
         customRoleId: true,
         customRole: {
           select: {
@@ -363,6 +366,7 @@ router.get('/me', authenticate, async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        timezone: user.timezone,
         customRoleId: user.customRoleId,
         customRole: user.customRole
       }

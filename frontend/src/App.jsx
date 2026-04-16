@@ -4,6 +4,7 @@ import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 
 import { AuthProvider } from './contexts/AuthContext.jsx'
+import { TimezoneProvider } from './contexts/TimezoneContext.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import Navbar from './components/Navbar.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
@@ -60,6 +61,7 @@ function App() {
   return (
     <>
       <AuthProvider>
+        <TimezoneProvider>
         <Router
           future={{
             v7_startTransition: true,
@@ -103,6 +105,7 @@ function App() {
             />
           </div>
         </Router>
+        </TimezoneProvider>
       </AuthProvider>
     </>
   )

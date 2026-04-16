@@ -7,10 +7,11 @@ import { AlertCircle, RefreshCw, Activity } from 'lucide-react';
 import useViewLevel from "../../zustand/useViewLevel";
 import ErrorBoundary from './ErrorBoundary.jsx';
 import MetricsCards from './MetricsCards.jsx';
-import { format, parseISO } from 'date-fns';
+import { useTimezone } from '../../contexts/TimezoneContext';
 
 
 const DropCowboyServiceStats = ({ selectedClient }) => {
+    const { formatShortDateTime } = useTimezone();
     // Use custom hooks for data fetching
     const { metrics, loading, error, refetch: refetchMetrics } = useMetrics({});
     const { syncLogs, refetch: refetchSyncLogs } = useSyncLogs(10);
@@ -136,7 +137,7 @@ const DropCowboyServiceStats = ({ selectedClient }) => {
                     {/* Last Sync Info - Compact */}
                     {syncLogs.length > 0 && syncLogs[0] && (
                         <div className="text-xs text-gray-500">
-                            Last sync: {format(parseISO(syncLogs[0].timestamp), 'MMM dd, h:mm a')}
+                            Last sync: {formatShortDateTime(syncLogs[0].timestamp)}
                         </div>
                     )}
                 </div>

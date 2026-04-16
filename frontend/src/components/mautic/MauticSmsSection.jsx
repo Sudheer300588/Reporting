@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import { MessageSquare, ArrowLeft, Activity, TrendingUp, CheckCircle, XCircle, MessageCircle } from "lucide-react";
 import axios from "axios";
 import ExportButton from "../ExportButton";
+import { useTimezone } from "../../contexts/TimezoneContext";
 
 const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients }) => {
+    const { formatDateTime } = useTimezone();
     const [view, setView] = useState('list'); // 'list', 'messages', or 'activity'
     const [smsCampaigns, setSmsCampaigns] = useState([]);
     const [selectedCampaign, setSelectedCampaign] = useState(null);
@@ -590,7 +592,7 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                                             </td>
                                             <td className="px-4 py-3">
                                                 <span className="text-sm text-gray-600">
-                                                    {msg.repliedAt ? new Date(msg.repliedAt).toLocaleString() : '-'}
+                                                    {msg.repliedAt ? formatDateTime(msg.repliedAt) : '-'}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3 text-center">
@@ -722,7 +724,7 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                                     </div>
                                     {leadActivity.message.sentAt && (
                                         <p className="text-xs text-gray-500 mt-2">
-                                            Sent: {new Date(leadActivity.message.sentAt).toLocaleString()}
+                                            Sent: {leadActivity.message.sentAt ? formatDateTime(leadActivity.message.sentAt) : '-'}
                                         </p>
                                     )}
                                 </div>
@@ -750,7 +752,7 @@ const MauticSmsSection = ({ selectedClient, goBackToServices, goBackToClients })
                                     </div>
                                     {leadActivity.reply.repliedAt && (
                                         <p className="text-xs text-gray-500 mt-2">
-                                            Replied: {new Date(leadActivity.reply.repliedAt).toLocaleString()}
+                                            Replied: {leadActivity.reply.repliedAt ? formatDateTime(leadActivity.reply.repliedAt) : '-'}
                                         </p>
                                     )}
                                 </div>
