@@ -3,6 +3,7 @@ import axios from 'axios';
 import { toast } from 'react-toastify';
 import { Settings as SettingsIcon } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTimezone } from '../../contexts/TimezoneContext';
 import SettingsSection from './SettingsSection';
 import { useSettings } from './SettingsLayout';
 import {
@@ -70,6 +71,7 @@ const SAMPLE_MAP = {
 };
 
 const NotificationsSettings = () => {
+  const { formatDateTime } = useTimezone();
   const { user } = useAuth();
   const { canAccessSetting } = useSettings();
 
@@ -653,7 +655,7 @@ const NotificationsSettings = () => {
                       {emailLogs.map((log) => (
                         <tr key={log.id}>
                           <td className="px-4 py-2 text-sm text-gray-600 whitespace-nowrap">
-                            {new Date(log.sentAt).toLocaleString()}
+                            {formatDateTime(log.sentAt)}
                           </td>
                           <td className="px-4 py-2 text-sm text-gray-700">
                             {getActionLabel(log.action)}

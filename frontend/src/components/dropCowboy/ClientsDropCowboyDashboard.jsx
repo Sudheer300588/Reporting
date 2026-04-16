@@ -7,12 +7,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { Activity, AlertCircle, RefreshCw } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
 import { toast } from 'react-toastify';
 import ErrorBoundary from './ErrorBoundary';
 import { useMetrics, useSyncLogs, useManualFetch } from '../../hooks/dropCowboy/useDropCowboy';
 import dropCowboyService from '../../services/dropCowboy/dropCowboyService';
 import { extractUniqueClients } from '../../utils/dropCowboy/helpers';
+import { useTimezone } from '../../contexts/TimezoneContext';
 import ClientsTable from './ClientsTable';
 import useViewLevel from '../../zustand/useViewLevel';
 
@@ -24,6 +24,7 @@ import useViewLevel from '../../zustand/useViewLevel';
  * @param {String} clientName - Optional: Display client name in header (lazy-loads only this client's campaigns)
  */
 export default function ClientsDropCowboyDashboard({ clientCampaigns = null, clientName = null }) {
+    const { formatShortDateTime } = useTimezone();
     const [clientFilter, setClientFilter] = useState(clientName || 'All');
     const [clientOptions, setClientOptions] = useState(['All']);
     const [loading, setLoading] = useState(true);
@@ -207,7 +208,7 @@ export default function ClientsDropCowboyDashboard({ clientCampaigns = null, cli
                         {/* Last Sync Info - Compact */}
                         {syncLogs.length > 0 && syncLogs[0] && (
                             <div className="text-xs text-gray-500">
-                                Last sync: {format(parseISO(syncLogs[0].timestamp), 'MMM dd, h:mm a')}
+                                Last sync: {formatShortDateTime(syncLogs[0].timestamp)}
                             </div>
                         )}
                     </div>

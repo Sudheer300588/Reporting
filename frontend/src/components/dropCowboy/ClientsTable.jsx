@@ -3,9 +3,10 @@ import { Loader2 } from "lucide-react";
 import MetricsCards from "./MetricsCards";
 import useViewLevel from "../../zustand/useViewLevel";
 import ExportButton from "../ExportButton";
-
+import { useTimezone } from "../../contexts/TimezoneContext";
 
 const ClientsTable = () => {
+  const { formatShortDate } = useTimezone();
   const [serverRecords, setServerRecords] = useState([]);
   const [totalRecords, setTotalRecords] = useState(0);
   const [loadingPage, setLoadingPage] = useState(false);
@@ -766,11 +767,7 @@ const ClientsTable = () => {
                           {getStatusBadge(record.status)}
                         </td>
                         <td className="px-4 py-3">
-                          {new Date(record.date).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric'
-                          })}
+                          {record.date ? formatShortDate(record.date, { year: 'numeric' }) : '-'}
                         </td>
                         <td className="px-4 py-3">{record.firstName}</td>
                         <td className="px-4 py-3">{record.lastName}</td>

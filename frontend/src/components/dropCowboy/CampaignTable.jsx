@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, Phone, CheckCircle2, XCircle, Calendar, DollarSign, ChevronLeft, ChevronRight, Info } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTimezone } from '../../contexts/TimezoneContext';
 import ExportButton from '../ExportButton';
 
 const CampaignTable = ({ campaigns }) => {
   const { user } = useAuth();
+  const { formatShortDateTime } = useTimezone();
   const [expandedCampaign, setExpandedCampaign] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [recordPages, setRecordPages] = useState({});
@@ -332,7 +333,7 @@ const CampaignTable = ({ campaigns }) => {
                                 </div>
                               </td>
                               <td className="py-2.5 px-3 text-gray-700 text-xs font-medium">
-                                {record.date ? format(parseISO(record.date), 'MMM dd, h:mm a') : 'N/A'}
+                                {record.date ? formatShortDateTime(record.date) : 'N/A'}
                               </td>
                               {user && user.role === 'superadmin' && (
                                 <td className="py-2.5 px-3 text-right text-gray-900 font-bold text-xs">

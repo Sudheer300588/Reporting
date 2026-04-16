@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useTimezone } from '../contexts/TimezoneContext';
 import axios from 'axios';
 import { User, Lock, Save, Eye, EyeOff, AlertCircle, CheckCircle } from 'lucide-react';
 
 const Profile = () => {
   const { user, updateUser } = useAuth();
+  const { formatDate } = useTimezone();
   const [activeTab, setActiveTab] = useState('profile');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -217,7 +219,7 @@ const Profile = () => {
                   <input
                     type="text"
                     className="form-input bg-gray-50"
-                    value={user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}
+                    value={user?.createdAt ? formatDate(user.createdAt) : 'N/A'}
                     disabled
                   />
                 </div>

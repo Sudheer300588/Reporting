@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, AlertCircle, RefreshCw } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
 import { toast } from 'react-toastify';
 import RecordsTable from './RecordsTable';
 import ErrorBoundary from './ErrorBoundary';
 import { useSyncLogs, useManualFetch } from '../../hooks/dropCowboy/useDropCowboy';
+import { useTimezone } from '../../contexts/TimezoneContext';
 
 export default function DropCowboyDashboard({ clientCampaigns = null, clientName = null, accessibleClientIds = [] }) {
+    const { formatShortDateTime } = useTimezone();
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
     const [recordsClientFilter, setRecordsClientFilter] = useState('all');
@@ -77,7 +78,7 @@ export default function DropCowboyDashboard({ clientCampaigns = null, clientName
                     <div className="flex items-center gap-4 text-xs text-gray-500">
                         {syncLogs.length > 0 && (
                             <span>
-                                Last sync: {format(parseISO(syncLogs[0].timestamp), 'MMM dd, h:mm a')}
+                                Last sync: {formatShortDateTime(syncLogs[0].timestamp)}
                             </span>
                         )}
                     </div>

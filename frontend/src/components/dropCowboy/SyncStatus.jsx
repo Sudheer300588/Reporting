@@ -1,8 +1,9 @@
 import React from 'react';
 import { RefreshCw, Download, Clock, CheckCircle, XCircle } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { useTimezone } from '../../contexts/TimezoneContext';
 
 const SyncStatus = ({ lastSync, onFetchNow, isFetching, syncLogs }) => {
+  const { formatDateTime, formatShortDateTime } = useTimezone();
   const getStatusIcon = (status) => {
     switch (status) {
       case 'success':
@@ -56,7 +57,7 @@ const SyncStatus = ({ lastSync, onFetchNow, isFetching, syncLogs }) => {
             <div className="flex items-center">
               <CheckCircle className="text-green-600 mr-2" size={15} strokeWidth={2.5} />
               <p className="text-sm font-semibold text-gray-900">
-                {format(parseISO(lastSync), 'MMM dd, yyyy h:mm a')}
+                {formatDateTime(lastSync)}
               </p>
             </div>
           </div>
@@ -79,7 +80,7 @@ const SyncStatus = ({ lastSync, onFetchNow, isFetching, syncLogs }) => {
                         {log.status === 'success' ? 'Sync Successful' : 'Sync Failed'}
                       </span>
                       <span className="text-xs text-gray-500 font-medium">
-                        {format(parseISO(log.timestamp), 'MMM dd, h:mm a')}
+                        {formatShortDateTime(log.timestamp)}
                       </span>
                     </div>
                     {log.status === 'success' && log.filesDownloaded > 0 && (

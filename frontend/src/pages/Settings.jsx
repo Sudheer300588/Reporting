@@ -10,7 +10,8 @@ import {
   SftpCredentials,
   VicidialCredentials,
   SiteBranding,
-  AISettings
+  AISettings,
+  TimezoneSettings
 } from '../components/Settings';
 
 const Settings = () => {
@@ -26,6 +27,7 @@ const Settings = () => {
       <SftpCredentials />
       <VicidialCredentials />
       <SiteBranding />
+      <TimezoneSettings />
       <AISettings />
     </SettingsLayout>
   );

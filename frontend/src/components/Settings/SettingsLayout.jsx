@@ -22,6 +22,7 @@ const SECTION_CONFIG = [
   { key: 'sftp', label: 'Voicemail SFTP Credentials' },
   { key: 'vicidial', label: 'Vicidial Credentials' },
   { key: 'sitecustom', label: 'Site Customization' },
+  { key: 'timezone', label: 'Timezone' },
   { key: 'ai', label: 'AI Assistant', superadminOnly: true },
 ];
 
@@ -48,7 +49,7 @@ const SettingsLayout = ({ children, myPermissions = [] }) => {
     const handleScroll = () => {
       if (isInteractingRef.current) return;
 
-      const sections = ['roles', 'mautic', 'sms-clients', 'notifs', 'maintenance', 'smtp', 'sftp', 'vicidial', 'sitecustom', 'ai'];
+      const sections = ['roles', 'mautic', 'sms-clients', 'notifs', 'maintenance', 'smtp', 'sftp', 'vicidial', 'sitecustom', 'timezone', 'ai'];
 
       for (const key of sections) {
         const el = sectionRefs.current[key];
@@ -92,10 +93,14 @@ const SettingsLayout = ({ children, myPermissions = [] }) => {
     'sftp': 'Voicemail SFTP Credentials',
     'vicidial': 'Vicidial Credentials',
     'sitecustom': 'Site Customization',
+    'timezone': 'Timezone',
     'ai': 'AI Assistant'
   };
 
   const canAccessSetting = (settingKey) => {
+    // Timezone is accessible to all authenticated users
+    if (settingKey === 'timezone') return true;
+
     if (hasFullAccess()) return true;
 
     // Check customRole.permissions.Settings for the specific section
@@ -128,18 +133,8 @@ const SettingsLayout = ({ children, myPermissions = [] }) => {
   // Check if user has Settings page access
   const hasSettingsPageAccess = () => {
     if (hasFullAccess()) return true;
-    // Check customRole.permissions.Pages.Settings
-    if (user?.customRole?.permissions?.Pages?.Settings === true) return true;
-    // Also check if user has any Settings subsection permissions
-    const settingsPerms = user?.customRole?.permissions?.Settings;
-    // Handle object format: {"Autovation Clients": true}
-    if (settingsPerms && typeof settingsPerms === 'object' && !Array.isArray(settingsPerms)) {
-      if (Object.values(settingsPerms).some(v => v === true)) return true;
-    }
-    // Handle array format: ["Autovation Clients"] (legacy)
-    if (Array.isArray(settingsPerms) && settingsPerms.length > 0) return true;
-    // Legacy fallback
-    if (!user?.customRoleId && ['superadmin', 'admin'].includes(user?.role)) return true;
+    // All authenticated users can access Settings (at minimum for Timezone)
+    if (user) return true;
     return false;
   };
 

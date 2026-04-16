@@ -242,12 +242,27 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const updateTimezone = async (timezone) => {
+    if (!user) return;
+    try {
+      const response = await axios.put(`/api/users/${user.id}/timezone`, { timezone });
+      if (response.data?.user) {
+        setUser(response.data.user);
+      } else {
+        setUser((prev) => ({ ...prev, timezone }));
+      }
+    } catch (error) {
+      throw error;
+    }
+  };
+
   const value = {
     user,
     login,
     signup,
     logout,
     updateUser,
+    updateTimezone,
     loading,
     isAuthenticated: !!user,
     // OTP methods

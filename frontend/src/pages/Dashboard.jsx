@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext.jsx'
+import { useTimezone } from '../contexts/TimezoneContext.jsx'
 import axios from 'axios'
 import { toast } from 'react-toastify'
 import { 
@@ -16,6 +17,7 @@ import { usePermissions } from '../utils/permissions'
 
 const Dashboard = () => {
   const { user } = useAuth()
+  const { formatDateTime, getCurrentHour } = useTimezone()
   const navigate = useNavigate()
   const { hasFullAccess, hasPermission, canViewClients, canViewUsers, isTeamManager } = usePermissions(user)
   
@@ -117,7 +119,7 @@ const Dashboard = () => {
   }
 
   const getGreeting = () => {
-    const hour = new Date().getHours()
+    const hour = getCurrentHour()
     if (hour < 12) return 'Good morning'
     if (hour < 18) return 'Good afternoon'
     return 'Good evening'
@@ -676,6 +678,7 @@ const RateBox = ({ label, value, isNegative = false }) => {
 }
 
 const SyncIndicator = ({ label, status, lastSync, isActive }) => {
+  const { formatDateTime } = useTimezone()
   // Determine if credentials are configured
   const hasCredentials = status?.hasCredentials ?? true
   
@@ -700,7 +703,7 @@ const SyncIndicator = ({ label, status, lastSync, isActive }) => {
     if (isActive) return 'Syncing...'
     if (notConfigured) return 'Not configured'
     if (neverSynced) return 'Never synced'
-    return new Date(lastSync).toLocaleString()
+    return formatDateTime(lastSync)
   }
 
   return (

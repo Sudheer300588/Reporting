@@ -566,6 +566,59 @@ router.put('/:id', authenticate, canManageUser, ensureOwnerGuard(), async (req, 
   }
 });
 
+// @route   PUT /api/users/:id/timezone
+// @desc    Update user's preferred timezone
+// @access  Private (Self only)
+router.put('/:id/timezone', authenticate, async (req, res) => {
+  try {
+    const { timezone } = req.body;
+    const userId = parseInt(req.params.id);
+
+    // Users can only update their own timezone
+    if (userId !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    if (!timezone || typeof timezone !== 'string') {
+      return res.status(400).json({ success: false, message: 'Invalid timezone value' });
+    }
+
+    // Validate timezone is a real IANA timezone
+    try {
+      Intl.DateTimeFormat(undefined, { timeZone: timezone });
+    } catch {
+      return res.status(400).json({ success: false, message: 'Invalid timezone identifier' });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { timezone },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        timezone: true,
+        customRoleId: true,
+        customRole: {
+          select: { id: true, name: true, fullAccess: true, isTeamManager: true, permissions: true }
+        }
+      }
+    });
+
+    logger.info('User timezone updated', { userId, timezone });
+
+    res.json({
+      success: true,
+      message: 'Timezone updated successfully',
+      user: updatedUser
+    });
+  } catch (error) {
+    logger.error('Error updating timezone', { error: error.message, userId: req.params.id });
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // @route   PUT /api/users/:id/password
 // @desc    Change employee password
 // @access  Private (Self only)

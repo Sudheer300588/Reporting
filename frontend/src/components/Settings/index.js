@@ -12,3 +12,4 @@ export { default as Permissions } from './Permissions';
 export { default as NotificationsSettings } from './NotificationsSettings';
 export { default as MaintenanceEmail } from './MaintenanceEmail';
 export { default as AISettings } from './AISettings';
+export { default as TimezoneSettings } from './TimezoneSettings';
