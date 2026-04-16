@@ -302,6 +302,7 @@ model DropCowboyCampaignRecord {
   company       String    @default("") @db.VarChar(255)
   email         String    @default("") @db.VarChar(255)
   recordId      String?   @db.VarChar(100)
+  sourceFile    String    @default("") @db.VarChar(100)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -309,7 +310,6 @@ model DropCowboyCampaignRecord {
   campaign       DropCowboyCampaign @relation(fields: [campaignId], references: [campaignId], onDelete: Cascade)
   importedFile   ImportedFile?      @relation(fields: [importedFileId], references: [id], onDelete: SetNull)
 
-  @@unique([campaignId, phoneNumber, date])
   @@index([campaignId])
   @@index([campaignName])
   @@index([status])

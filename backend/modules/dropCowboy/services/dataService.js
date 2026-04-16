@@ -2,8 +2,7 @@ import logger from '../../../utils/logger.js';
 import { format, parseISO, isWithinInterval } from "date-fns";
 import prisma from "../../../prisma/client.js";
 import { Prisma } from "@prisma/client";
-import { ca } from "zod/v4/locales";
-import { cli } from "winston/lib/winston/config/index.js";
+
 
 // Simple in-memory cache for frequently accessed data
 const cache = {
@@ -14,201 +13,119 @@ const cache = {
 class DataService {
   async saveCampaignData(campaignData) {
     try {
-      logger.debug(`💾 Saving ${campaignData.length} campaigns to database...`);
+      logger.debug(`💾 Saving ${campaignData.length} campaign-file groups to database...`);
       let totalRecordsInserted = 0;
 
-      for (const campaign of campaignData) {
+      // Cache Mautic clients once for the whole batch
+      const mauticClients = await prisma.client.findMany({
+        where: { clientType: "mautic" },
+      });
+      const sortedClients = mauticClients.sort((a, b) =>
+        b.name.length - a.name.length || a.id - b.id
+      );
 
-        // campaignId comes directly from the grouped campaign object (set by parseLocalFiles)
-        const campaignId = campaign.campaignId;
-        if (!campaignId || campaignId === 'unknown') {
-          logger.warn(`   ⚠️  Skipping campaign with no campaignId: ${campaign.campaignName}`);
+      // Cache already-imported filenames so we skip them
+      const importedFiles = await prisma.importedFile.findMany({
+        select: { filename: true },
+      });
+      const importedFilenames = new Set(importedFiles.map((f) => f.filename));
+
+      // Delete all records that were saved before the file-level import system existed
+      // (sourceFile="" means they have no ImportedFile entry and are stale legacy data).
+      // This ensures a clean slate so the per-file import produces the exact right counts.
+      const legacyDeleted = await prisma.dropCowboyCampaignRecord.deleteMany({
+        where: { sourceFile: "" },
+      });
+      if (legacyDeleted.count > 0) {
+        logger.info(`🗑️  Deleted ${legacyDeleted.count} legacy records (sourceFile="") before re-import`);
+      }
+
+      // Group campaign-groups by source file. A single JSON file can contain
+      // multiple campaigns. We must process ALL campaigns from a file before
+      // marking it as imported — otherwise the first campaign marks the file
+      // done and subsequent campaigns from the same file get skipped.
+      const byFile = new Map();
+      for (const campaign of campaignData) {
+        const f = campaign.filename || '__no_file__';
+        if (!byFile.has(f)) byFile.set(f, []);
+        byFile.get(f).push(campaign);
+      }
+
+      for (const [sourceFile, fileCampaigns] of byFile) {
+        // Skip entire file if already fully imported
+        if (sourceFile !== '__no_file__' && importedFilenames.has(sourceFile)) {
+          logger.debug(`   ⏭️  Skipping already-imported file: ${sourceFile}`);
           continue;
         }
 
-        // ONLY match to Mautic clients (do NOT auto-create dropcowboy clients)
-        let clientId = null;
-        try {
-          // Check if a client already exists for this campaign
-          const existingCampaign = await prisma.dropCowboyCampaign.findUnique({
+        // Process every campaign group in this file
+        for (const campaign of fileCampaigns) {
+          const campaignId = campaign.campaignId;
+          if (!campaignId || campaignId === 'unknown') {
+            logger.warn(`   ⚠️  Skipping campaign with no campaignId: ${campaign.campaignName}`);
+            continue;
+          }
+
+          // Resolve clientId
+          let clientId = null;
+          try {
+            const existingCampaign = await prisma.dropCowboyCampaign.findUnique({
+              where: { campaignId },
+              select: { clientId: true },
+            });
+            if (existingCampaign?.clientId) {
+              clientId = existingCampaign.clientId;
+            } else {
+              const campaignNameLower = campaign.campaignName.toLowerCase();
+              const campaignNameNorm = campaignNameLower.replace(/[\s_\-]+/g, '');
+              let matchedClient = sortedClients.find((c) =>
+                campaignNameLower.startsWith(c.name.toLowerCase())
+              );
+              if (!matchedClient) {
+                matchedClient = sortedClients.find((c) => {
+                  const n = c.name.toLowerCase().replace(/[\s_\-]+/g, '');
+                  return n.length >= 3 && campaignNameNorm.startsWith(n);
+                });
+              }
+              if (!matchedClient) {
+                matchedClient = sortedClients.find((c) => {
+                  const w = c.name.split(/\s+/)[0].toLowerCase();
+                  return w.length >= 3 && campaignNameLower.startsWith(w);
+                });
+              }
+              if (!matchedClient) {
+                matchedClient = sortedClients.find((c) => {
+                  const sig = c.name.toLowerCase().split(/\s+/).find((w) => w.length >= 3);
+                  return sig && campaignNameLower.includes(sig);
+                });
+              }
+              if (matchedClient) clientId = matchedClient.id;
+            }
+          } catch (clientError) {
+            logger.error(`   ⚠️  Error matching campaign to client: ${clientError.message}`);
+          }
+
+          // Upsert campaign
+          await prisma.dropCowboyCampaign.upsert({
             where: { campaignId },
-            select: { clientId: true },
+            update: { campaignName: campaign.campaignName, clientId, updatedAt: new Date() },
+            create: { campaignName: campaign.campaignName, campaignId, clientId, recordCount: 0 },
           });
 
-          if (existingCampaign?.clientId) {
-            clientId = existingCampaign.clientId;
-          } else {
-            // ONLY get Mautic clients (clientType: "mautic")
-            const mauticClients = await prisma.client.findMany({
-              where: { clientType: "mautic" },
-            });
-
-            // Sort by name length (longest first) to prioritize more specific matches,
-            // then by id ascending so the oldest (canonical) record wins on ties
-            const sortedClients = mauticClients.sort((a, b) =>
-              b.name.length - a.name.length || a.id - b.id
-            );
-
-            const campaignNameLower = campaign.campaignName.toLowerCase();
-            // Normalized version for fuzzy matching (strips spaces, underscores, hyphens)
-            const campaignNameNorm = campaignNameLower.replace(/[\s_\-]+/g, '');
-
-            // Strategy 1: Try exact prefix match (case-insensitive)
-            let matchedClient = sortedClients.find((client) =>
-              campaignNameLower.startsWith(client.name.toLowerCase())
-            );
-
-            // Strategy 1b: Normalized prefix match (handles "1TouchOffice" vs "1 Touch Office_")
-            if (!matchedClient) {
-              matchedClient = sortedClients.find((client) => {
-                const clientNorm = client.name.toLowerCase().replace(/[\s_\-]+/g, '');
-                return clientNorm.length >= 3 && campaignNameNorm.startsWith(clientNorm);
-              });
-            }
-
-            // Strategy 2: Try matching first word/token of client name
-            if (!matchedClient) {
-              matchedClient = sortedClients.find((client) => {
-                const firstWord = client.name.split(/\s+/)[0].toLowerCase();
-                return firstWord.length >= 3 && campaignNameLower.startsWith(firstWord);
-              });
-            }
-
-            // Strategy 3: Check if any significant part of client name appears in campaign name
-            if (!matchedClient) {
-              matchedClient = sortedClients.find((client) => {
-                const clientWords = client.name.toLowerCase().split(/\s+/);
-                const significantWord = clientWords.find(word => word.length >= 3);
-                return significantWord && campaignNameLower.includes(significantWord);
-              });
-            }
-
-            if (matchedClient) {
-              clientId = matchedClient.id;
-              logger.debug(
-                `ℹ️ Matched Mautic client: ${matchedClient.name} (ID: ${clientId}) for campaign: ${campaign.campaignName}`
-              );
-            } else {
-              // No Mautic client matched - set clientId to null (do NOT create dropcowboy client)
-              logger.debug(
-                `⚠️  No Mautic client matched for campaign: ${campaign.campaignName}`
-              );
-            }
-          }
-        } catch (clientError) {
-          logger.error(
-            `   ⚠️  Error matching campaign to client: ${clientError.message}`
-          );
-        }
-
-        // Create or update campaign
-        await prisma.dropCowboyCampaign.upsert({
-          where: { campaignId },
-          update: {
-            campaignName: campaign.campaignName,
-            clientId: clientId,
-            recordCount: campaign.records.length,
-            updatedAt: new Date(),
-          },
-          create: {
-            campaignName: campaign.campaignName,
-            campaignId,
-            clientId: clientId,
-            recordCount: campaign.records.length,
-          },
-        });
-
-        logger.debug(
-          `   ✓ Campaign: ${campaign.campaignName} (${campaign.recordCount} records)`
-        );
-
-        // OPTIMIZED: Use IN clause for bulk lookup (much faster than OR)
-        const uniquePhoneNumbers = [
-          ...new Set(campaign.records.map((r) => r.phoneNumber)),
-        ];
-        // Filter out invalid dates (empty strings, null, undefined)
-        const uniqueDates = [
-          ...new Set(
-            campaign.records
-              .map((r) => r.date)
-              .filter((d) => d && d.trim() !== "")
-          ),
-        ];
-
-        logger.debug(
-          `     - Checking ${uniquePhoneNumbers.length} unique phones × ${uniqueDates.length} unique dates`
-        );
-
-        // Fetch existing records using IN clauses (MySQL optimized)
-        const existingRecords = await prisma.dropCowboyCampaignRecord.findMany({
-          where: {
-            campaignId: campaignId,
-            phoneNumber: { in: uniquePhoneNumbers },
-            date: uniqueDates.length > 0 ? { in: uniqueDates } : undefined,
-          },
-          select: {
-            campaignId: true,
-            phoneNumber: true,
-            date: true,
-          },
-        });
-
-        // Helper function to parse dates consistently
-        const parseDate = (dateStr) => {
-          if (!dateStr || dateStr.trim() === "") return null;
-          try {
-            const parsed = new Date(dateStr);
-            return isNaN(parsed.getTime()) ? null : parsed.toISOString();
-          } catch (e) {
-            return null;
-          }
-        };
-
-        // Create Set of existing composite keys for O(1) lookup
-        const existingKeys = new Set(
-          existingRecords.map(
-            (r) =>
-              `${r.campaignId}|${r.phoneNumber}|${
-                r.date ? new Date(r.date).toISOString() : "null"
-              }`
-          )
-        );
-
-        // Filter out duplicates using Set lookup (O(n) complexity)
-        const newRecords = campaign.records.filter((record) => {
-          const parsedDate = parseDate(record.date);
-          const key = `${record.campaignId}|${record.phoneNumber}|${
-            parsedDate || "null"
-          }`;
-          return !existingKeys.has(key);
-        });
-
-        logger.debug(
-          `     - Found ${existingRecords.length} existing records, inserting ${newRecords.length} new records`
-        );
-
-        // Bulk insert new records in batches of 500
-        const batchSize = 500;
-        for (let i = 0; i < newRecords.length; i += batchSize) {
-          const batch = newRecords.slice(i, i + batchSize);
-
-          if (batch.length > 0) {
+          // Insert ALL records — no dedup, no filtering
+          const records = campaign.records;
+          const batchSize = 500;
+          for (let i = 0; i < records.length; i += batchSize) {
+            const batch = records.slice(i, i + batchSize);
             await prisma.dropCowboyCampaignRecord.createMany({
               data: batch.map((record) => {
-                // Parse date properly - convert to Date or null
                 let dateValue = null;
                 if (record.date && record.date.trim() !== "") {
                   try {
-                    dateValue = new Date(record.date);
-                    // Check if date is valid
-                    if (isNaN(dateValue.getTime())) {
-                      dateValue = null;
-                    }
-                  } catch (e) {
-                    dateValue = null;
-                  }
+                    const d = new Date(record.date);
+                    if (!isNaN(d.getTime())) dateValue = d;
+                  } catch (_) {}
                 }
-
                 return {
                   campaignId: record.campaignId,
                   campaignName: record.campaignName,
@@ -229,29 +146,36 @@ class DataService {
                   company: record.company || "",
                   email: record.email || "",
                   recordId: record.recordId || null,
+                  sourceFile: record.sourceFile || "",
                 };
               }),
-              skipDuplicates: true,
             });
-
             totalRecordsInserted += batch.length;
-
-            if (newRecords.length > batchSize) {
-              logger.debug(
-                `     - Inserted ${Math.min(
-                  i + batchSize,
-                  newRecords.length
-                )}/${newRecords.length} records`
-              );
-            }
           }
+
+          logger.debug(`     ✓ ${campaign.campaignName} → ${records.length} records`);
         }
 
+        // Mark the whole file as imported AFTER all its campaigns are done
+        if (sourceFile !== '__no_file__') {
+          await prisma.importedFile.create({ data: { filename: sourceFile } });
+          importedFilenames.add(sourceFile);
+          logger.debug(`   ✅ File imported: ${sourceFile}`);
+        }
+      }
+
+      // Update recordCount on all affected campaigns
+      const campaignIds = [...new Set(campaignData.map((c) => c.campaignId).filter(Boolean))];
+      for (const cid of campaignIds) {
+        const count = await prisma.dropCowboyCampaignRecord.count({ where: { campaignId: cid } });
+        await prisma.dropCowboyCampaign.update({
+          where: { campaignId: cid },
+          data: { recordCount: count },
+        });
       }
 
       logger.debug(`✅ Total records inserted: ${totalRecordsInserted}`);
 
-      // Get aggregated metrics from database
       const metrics = await this.getMetrics();
       return metrics;
     } catch (error) {
