@@ -360,7 +360,7 @@ class SftpService {
               };
             }
             
-            campaignGroups[campaignId].records.push(record);
+            campaignGroups[campaignId].records.push({ ...record, sourceFile: file });
           }
           
           // Add each campaign group to parsedData

@@ -168,6 +168,7 @@ CREATE TABLE `DropCowboyCampaignRecord` (
     `company` VARCHAR(255) NOT NULL DEFAULT '',
     `email` VARCHAR(255) NOT NULL DEFAULT '',
     `recordId` VARCHAR(100) NULL,
+    `sourceFile` VARCHAR(100) NOT NULL DEFAULT '',
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
     `importedFileId` INTEGER NULL,
@@ -179,7 +180,6 @@ CREATE TABLE `DropCowboyCampaignRecord` (
     INDEX `DropCowboyCampaignRecord_phoneNumber_idx`(`phoneNumber`),
     INDEX `DropCowboyCampaignRecord_campaignId_date_idx`(`campaignId`, `date`),
     INDEX `DropCowboyCampaignRecord_campaignName_date_idx`(`campaignName`, `date`),
-    UNIQUE INDEX `DropCowboyCampaignRecord_campaignId_phoneNumber_date_key`(`campaignId`, `phoneNumber`, `date`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
