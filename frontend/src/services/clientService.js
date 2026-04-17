@@ -112,19 +112,53 @@ export async function getMauticSegments(clientId) {
 }
 
 /**
- * Get DropCowboy campaigns for a specific client (lazy-loaded)
+ * Get DropCowboy campaign summaries for a specific client (lazy-loaded)
  */
-export async function getDropcowboyCampaigns(clientName) {
-  const cacheKey = `dropcowboy-campaigns-${clientName}`;
+export async function getDropcowboyCampaigns(clientName, filters = {}) {
+  const cacheKey = `dropcowboy-campaigns-${clientName}-${filters.startDate || ''}-${filters.endDate || ''}`;
   const cached = getFromCache(cacheKey);
   if (cached) return cached;
 
   try {
     const encodedName = encodeURIComponent(clientName);
-    const response = await axios.get(`${BASE_URL}/api/clients/${encodedName}/dropcowboy/campaigns`);
-    const data = response.data?.data || [];
+    const response = await axios.get(`${BASE_URL}/api/clients/${encodedName}/dropcowboy/campaigns`, {
+      params: {
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+        noCache: filters.noCache ? true : undefined,
+      },
+    });
+    const data = {
+      campaigns: response.data?.data || [],
+      overall: response.data?.overall || null,
+    };
     setInCache(cacheKey, data);
     return data;
+  } catch (error) {
+    throw error;
+  }
+}
+
+/**
+ * Get DropCowboy records for a selected campaign (on-demand)
+ */
+export async function getDropcowboyCampaignRecords(clientName, campaignId, filters = {}) {
+  try {
+    const encodedName = encodeURIComponent(clientName);
+    const response = await axios.get(
+      `${BASE_URL}/api/clients/${encodedName}/dropcowboy/campaigns/${encodeURIComponent(campaignId)}/records`,
+      {
+        params: {
+          page: filters.page || 1,
+          limit: filters.limit || 50,
+          startDate: filters.startDate,
+          endDate: filters.endDate,
+          status: filters.status && filters.status !== 'all' ? filters.status : undefined,
+          noCache: filters.noCache ? true : undefined,
+        },
+      }
+    );
+    return response.data?.data || { records: [], metrics: null, pagination: null };
   } catch (error) {
     throw error;
   }
@@ -184,8 +218,8 @@ export async function getClientData(client) {
 
   if (client.services.includes('dropcowboy')) {
     promises.push(
-      getDropcowboyCampaigns(client.name).then(campaigns => {
-        result.dropcowboyCampaigns = campaigns;
+      getDropcowboyCampaigns(client.name).then(dropcowboyData => {
+        result.dropcowboyCampaigns = dropcowboyData.campaigns || [];
       }).catch(error => {
       })
     );
@@ -265,6 +299,7 @@ export default {
   getMauticEmails,
   getMauticSegments,
   getDropcowboyCampaigns,
+  getDropcowboyCampaignRecords,
   getSmsCampaigns,
   getClientData,
   assignClient,
