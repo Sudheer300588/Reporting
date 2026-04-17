@@ -432,7 +432,7 @@ const ClientsTable = ({ refreshTick = 0 }) => {
                     <td className="px-4 py-3">{campaign.successfulDeliveries}</td>
                     <td className="px-4 py-3">{campaign.failedSends}</td>
                     <td className="px-4 py-3">{campaign.otherStatus}</td>
-                    <td className="px-4 py-3">${(campaign.totalCost || 0).toFixed(4)}</td>
+                    <td className="px-4 py-3">${(campaign.totalCost || 0).toFixed(2)}</td>
                   </tr>
                 ))}
 
