@@ -12,15 +12,21 @@ import dropCowboyService from '../../services/dropCowboy/dropCowboyService';
 /**
  * Hook for fetching and managing metrics data
  * @param {Object} initialFilters - Initial filter values
+ * @param {Object} options - { enabled: boolean }
  * @returns {Object} { metrics, loading, error, refetch, setFilters }
  */
-export function useMetrics(initialFilters = {}) {
+export function useMetrics(initialFilters = {}, options = {}) {
+    const { enabled = true } = options;
     const [metrics, setMetrics] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(enabled);
     const [error, setError] = useState(null);
     const [filters, setFilters] = useState(initialFilters);
 
     const fetchData = useCallback(async (activeFilters = filters) => {
+        if (!enabled) {
+            setLoading(false);
+            return;
+        }
         try {
             setLoading(true);
             setError(null);
@@ -36,15 +42,20 @@ export function useMetrics(initialFilters = {}) {
         } finally {
             setLoading(false);
         }
-    }, [filters]);
+    }, [enabled, filters]);
 
     useEffect(() => {
+        if (!enabled) {
+            setLoading(false);
+            return;
+        }
         fetchData();
-    }, [fetchData]);
+    }, [enabled, fetchData]);
 
     const refetch = useCallback(() => {
+        if (!enabled) return;
         fetchData(filters);
-    }, [fetchData, filters]);
+    }, [enabled, fetchData, filters]);
 
     return {
         metrics,

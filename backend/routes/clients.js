@@ -27,6 +27,77 @@ import DataService from "../modules/dropCowboy/services/dataService.js";
 
 const router = express.Router();
 
+const SUCCESS_STATUSES = ["sent", "success", "delivered", "SENT", "SUCCESS", "DELIVERED"];
+const FAILURE_STATUSES = ["failed", "failure", "error", "FAILED", "FAILURE", "ERROR"];
+const DROPCOWBOY_CACHE_TTL_MS = 60 * 1000;
+const dropCowboyRouteCache = new Map();
+
+function cacheKeyFor(kind, data = {}) {
+  const stableEntries = Object.entries(data).sort(([a], [b]) => a.localeCompare(b));
+  return `${kind}:${JSON.stringify(stableEntries)}`;
+}
+
+function getCachedRouteResponse(key) {
+  const item = dropCowboyRouteCache.get(key);
+  if (!item) return null;
+  if (item.expiresAt <= Date.now()) {
+    dropCowboyRouteCache.delete(key);
+    return null;
+  }
+  return item.value;
+}
+
+function setCachedRouteResponse(key, value, ttlMs = DROPCOWBOY_CACHE_TTL_MS) {
+  dropCowboyRouteCache.set(key, {
+    value,
+    expiresAt: Date.now() + ttlMs,
+  });
+}
+
+function addDateFilter(where, startDate, endDate) {
+  if (!startDate && !endDate) return where;
+
+  const date = {};
+  if (startDate) date.gte = new Date(`${startDate}T00:00:00.000Z`);
+  if (endDate) date.lte = new Date(`${endDate}T23:59:59.999Z`);
+
+  return { ...where, date };
+}
+
+function getStatusWhere(status) {
+  if (!status || status === "all") return null;
+
+  const normalized = String(status).toLowerCase();
+  if (normalized === "success") return { in: SUCCESS_STATUSES };
+  if (normalized === "failure" || normalized === "failed") return { in: FAILURE_STATUSES };
+  if (normalized === "other") return { notIn: [...SUCCESS_STATUSES, ...FAILURE_STATUSES] };
+  return { equals: status };
+}
+
+function toCampaignSummary(campaign, counters = {}, sums = {}) {
+  const totalSent = counters.totalSent || 0;
+  const successfulDeliveries = counters.successfulDeliveries || 0;
+  const failedSends = counters.failedSends || 0;
+  const otherStatus = totalSent - successfulDeliveries - failedSends;
+  const totalCost =
+    parseFloat(sums.cost || 0) +
+    parseFloat(sums.complianceFee || 0) +
+    parseFloat(sums.ttsFee || 0);
+
+  return {
+    campaignId: campaign.campaignId,
+    campaignName: campaign.campaignName,
+    totalSent,
+    successfulDeliveries,
+    failedSends,
+    otherStatus,
+    totalCost: parseFloat(totalCost.toFixed(4)),
+    successRate: totalSent > 0 ? parseFloat(((successfulDeliveries / totalSent) * 100).toFixed(2)) : 0,
+    createdAt: campaign.createdAt,
+    updatedAt: campaign.updatedAt,
+  };
+}
+
 // ============================================
 // GET UNIFIED CLIENTS (Mautic + DropCowboy + SMS) - OPTIMIZED
 // Returns only client metadata with available services
@@ -254,35 +325,155 @@ router.get("/:clientId/mautic/campaigns", authenticate, canViewClients, async (r
 router.get("/:clientName/dropcowboy/campaigns", authenticate, canViewClients, async (req, res) => {
   try {
     const clientName = decodeURIComponent(req.params.clientName);
+    const { startDate, endDate } = req.query;
+    const noCache = String(req.query.noCache || "").toLowerCase() === "true";
 
-    // First, find the client by name to get its ID
     const client = await prisma.client.findFirst({
       where: { name: clientName },
       select: { id: true }
     });
 
     if (!client) {
-      return res.json({ success: true, data: [] }); // No client found
+      return res.json({
+        success: true,
+        data: [],
+        overall: {
+          totalCampaigns: 0,
+          totalSent: 0,
+          successfulDeliveries: 0,
+          failedSends: 0,
+          otherStatus: 0,
+          totalCost: 0,
+          avgSuccessRate: 0,
+        },
+      });
     }
 
-    // Get DropCowboy campaigns for this client using clientId with records included
+    const responseCacheKey = cacheKeyFor("dc-client-campaigns", {
+      clientId: client.id,
+      startDate: startDate || "",
+      endDate: endDate || "",
+    });
+
+    if (!noCache) {
+      const cached = getCachedRouteResponse(responseCacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+    }
+
     const campaigns = await prisma.dropCowboyCampaign.findMany({
       where: { clientId: client.id },
-      include: {
-        records: {
-          orderBy: { date: 'desc' }
-        }
+      select: {
+        campaignId: true,
+        campaignName: true,
+        createdAt: true,
+        updatedAt: true,
       },
       orderBy: { createdAt: 'desc' }
     });
 
-    // Transform campaigns to match expected format with client name
-    const transformedCampaigns = campaigns.map(campaign => ({
-      ...campaign,
-      client: clientName, // Add client name to each campaign
-    }));
+    if (campaigns.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        overall: {
+          totalCampaigns: 0,
+          totalSent: 0,
+          successfulDeliveries: 0,
+          failedSends: 0,
+          otherStatus: 0,
+          totalCost: 0,
+          avgSuccessRate: 0,
+        },
+      });
+    }
 
-    res.json({ success: true, data: transformedCampaigns });
+    const campaignIds = campaigns.map((c) => c.campaignId);
+    const baseWhere = addDateFilter({ campaignId: { in: campaignIds } }, startDate, endDate);
+
+    const [statusGroups, costGroups] = await Promise.all([
+      prisma.dropCowboyCampaignRecord.groupBy({
+        by: ["campaignId", "status"],
+        where: baseWhere,
+        _count: { _all: true },
+      }),
+      prisma.dropCowboyCampaignRecord.groupBy({
+        by: ["campaignId"],
+        where: baseWhere,
+        _sum: { cost: true, complianceFee: true, ttsFee: true },
+      }),
+    ]);
+
+    const sumsByCampaign = new Map(
+      costGroups.map((row) => [
+        row.campaignId,
+        {
+          cost: row._sum.cost || 0,
+          complianceFee: row._sum.complianceFee || 0,
+          ttsFee: row._sum.ttsFee || 0,
+        },
+      ])
+    );
+
+    const statusByCampaign = new Map();
+    const totalByCampaign = new Map();
+    for (const row of statusGroups) {
+      const bucket = statusByCampaign.get(row.campaignId) || { successfulDeliveries: 0, failedSends: 0 };
+      totalByCampaign.set(row.campaignId, (totalByCampaign.get(row.campaignId) || 0) + (row._count._all || 0));
+      if (SUCCESS_STATUSES.includes(row.status)) {
+        bucket.successfulDeliveries += row._count._all || 0;
+      } else if (FAILURE_STATUSES.includes(row.status)) {
+        bucket.failedSends += row._count._all || 0;
+      }
+      statusByCampaign.set(row.campaignId, bucket);
+    }
+
+    const transformedCampaigns = campaigns.map((campaign) =>
+      toCampaignSummary(
+        campaign,
+        {
+          totalSent: totalByCampaign.get(campaign.campaignId) || 0,
+          ...(statusByCampaign.get(campaign.campaignId) || {}),
+        },
+        sumsByCampaign.get(campaign.campaignId) || {}
+      )
+    );
+
+    const overall = transformedCampaigns.reduce(
+      (acc, item) => {
+        acc.totalSent += item.totalSent;
+        acc.successfulDeliveries += item.successfulDeliveries;
+        acc.failedSends += item.failedSends;
+        acc.otherStatus += item.otherStatus;
+        acc.totalCost += item.totalCost;
+        return acc;
+      },
+      {
+        totalCampaigns: transformedCampaigns.length,
+        totalSent: 0,
+        successfulDeliveries: 0,
+        failedSends: 0,
+        otherStatus: 0,
+        totalCost: 0,
+      }
+    );
+
+    const payload = {
+      success: true,
+      data: transformedCampaigns,
+      overall: {
+        ...overall,
+        totalCost: parseFloat(overall.totalCost.toFixed(4)),
+        avgSuccessRate: overall.totalSent > 0 ? parseFloat(((overall.successfulDeliveries / overall.totalSent) * 100).toFixed(2)) : 0,
+      },
+    };
+
+    if (!noCache) {
+      setCachedRouteResponse(responseCacheKey, payload);
+    }
+
+    res.json(payload);
   } catch (error) {
     logger.error("Error fetching DropCowboy campaigns", {
       error: error.message,
@@ -298,9 +489,9 @@ router.get("/:clientName/dropcowboy/campaigns", authenticate, canViewClients, as
 router.get("/:clientName/dropcowboy/stats", authenticate, canViewClients, async (req, res) => {
   try {
     const clientName = decodeURIComponent(req.params.clientName);
-    logger.info(`DropCowboy stats requested for client: ${clientName}`);
+    const { startDate, endDate } = req.query;
+    const noCache = String(req.query.noCache || "").toLowerCase() === "true";
 
-    // First, find the client by name to get its ID
     const client = await prisma.client.findFirst({
       where: { name: clientName },
       select: { id: true }
@@ -321,7 +512,6 @@ router.get("/:clientName/dropcowboy/stats", authenticate, canViewClients, async 
       });
     }
 
-    // Get all campaign IDs for this client using clientId
     const campaigns = await prisma.dropCowboyCampaign.findMany({
       where: { clientId: client.id },
       select: { campaignId: true, id: true }
@@ -344,33 +534,51 @@ router.get("/:clientName/dropcowboy/stats", authenticate, canViewClients, async 
 
     const campaignIds = campaigns.map(c => c.campaignId);
 
-    // Get aggregated stats
+    const responseCacheKey = cacheKeyFor("dc-client-stats", {
+      clientId: client.id,
+      startDate: startDate || "",
+      endDate: endDate || "",
+    });
+
+    if (!noCache) {
+      const cached = getCachedRouteResponse(responseCacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+    }
+
+    const where = addDateFilter({ campaignId: { in: campaignIds } }, startDate, endDate);
+
     const [totalSent, successCount, failureCount, costSum] = await Promise.all([
       prisma.dropCowboyCampaignRecord.count({
-        where: { campaignId: { in: campaignIds } }
+        where
       }),
       prisma.dropCowboyCampaignRecord.count({
         where: {
-          campaignId: { in: campaignIds },
-          status: { in: ["sent", "success", "delivered", "SENT", "SUCCESS", "DELIVERED"] }
+          ...where,
+          status: { in: SUCCESS_STATUSES }
         }
       }),
       prisma.dropCowboyCampaignRecord.count({
         where: {
-          campaignId: { in: campaignIds },
-          status: { in: ["failed", "failure", "FAILED", "FAILURE"] }
+          ...where,
+          status: { in: FAILURE_STATUSES }
         }
       }),
       prisma.dropCowboyCampaignRecord.aggregate({
-        where: { campaignId: { in: campaignIds } },
-        _sum: { cost: true }
+        where,
+        _sum: { cost: true, complianceFee: true, ttsFee: true }
       })
     ]);
 
     const otherStatus = totalSent - successCount - failureCount;
     const avgSuccessRate = totalSent > 0 ? (successCount / totalSent) * 100 : 0;
+    const totalCost =
+      parseFloat(costSum._sum.cost || 0) +
+      parseFloat(costSum._sum.complianceFee || 0) +
+      parseFloat(costSum._sum.ttsFee || 0);
 
-    res.json({
+    const payload = {
       success: true,
       data: {
         totalCampaigns: campaigns.length,
@@ -378,15 +586,195 @@ router.get("/:clientName/dropcowboy/stats", authenticate, canViewClients, async 
         successfulDeliveries: successCount,
         failedSends: failureCount,
         otherStatus,
-        totalCost: parseFloat((costSum._sum.cost || 0).toFixed(2)),
+        totalCost: parseFloat(totalCost.toFixed(4)),
         avgSuccessRate: parseFloat(avgSuccessRate.toFixed(1))
       }
-    });
+    };
+
+    if (!noCache) {
+      setCachedRouteResponse(responseCacheKey, payload);
+    }
+
+    res.json(payload);
 
   } catch (error) {
     logger.error("Error fetching DropCowboy stats", {
       error: error.message,
       clientName: req.params.clientName,
+    });
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+});
+
+// ============================================
+// LAZY-LOAD: GET DROPCOWBOY PAGINATED RECORDS FOR A CAMPAIGN
+// ============================================
+router.get("/:clientName/dropcowboy/campaigns/:campaignId/records", authenticate, canViewClients, async (req, res) => {
+  try {
+    const clientName = decodeURIComponent(req.params.clientName);
+    const campaignId = req.params.campaignId;
+    const {
+      page = 1,
+      limit = 50,
+      startDate,
+      endDate,
+      status,
+    } = req.query;
+    const noCache = String(req.query.noCache || "").toLowerCase() === "true";
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const pageSize = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
+    const offset = (pageNum - 1) * pageSize;
+
+    const client = await prisma.client.findFirst({
+      where: { name: clientName },
+      select: { id: true },
+    });
+
+    if (!client) {
+      return res.json({
+        success: true,
+        data: {
+          records: [],
+          metrics: {
+            totalSent: 0,
+            successfulDeliveries: 0,
+            failedSends: 0,
+            otherStatus: 0,
+            totalCost: 0,
+            averageSuccessRate: 0,
+          },
+          pagination: {
+            currentPage: pageNum,
+            pageSize,
+            totalRecords: 0,
+            totalPages: 1,
+            hasMore: false,
+          },
+        },
+      });
+    }
+
+    const campaign = await prisma.dropCowboyCampaign.findFirst({
+      where: { clientId: client.id, campaignId },
+      select: { campaignId: true, campaignName: true },
+    });
+
+    if (!campaign) {
+      return res.status(404).json({ success: false, message: "Campaign not found for this client" });
+    }
+
+    const responseCacheKey = cacheKeyFor("dc-client-campaign-records", {
+      clientId: client.id,
+      campaignId,
+      page: pageNum,
+      limit: pageSize,
+      startDate: startDate || "",
+      endDate: endDate || "",
+      status: status || "all",
+    });
+
+    if (!noCache) {
+      const cached = getCachedRouteResponse(responseCacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+    }
+
+    const metricsWhere = addDateFilter({ campaignId }, startDate, endDate);
+    const statusClause = getStatusWhere(status);
+    const listWhere = statusClause ? { ...metricsWhere, status: statusClause } : metricsWhere;
+
+    const [totalRecords, records, totalSent, successCount, failureCount, costSum] = await Promise.all([
+      prisma.dropCowboyCampaignRecord.count({ where: listWhere }),
+      prisma.dropCowboyCampaignRecord.findMany({
+        where: listWhere,
+        orderBy: { date: "desc" },
+        skip: offset,
+        take: pageSize,
+        select: {
+          id: true,
+          campaignId: true,
+          campaignName: true,
+          phoneNumber: true,
+          status: true,
+          statusCode: true,
+          statusReason: true,
+          date: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          cost: true,
+          complianceFee: true,
+          ttsFee: true,
+        },
+      }),
+      prisma.dropCowboyCampaignRecord.count({ where: metricsWhere }),
+      prisma.dropCowboyCampaignRecord.count({
+        where: {
+          ...metricsWhere,
+          status: { in: SUCCESS_STATUSES },
+        },
+      }),
+      prisma.dropCowboyCampaignRecord.count({
+        where: {
+          ...metricsWhere,
+          status: { in: FAILURE_STATUSES },
+        },
+      }),
+      prisma.dropCowboyCampaignRecord.aggregate({
+        where: metricsWhere,
+        _sum: { cost: true, complianceFee: true, ttsFee: true },
+      }),
+    ]);
+
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    const totalCost =
+      parseFloat(costSum._sum.cost || 0) +
+      parseFloat(costSum._sum.complianceFee || 0) +
+      parseFloat(costSum._sum.ttsFee || 0);
+
+    const payload = {
+      success: true,
+      data: {
+        campaign: {
+          campaignId: campaign.campaignId,
+          campaignName: campaign.campaignName,
+        },
+        records: records.map((r) => ({
+          ...r,
+          cost: parseFloat(r.cost || 0),
+          complianceFee: parseFloat(r.complianceFee || 0),
+          ttsFee: parseFloat(r.ttsFee || 0),
+        })),
+        metrics: {
+          totalSent,
+          successfulDeliveries: successCount,
+          failedSends: failureCount,
+          otherStatus: totalSent - successCount - failureCount,
+          totalCost: parseFloat(totalCost.toFixed(4)),
+          averageSuccessRate: totalSent > 0 ? parseFloat(((successCount / totalSent) * 100).toFixed(2)) : 0,
+        },
+        pagination: {
+          currentPage: pageNum,
+          pageSize,
+          totalRecords,
+          totalPages,
+          hasMore: pageNum < totalPages,
+        },
+      },
+    };
+
+    if (!noCache) {
+      setCachedRouteResponse(responseCacheKey, payload, 30 * 1000);
+    }
+
+    res.json(payload);
+  } catch (error) {
+    logger.error("Error fetching DropCowboy campaign records", {
+      error: error.message,
+      clientName: req.params.clientName,
+      campaignId: req.params.campaignId,
     });
     res.status(500).json({ success: false, message: "Server error", error: error.message });
   }

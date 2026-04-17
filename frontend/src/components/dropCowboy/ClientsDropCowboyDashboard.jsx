@@ -10,8 +10,6 @@ import { Activity, AlertCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'react-toastify';
 import ErrorBoundary from './ErrorBoundary';
 import { useMetrics, useSyncLogs, useManualFetch } from '../../hooks/dropCowboy/useDropCowboy';
-import dropCowboyService from '../../services/dropCowboy/dropCowboyService';
-import { extractUniqueClients } from '../../utils/dropCowboy/helpers';
 import { useTimezone } from '../../contexts/TimezoneContext';
 import ClientsTable from './ClientsTable';
 import useViewLevel from '../../zustand/useViewLevel';
@@ -25,133 +23,42 @@ import useViewLevel from '../../zustand/useViewLevel';
  */
 export default function ClientsDropCowboyDashboard({ clientCampaigns = null, clientName = null }) {
     const { formatShortDateTime } = useTimezone();
-    const [clientFilter, setClientFilter] = useState(clientName || 'All');
-    const [clientOptions, setClientOptions] = useState(['All']);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [campaigns, setCampaigns] = useState([]);
-    const [metrics, setMetrics] = useState(null);
+    const [refreshTick, setRefreshTick] = useState(0);
 
     // Use custom hooks for data fetching (only if no specific client is provided)
     const shouldUseBulkFetch = !clientName;
     const initialFilters = clientCampaigns ? { campaignIds: clientCampaigns } : {};
-    const bulkData = shouldUseBulkFetch ? useMetrics(initialFilters) : { metrics: null, loading: false, error: null };
+    const {
+        loading: bulkLoading,
+        error: bulkError,
+        refetch: refetchBulkMetrics,
+    } = useMetrics(initialFilters, { enabled: shouldUseBulkFetch });
     const { syncLogs, refetch: refetchSyncLogs } = useSyncLogs(10);
     const { triggerFetch, isFetching, error: fetchError } = useManualFetch();
 
-    const { dropcowboy, setDCCampaigns, setDCSelectedClient, setDCMetrics } = useViewLevel();
-    const { savedMetrics } = dropcowboy;
+    const { setDCSelectedClient, setDCViewLevel } = useViewLevel();
 
-    // ✅ LAZY-LOAD: Fetch only this client's campaigns when clientName is provided
+    // Set selected client and view context
     useEffect(() => {
-        if (!clientName) return;
-
-        const fetchClientCampaigns = async () => {
-            try {
-                setLoading(true);
-                setError(null);
-                const result = await dropCowboyService.getClientCampaigns(clientName);
-                
-                if (result.success) {
-                    setCampaigns(result.data);
-                    // Calculate metrics from campaigns
-                    const clientMetrics = {
-                        campaigns: result.data,
-                        overall: calculateMetrics(result.data)
-                    };
-                    setMetrics(clientMetrics);
-                } else {
-                    setError(result.error);
-                }
-            } catch (err) {
-                setError(err.message || 'Failed to fetch campaigns');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchClientCampaigns();
-    }, [clientName]);
-
-    // Helper to calculate metrics from campaigns
-    const calculateMetrics = (campaignList) => {
-        if (!campaignList || campaignList.length === 0) {
-            return {
-                totalCampaigns: 0,
-                totalSent: 0,
-                successfulDeliveries: 0,
-                failedSends: 0,
-                totalCost: 0,
-                averageSuccessRate: 0
-            };
+        if (clientName) {
+            setDCViewLevel('client');
         }
-
-        // Note: These are campaign-level stats, not detailed record stats
-        // For detailed stats, you'd need to query DropCowboyCampaignRecord
-        return {
-            totalCampaigns: campaignList.length,
-            // Add more calculations as needed
-        };
-    };
-
-    // Use bulk metrics if not client-specific
-    useEffect(() => {
-        if (!clientName && bulkData.metrics) {
-            setMetrics(bulkData.metrics);
-            setCampaigns(bulkData.metrics?.campaigns || []);
-            setLoading(bulkData.loading);
-            setError(bulkData.error);
-        }
-    }, [clientName, bulkData.metrics, bulkData.loading, bulkData.error]);
-
-    // Extract unique clients when metrics change
-    useEffect(() => {
-        if (metrics?.campaigns) {
-            const clients = extractUniqueClients(metrics.campaigns);
-            setClientOptions(['All', ...clients]);
-
-            // if coming in from a client page, auto-select that client
-            if (clientName && clients.includes(clientName)) {
-                setClientFilter(clientName);
-            }
-        }
-        
-        // Filter campaigns by clientName if provided
-        const filteredCampaigns = clientName && metrics?.campaigns
-            ? metrics.campaigns.filter(c => c.client === clientName)
-            : metrics?.campaigns;
-        
-        setDCCampaigns(filteredCampaigns);
-        setDCMetrics(metrics);
         setDCSelectedClient(clientName);
-    }, [metrics, clientName]);
+    }, [clientName, setDCSelectedClient, setDCViewLevel]);
 
     // Auto-refresh data every 50 minutes
     useEffect(() => {
-        const refetchMetrics = async () => {
-            if (clientName) {
-                // Re-fetch client-specific campaigns
-                const result = await dropCowboyService.getClientCampaigns(clientName);
-                if (result.success) {
-                    setCampaigns(result.data);
-                    const clientMetrics = {
-                        campaigns: result.data,
-                        overall: calculateMetrics(result.data)
-                    };
-                    setMetrics(clientMetrics);
-                }
-            } else if (bulkData.refetch) {
-                // Re-fetch bulk metrics
-                bulkData.refetch();
-            }
-        };
-
         const interval = setInterval(() => {
-            refetchMetrics();
+            if (refetchBulkMetrics && shouldUseBulkFetch) {
+                refetchBulkMetrics();
+            }
+            if (clientName) {
+                setRefreshTick((prev) => prev + 1);
+            }
             refetchSyncLogs();
         }, 50 * 60 * 1000);
         return () => clearInterval(interval);
-    }, [clientName, refetchSyncLogs]);
+    }, [clientName, refetchSyncLogs, refetchBulkMetrics, shouldUseBulkFetch]);
 
     // Handle manual SFTP fetch
     const handleFetchNow = async () => {
@@ -162,17 +69,9 @@ export default function ClientsDropCowboyDashboard({ clientCampaigns = null, cli
         if (result.success) {
             // Reload data after successful fetch
             if (clientName) {
-                const refreshResult = await dropCowboyService.getClientCampaigns(clientName);
-                if (refreshResult.success) {
-                    setCampaigns(refreshResult.data);
-                    const clientMetrics = {
-                        campaigns: refreshResult.data,
-                        overall: calculateMetrics(refreshResult.data)
-                    };
-                    setMetrics(clientMetrics);
-                }
-            } else if (bulkData.refetch) {
-                await bulkData.refetch();
+                setRefreshTick((prev) => prev + 1);
+            } else if (refetchBulkMetrics) {
+                await refetchBulkMetrics();
             }
             await refetchSyncLogs();
             await refetchSyncLogs();
@@ -193,11 +92,11 @@ export default function ClientsDropCowboyDashboard({ clientCampaigns = null, cli
         <ErrorBoundary>
             <div className="py-6 sm:py-8">
                 {/* Error Messages */}
-                {(error || fetchError) && (
+                {(bulkError || fetchError) && (
                     <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start">
                         <AlertCircle className="text-red-600 mr-3 flex-shrink-0 mt-0.5" size={18} />
                         <p className="text-sm text-red-800 leading-relaxed">
-                            {error || fetchError}
+                            {bulkError || fetchError}
                         </p>
                     </div>
                 )}
@@ -227,7 +126,7 @@ export default function ClientsDropCowboyDashboard({ clientCampaigns = null, cli
                 </div>
 
                 {/* Loading State */}
-                {loading ? (
+                {(shouldUseBulkFetch && bulkLoading) ? (
                     <div className="flex items-center justify-center h-96">
                         <div className="text-center">
                             <Activity className="animate-spin mx-auto mb-4 text-blue-600" size={40} />
@@ -237,7 +136,7 @@ export default function ClientsDropCowboyDashboard({ clientCampaigns = null, cli
                 ) : (
                     <div className="space-y-6">
                         {/* All Records Table */}
-                        <ClientsTable />
+                        <ClientsTable refreshTick={refreshTick} />
                     </div>
                 )}
             </div>

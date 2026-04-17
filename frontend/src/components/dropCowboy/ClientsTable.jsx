@@ -1,137 +1,143 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Loader2 } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import MetricsCards from "./MetricsCards";
 import useViewLevel from "../../zustand/useViewLevel";
 import ExportButton from "../ExportButton";
-import { useTimezone } from "../../contexts/TimezoneContext";
+import dropCowboyService from "../../services/dropCowboy/dropCowboyService";
 
-const ClientsTable = () => {
-  const { formatShortDate } = useTimezone();
-  const [serverRecords, setServerRecords] = useState([]);
-  const [totalRecords, setTotalRecords] = useState(0);
-  const [loadingPage, setLoadingPage] = useState(false);
+const RECORDS_PER_PAGE = 50;
 
-  const { dropcowboy, setDCViewLevel, setDCSelectedClient, setDCSelectedCampaign } = useViewLevel();
-  const { viewLevel, selectedClient, selectedCampaign, campaigns } = dropcowboy;
-
-  const groupBy = (arr, keyFn) =>
-    arr.reduce((acc, item) => {
-      const key = keyFn(item);
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(item);
-      return acc;
-    }, {});
-
-  // Refs to capture/restore scroll ratio when changing pages
-  const tableContainerRef = useRef(null);
-  const scrollRatioRef = useRef(0);
-  const maintainScrollRef = useRef(false);
-  const [fadeIn, setFadeIn] = useState(true);
+const ClientsTable = ({ refreshTick = 0 }) => {
+  const { dropcowboy, setDCViewLevel, setDCSelectedCampaign } = useViewLevel();
+  const { viewLevel, selectedClient, selectedCampaign } = dropcowboy;
 
   const [statusFilter, setStatusFilter] = useState("all");
-  const [dateFilters, setDateFilters] = useState({
-    startDate: "",
-    endDate: "",
+  const [dateFilters, setDateFilters] = useState({ startDate: "", endDate: "" });
+  const [appliedDateFilters, setAppliedDateFilters] = useState({ startDate: "", endDate: "" });
+
+  const [campaignSummaries, setCampaignSummaries] = useState([]);
+  const [overallMetrics, setOverallMetrics] = useState(null);
+  const [campaignRecords, setCampaignRecords] = useState([]);
+  const [recordsMetrics, setRecordsMetrics] = useState(null);
+  const [recordsPagination, setRecordsPagination] = useState({
+    currentPage: 1,
+    pageSize: RECORDS_PER_PAGE,
+    totalRecords: 0,
+    totalPages: 1,
+    hasMore: false,
   });
-  const [appliedDateFilters, setAppliedDateFilters] = useState({
-    startDate: "",
-    endDate: "",
-  });
-  const [fetchLoading, setFetchLoading] = useState(false);
-  const [fetchMessage, setFetchMessage] = useState("");
-  const [allRecords, setAllRecords] = useState([]);
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const [recordsPerPage] = useState(50);
-  const [paginatedRecords, setPaginatedRecords] = useState([]);
-  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [loadingRecords, setLoadingRecords] = useState(false);
 
-  // Small reusable skeleton row used during fetch or pagination
-  const SkeletonRow = ({ compact = false }) => (
-    <tr className="opacity-100 animate-pulse">
-      <td className="sticky left-0 bg-white px-3 py-3 border-r border-gray-200 z-10">
-        <div className="h-3 bg-gray-200 rounded w-20"></div>
-      </td>
-      <td className="px-3 py-3">
-        <div className="h-3 bg-gray-200 rounded w-32" />
-      </td>
-      <td className="px-3 py-3 whitespace-nowrap">
-        <div className="h-3 bg-gray-200 rounded w-24" />
-      </td>
-      <td className="px-3 py-3 whitespace-nowrap">
-        <div className="h-3 bg-gray-200 rounded w-20" />
-      </td>
-      <td className="px-3 py-3 whitespace-nowrap">
-        <div className="h-3 bg-gray-200 rounded w-16" />
-      </td>
-      <td className="px-3 py-3">
-        <div className="h-3 bg-gray-200 rounded w-16" />
-      </td>
-      <td className="px-3 py-3">
-        <div className="h-3 bg-gray-200 rounded w-16" />
-      </td>
-      <td className="px-3 py-3">
-        <div className="h-3 bg-gray-200 rounded w-28" />
-      </td>
-    </tr>
-  );
+  const tableContainerRef = useRef(null);
+  const [gotoPageInput, setGotoPageInput] = useState("");
+  const [gotoInvalid, setGotoInvalid] = useState(false);
 
-  // If campaigns prop is passed (from App.jsx filtered by client), use it as a fallback initial load
+  const metrics = useMemo(() => {
+    const source = viewLevel === "campaign" ? recordsMetrics : overallMetrics;
+
+    if (!source) {
+      return {
+        overall: {
+          totalSent: 0,
+          successfulDeliveries: 0,
+          failedSends: 0,
+          otherStatus: 0,
+          totalCost: 0,
+          averageSuccessRate: 0,
+        },
+      };
+    }
+
+    return {
+      overall: {
+        totalSent: source.totalSent || 0,
+        successfulDeliveries: source.successfulDeliveries || 0,
+        failedSends: source.failedSends || 0,
+        otherStatus: source.otherStatus || 0,
+        totalCost: source.totalCost || 0,
+        averageSuccessRate: source.avgSuccessRate || source.averageSuccessRate || 0,
+      },
+    };
+  }, [overallMetrics, recordsMetrics, viewLevel]);
+
   useEffect(() => {
-    if (campaigns && campaigns.length > 0) {
-      const records = campaigns.flatMap((c) => {
-        const clientName = c.client || "Unknown";
-        const campaign = c.campaignName || "";
+    if (!selectedClient) return;
 
-        return c.records.map((record) => ({
-          ...record,
-          client: clientName,
-          campaign: campaign.trim(),
-          status: record.status?.trim()?.toLowerCase() || "other",
-        }));
+    const fetchSummaries = async () => {
+      setLoading(true);
+      const result = await dropCowboyService.getClientCampaigns(selectedClient, {
+        ...appliedDateFilters,
+        noCache: refreshTick > 0,
+      });
+      if (result.success) {
+        setCampaignSummaries(result.data || []);
+        setOverallMetrics(
+          result.overall || {
+            totalSent: 0,
+            successfulDeliveries: 0,
+            failedSends: 0,
+            otherStatus: 0,
+            totalCost: 0,
+            avgSuccessRate: 0,
+          }
+        );
+      }
+      setLoading(false);
+    };
+
+    fetchSummaries();
+  }, [selectedClient, appliedDateFilters, refreshTick]);
+
+  useEffect(() => {
+    if (viewLevel !== "campaign" || !selectedClient || !selectedCampaign) return;
+
+    const campaign = campaignSummaries.find((c) => c.campaignName === selectedCampaign);
+    if (!campaign?.campaignId) return;
+
+    const fetchRecords = async () => {
+      setLoadingRecords(true);
+      const result = await dropCowboyService.getClientCampaignRecords(selectedClient, campaign.campaignId, {
+        page: recordsPagination.currentPage,
+        limit: RECORDS_PER_PAGE,
+        startDate: appliedDateFilters.startDate,
+        endDate: appliedDateFilters.endDate,
+        status: statusFilter,
+        noCache: refreshTick > 0,
       });
 
-      const filtered = selectedClient
-        ? records.filter((r) => r.client === selectedClient) // selectedClient here is actually selectedClient's name
-        : records;
-
-      setAllRecords(filtered);
-      setTotalRecords(filtered.length);
-
-    }
-  }, [campaigns]);
-
-  useEffect(() => {
-    const offset = (currentPage - 1) * recordsPerPage;
-    setServerRecords(allRecords.slice(offset, offset + recordsPerPage));
-  }, [allRecords, currentPage, recordsPerPage]);
-
-  // When currentPage changes, animate rows and restore scroll position (or scroll to top)
-  useEffect(() => {
-    const container = tableContainerRef.current;
-    setFadeIn(false);
-    // small delay to allow DOM update
-    const t = setTimeout(() => {
-      setFadeIn(true);
-      if (container) {
-        try {
-          if (maintainScrollRef.current) {
-            const maxAfter = Math.max(
-              0,
-              container.scrollHeight - container.clientHeight
-            );
-            container.scrollTop = Math.round(scrollRatioRef.current * maxAfter);
-          } else {
-            container.scrollTo({ top: 0, behavior: "smooth" });
+      if (result.success) {
+        setCampaignRecords(result.data?.records || []);
+        setRecordsMetrics(result.data?.metrics || null);
+        setRecordsPagination(
+          result.data?.pagination || {
+            currentPage: 1,
+            pageSize: RECORDS_PER_PAGE,
+            totalRecords: 0,
+            totalPages: 1,
+            hasMore: false,
           }
-        } catch (e) { }
+        );
       }
-    }, 60);
-    return () => clearTimeout(t);
-  }, [currentPage]);
 
-  // Server-side pagination: current page records come from serverRecords, totalRecords tracks full count
-  const currentRecords = serverRecords;
+      setLoadingRecords(false);
+    };
+
+    fetchRecords();
+  }, [
+    viewLevel,
+    selectedClient,
+    selectedCampaign,
+    campaignSummaries,
+    appliedDateFilters,
+    statusFilter,
+    recordsPagination.currentPage,
+    refreshTick,
+  ]);
+
+  useEffect(() => {
+    setRecordsPagination((prev) => ({ ...prev, currentPage: 1 }));
+  }, [selectedCampaign, statusFilter, appliedDateFilters]);
 
   const getStatusBadge = (status) => {
     const statusLower = status?.toLowerCase() || "";
@@ -155,190 +161,29 @@ const ClientsTable = () => {
     );
   };
 
-  // Page input state for 'Go to page'
-  const [gotoPageInput, setGotoPageInput] = useState("");
-  const [gotoInvalid, setGotoInvalid] = useState(false);
-
   const handleGoto = () => {
     const n = parseInt(gotoPageInput, 10);
-    if (Number.isNaN(n)) return;
-    if (n < 1 || n > totalPages) {
+    if (Number.isNaN(n) || n < 1 || n > recordsPagination.totalPages) {
       setGotoInvalid(true);
       return;
     }
-    const page = n;
-    setCurrentPage(gotoPageInput);
+    setRecordsPagination((prev) => ({ ...prev, currentPage: n }));
     setGotoPageInput("");
     setGotoInvalid(false);
-    try {
-      window.localStorage.setItem("dc_records_page", String(page));
-    } catch (e) { }
   };
-
-  // Clear invalid state when input changes
-  useEffect(() => {
-    if (gotoInvalid) setGotoInvalid(false);
-  }, [gotoPageInput]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedCampaign]);
-
-  // 🔹 Filters applied to metrics (no status filter)
-  const filteredRecordsForMetrics = useMemo(() => {
-    let records = allRecords;
-
-    // View-level filtering
-    if (viewLevel === "client" && selectedClient) {
-      records = records.filter((r) => r.client === selectedClient);
-    } else if (viewLevel === "campaign" && selectedClient && selectedCampaign) {
-      records = records.filter(
-        (r) => r.client === selectedClient && r.campaignName === selectedCampaign
-      );
-    }
-
-    // Date filtering (applied only after Save)
-    if (appliedDateFilters.startDate || appliedDateFilters.endDate) {
-      records = records.filter((r) => {
-        const recordDate = new Date(r.date);
-        if (
-          appliedDateFilters.startDate &&
-          recordDate < new Date(appliedDateFilters.startDate)
-        )
-          return false;
-        if (
-          appliedDateFilters.endDate &&
-          recordDate > new Date(appliedDateFilters.endDate)
-        )
-          return false;
-        return true;
-      });
-    }
-
-    return records;
-  }, [allRecords, viewLevel, selectedClient, selectedCampaign, appliedDateFilters]);
-
-  // 🔹 Filters applied to table (includes status)
-  const filteredRecordsForTable = useMemo(() => {
-    let records = filteredRecordsForMetrics;
-
-    // Apply status filtering separately
-    if (statusFilter !== "all") {
-      if (statusFilter === "other") {
-        records = records.filter(
-          (r) => !["success", "failure"].includes(r.status)
-        );
-      } else {
-        records = records.filter((r) => r.status === statusFilter);
-      }
-    }
-
-    return records;
-  }, [filteredRecordsForMetrics, statusFilter]);
-
-  const metrics = useMemo(() => {
-    const totalSent = filteredRecordsForMetrics.length;
-    const successfulDeliveries = filteredRecordsForMetrics.filter(
-      (r) => r.status === "success"
-    ).length;
-    const failedSends = filteredRecordsForMetrics.filter(
-      (r) => r.status === "failure"
-    ).length;
-    const otherStatus = filteredRecordsForMetrics.filter(
-      (r) => !["success", "failure"].includes(r.status)
-    ).length;
-    const totalCost = filteredRecordsForMetrics.reduce(
-      (sum, r) => sum + (parseFloat(r.cost) || 0),
-      0
-    );
-
-    return {
-      overall: {
-        totalSent,
-        successfulDeliveries,
-        failedSends,
-        otherStatus,
-        totalCost,
-        averageSuccessRate:
-          totalSent > 0 ? (successfulDeliveries / totalSent) * 100 : 0,
-      },
-    };
-  }, [filteredRecordsForMetrics]);
 
   // Build export rows from the same view model used by the visible table.
   const exportConfig = useMemo(() => {
-    if (viewLevel === "root") {
-      const clientGroups = groupBy(
-        allRecords,
-        (r) => (r.client && r.client.trim()) || "Unknown Client"
-      );
-
-      const data = Object.entries(clientGroups).map(([client, records]) => {
-        const total = records.length;
-        const success = records.filter(
-          (r) => r.status?.toLowerCase() === "success"
-        ).length;
-        const failure = records.filter(
-          (r) => r.status?.toLowerCase() === "failure"
-        ).length;
-        const other = records.filter(
-          (r) => !["success", "failure"].includes(r.status)
-        ).length;
-
-        return {
-          client,
-          totalCampaigns: new Set(records.map((r) => r.campaignId)).size,
-          totalVoicemailsSent: total,
-          success,
-          failure,
-          other,
-        };
-      });
-
+    if (viewLevel === "client") {
       return {
-        data,
-        filename: "voicemail_clients_summary",
-        title: "Voicemail Clients Summary",
-        columns: {
-          client: "Client",
-          totalCampaigns: "Total Campaigns",
-          totalVoicemailsSent: "Total Voicemails sent",
-          success: "Success",
-          failure: "Failure",
-          other: "Other",
-        },
-      };
-    }
-
-    if (viewLevel === "client" && selectedClient) {
-      const campaignGroups = groupBy(
-        filteredRecordsForTable,
-        (r) => r.campaignName || "Unknown Campaign"
-      );
-
-      const data = Object.entries(campaignGroups).map(([campaign, records]) => {
-        const total = records.length;
-        const success = records.filter(
-          (r) => r.status?.toLowerCase() === "success"
-        ).length;
-        const failure = records.filter(
-          (r) => r.status?.toLowerCase() === "failure"
-        ).length;
-        const other = records.filter(
-          (r) => !["success", "failure"].includes(r.status)
-        ).length;
-
-        return {
-          campaign,
-          totalVoicemailsSent: total,
-          success,
-          failure,
-          other,
-        };
-      });
-
-      return {
-        data,
+        data: campaignSummaries.map((row) => ({
+          campaign: row.campaignName,
+          totalVoicemailsSent: row.totalSent,
+          success: row.successfulDeliveries,
+          failure: row.failedSends,
+          other: row.otherStatus,
+          cost: row.totalCost,
+        })),
         filename: "voicemail_campaign_summary",
         title: "Voicemail Campaign Summary",
         columns: {
@@ -347,22 +192,21 @@ const ClientsTable = () => {
           success: "Success",
           failure: "Failure",
           other: "Other",
+          cost: "Cost",
         },
       };
     }
 
-    if (viewLevel === "campaign" && selectedCampaign) {
-      const data = paginatedRecords.map((record) => ({
-        phoneNumber: record.phoneNumber || "",
-        status: record.status || "",
-        date: record.date || "",
-        firstName: record.firstName || "",
-        lastName: record.lastName || "",
-        email: record.email || "",
-      }));
-
+    if (viewLevel === "campaign") {
       return {
-        data,
+        data: campaignRecords.map((record) => ({
+          phoneNumber: record.phoneNumber || "",
+          status: record.status || "",
+          date: record.date || "",
+          firstName: record.firstName || "",
+          lastName: record.lastName || "",
+          email: record.email || "",
+        })),
         filename: "voicemail_campaign_records",
         title: "Voicemail Campaign Records",
         columns: {
@@ -376,36 +220,12 @@ const ClientsTable = () => {
       };
     }
 
-    return {
-      data: [],
-      filename: "voicemail_records",
-      title: "Voicemail Records",
-      columns: {},
-    };
+    return { data: [], filename: "voicemail", title: "Voicemail", columns: {} };
   }, [
-    allRecords,
-    filteredRecordsForTable,
-    paginatedRecords,
-    selectedCampaign,
-    selectedClient,
+    campaignSummaries,
+    campaignRecords,
     viewLevel,
   ]);
-
-  useEffect(() => {
-    if (!selectedClient || !selectedCampaign || allRecords.length === 0) return;
-
-    // 1️⃣ Filter the records for the selected client + campaign
-    const campaignRecords = filteredRecordsForTable.filter(
-      (r) => r.client === selectedClient && r.campaignName === selectedCampaign
-    );
-
-    // 2️⃣ Pagination logic
-    const startIndex = (currentPage - 1) * recordsPerPage;
-    const endIndex = startIndex + recordsPerPage;
-
-    setPaginatedRecords(campaignRecords.slice(startIndex, endIndex));
-    setTotalPages(Math.ceil(campaignRecords.length / recordsPerPage));
-  }, [selectedClient, selectedCampaign, currentPage, filteredRecordsForTable]);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200">
@@ -425,29 +245,6 @@ const ClientsTable = () => {
               variant="secondary"
               disabled={exportConfig.data.length === 0}
             />
-            <button
-              onClick={async () => {
-                try {
-                  setFetchLoading(true);
-                  setFetchMessage("Refreshing data...");
-                  // await fetchPage(currentPage || 1);
-                  setFetchMessage("Data refreshed successfully");
-                } catch (err) {
-                  setFetchMessage("Error: " + (err.message || "unknown"));
-                } finally {
-                  setFetchLoading(false);
-                  setTimeout(() => setFetchMessage(""), 3000);
-                }
-              }}
-              disabled={fetchLoading}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors shadow-sm"
-            >
-              {fetchLoading ? (
-                <Loader2 className="animate-spin" size={16} />
-              ) : (
-                "Refresh Data"
-              )}
-            </button>
           </div>
         </div>
 
@@ -520,9 +317,8 @@ const ClientsTable = () => {
         metrics={metrics}
         onMetricClick={(status) => {
           if (viewLevel === "campaign") {
-            // Apply status filter for leaf node view
             setStatusFilter(status);
-            setCurrentPage(1);
+            setRecordsPagination((prev) => ({ ...prev, currentPage: 1 }));
           }
         }}
         viewLevel={viewLevel}
@@ -538,11 +334,8 @@ const ClientsTable = () => {
           {/* Drilldown Header / Breadcrumb */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
             <div className="flex items-center gap-2 text-sm font-medium text-gray-600">
-              {viewLevel === "root" && <span>📊 All Clients</span>}
               {viewLevel === "client" && (
-                <>
-                  <span>Client: {selectedClient}</span>
-                </>
+                <span>Client: {selectedClient}</span>
               )}
               {viewLevel === "campaign" && (
                 <>
@@ -565,29 +358,6 @@ const ClientsTable = () => {
           <div className="max-h-[500px] overflow-y-auto">
             <table className="w-full min-w-max border-collapse">
               <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-300 sticky top-0 z-30">
-                {viewLevel === "root" && (
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-700">
-                      Client
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-700">
-                      Total Campaigns
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-700">
-                      Total Voicemails sent
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-700">
-                      Success
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-700">
-                      Failure
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-700">
-                      Other
-                    </th>
-                  </tr>
-                )}
-
                 {viewLevel === "client" && (
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-700">
@@ -604,6 +374,9 @@ const ClientsTable = () => {
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-700">
                       Other
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-700">
+                      Cost
                     </th>
                   </tr>
                 )}
@@ -633,177 +406,87 @@ const ClientsTable = () => {
               </thead>
 
               <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
-                {(() => {
-                  if (fetchLoading || loadingPage) {
-                    return [...Array(recordsPerPage)].map((_, i) => (
-                      <SkeletonRow key={i} />
-                    ));
-                  }
+                {(loading || loadingRecords) && (
+                  <tr>
+                    <td colSpan="6" className="py-12 text-center text-gray-500">Loading...</td>
+                  </tr>
+                )}
 
-                  if (!currentRecords?.length) {
-                    return (
-                      <tr>
-                        <td
-                          colSpan="6"
-                          className="py-16 text-center text-gray-400 text-sm"
-                        >
-                          📭 No records found
-                        </td>
-                      </tr>
-                    );
-                  }
+                {!loading && !loadingRecords && viewLevel === "client" && campaignSummaries.length === 0 && (
+                  <tr>
+                    <td colSpan="6" className="py-12 text-center text-gray-400">No campaigns found</td>
+                  </tr>
+                )}
 
-                  // Root Level → Group by Client
-                  if (viewLevel === "root") {
-                    const clientGroups = groupBy(
-                      allRecords,
-                      (r) => (r.client && r.client.trim()) || "Unknown Client"
-                    );
-                    return Object.entries(clientGroups).map(
-                      ([client, records]) => {
-                        const total = records.length;
-                        const success = records.filter(
-                          (r) => r.status?.toLowerCase() === "success"
-                        ).length;
-                        const failed = records.filter(
-                          (r) => r.status?.toLowerCase() === "failure"
-                        ).length;
-                        const other = records.filter(
-                          (r) => !["success", "failure"].includes(r.status)
-                        ).length;
+                {!loading && !loadingRecords && viewLevel === "client" && campaignSummaries.map((campaign) => (
+                  <tr
+                    key={campaign.campaignId}
+                    className="hover:bg-blue-50 cursor-pointer transition-all"
+                    onClick={() => {
+                      setDCSelectedCampaign(campaign.campaignName);
+                      setDCViewLevel("campaign");
+                    }}
+                  >
+                    <td className="px-4 py-3 font-medium">{campaign.campaignName}</td>
+                    <td className="px-4 py-3">{campaign.totalSent}</td>
+                    <td className="px-4 py-3">{campaign.successfulDeliveries}</td>
+                    <td className="px-4 py-3">{campaign.failedSends}</td>
+                    <td className="px-4 py-3">{campaign.otherStatus}</td>
+                    <td className="px-4 py-3">${(campaign.totalCost || 0).toFixed(4)}</td>
+                  </tr>
+                ))}
 
-                        return (
-                          <tr
-                            key={client}
-                            className="hover:bg-blue-50 cursor-pointer transition-all"
-                            onClick={() => {
-                              setDCSelectedClient(client);
-                              setDCViewLevel("client");
-                            }}
-                          >
-                            <td className="px-4 py-3 font-semibold text-gray-800">
-                              {client}
-                            </td>
-                            <td className="px-4 py-3">
-                              {new Set(records.map((r) => r.campaignId)).size}
-                            </td>
-                            <td className="px-4 py-3">{total}</td>
-                            <td className="px-4 py-3">{success}</td>
-                            <td className="px-4 py-3">{failed}</td>
-                            <td className="px-4 py-3">{other}</td>
-                          </tr>
-                        );
-                      }
-                    );
-                  }
+                {!loading && !loadingRecords && viewLevel === "campaign" && campaignRecords.length === 0 && (
+                  <tr>
+                    <td colSpan="6" className="py-12 text-center text-gray-400">No records found</td>
+                  </tr>
+                )}
 
-                  // Client Level → Group by Campaign
-                  if (viewLevel === "client" && selectedClient) {
-                    const campaignGroups = groupBy(
-                      filteredRecordsForTable,
-                      (r) => r.campaignName || "Unknown Campaign"
-                    );
-
-                    return Object.entries(campaignGroups).map(
-                      ([campaign, records]) => {
-                        const total = records.length;
-                        const success = records.filter(
-                          (r) => r.status?.toLowerCase() === "success"
-                        ).length;
-                        const failed = records.filter(
-                          (r) => r.status?.toLowerCase() === "failure"
-                        ).length;
-                        const other = records.filter(
-                          (r) => !["success", "failure"].includes(r.status)
-                        ).length;
-
-                        return (
-                          <tr
-                            key={campaign}
-                            className="hover:bg-blue-50 cursor-pointer transition-all"
-                            onClick={() => {
-                              setDCSelectedCampaign(campaign);
-                              setDCViewLevel("campaign");
-                              // fetchPage(1, campaign)
-                            }}
-                          >
-                            <td className="px-4 py-3 font-medium">{campaign}</td>
-                            <td className="px-4 py-3">{total}</td>
-                            <td className="px-4 py-3">{success}</td>
-                            <td className="px-4 py-3">{failed}</td>
-                            <td className="px-4 py-3">{other}</td>
-                          </tr>
-                        );
-                      }
-                    );
-                  }
-
-                  // Campaign Level → Show individual records
-                  if (viewLevel === "campaign" && selectedCampaign) {
-                    // Update total pages dynamically based on filtered results
-                    const totalFilteredPages = Math.ceil(
-                      filteredRecordsForTable.length / recordsPerPage
-                    );
-
-                    // Ensure current page is valid (in case filters reduce total pages)
-                    const safePage = Math.min(
-                      currentPage,
-                      totalFilteredPages || 1
-                    );
-                    if (safePage !== currentPage) setCurrentPage(safePage);
-
-                    const paginatedRecords = filteredRecordsForTable.slice(
-                      (safePage - 1) * recordsPerPage,
-                      safePage * recordsPerPage
-                    );
-
-                    return paginatedRecords.map((record, i) => (
-                      <tr
-                        key={i}
-                        className="hover:bg-blue-50 cursor-pointer transition-all"
-                      >
-                        <td className="px-4 py-3">{record.phoneNumber}</td>
-                        <td className="px-4 py-3">
-                          {getStatusBadge(record.status)}
-                        </td>
-                        <td className="px-4 py-3">
-                          {record.date ? formatShortDate(record.date, { year: 'numeric' }) : '-'}
-                        </td>
-                        <td className="px-4 py-3">{record.firstName}</td>
-                        <td className="px-4 py-3">{record.lastName}</td>
-                        <td className="px-4 py-3">{record.email}</td>
-                      </tr>
-                    ));
-                  }
-                })()}
+                {!loading && !loadingRecords && viewLevel === "campaign" && campaignRecords.map((record) => (
+                  <tr key={record.id} className="hover:bg-blue-50 transition-all">
+                    <td className="px-4 py-3">{record.phoneNumber}</td>
+                    <td className="px-4 py-3">{getStatusBadge(record.status)}</td>
+                    <td className="px-4 py-3">
+                      {record.date
+                        ? new Date(record.date).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })
+                        : "-"}
+                    </td>
+                    <td className="px-4 py-3">{record.firstName}</td>
+                    <td className="px-4 py-3">{record.lastName}</td>
+                    <td className="px-4 py-3">{record.email}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* Sticky pagination footer inside table viewport */}
-        {viewLevel === "campaign" && paginatedRecords.length > 0 && (
+        {viewLevel === "campaign" && recordsPagination.totalRecords > 0 && (
           <div className="sticky bottom-0 left-0 right-0 bg-gradient-to-r from-gray-50 to-white backdrop-blur-sm border-t-2 border-gray-200 px-6 py-4 flex items-center justify-between z-10 shadow-lg">
             <div className="text-sm text-gray-700 font-medium">
               Showing{" "}
               <span className="font-bold text-blue-600">
-                {(currentPage - 1) * recordsPerPage + 1}
+                {(recordsPagination.currentPage - 1) * recordsPagination.pageSize + 1}
               </span>{" "}
               to{" "}
               <span className="font-bold text-blue-600">
-                {Math.min(currentPage * recordsPerPage, filteredRecordsForTable.length)}
+                {Math.min(recordsPagination.currentPage * recordsPagination.pageSize, recordsPagination.totalRecords)}
               </span>{" "}
               of{" "}
               <span className="font-bold text-blue-600">
-                {filteredRecordsForTable.length}
+                {recordsPagination.totalRecords}
               </span>{" "}
               records
             </div>
 
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setCurrentPage(1)}
-                disabled={currentPage === 1}
+                onClick={() => setRecordsPagination((prev) => ({ ...prev, currentPage: 1 }))}
+                disabled={recordsPagination.currentPage === 1}
                 className="px-3 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
                 title="First Page"
               >
@@ -811,8 +494,13 @@ const ClientsTable = () => {
               </button>
 
               <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
+                onClick={() =>
+                  setRecordsPagination((prev) => ({
+                    ...prev,
+                    currentPage: Math.max(1, prev.currentPage - 1),
+                  }))
+                }
+                disabled={recordsPagination.currentPage === 1}
                 className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
               >
                 Previous
@@ -820,24 +508,27 @@ const ClientsTable = () => {
 
               <div
                 className="px-4 py-2 text-sm font-bold text-gray-900 bg-blue-50 border border-blue-200 rounded-lg"
-                title={`Total pages: ${totalPages}`}
+                title={`Total pages: ${recordsPagination.totalPages}`}
               >
-                Page {currentPage} of {totalPages}
+                Page {recordsPagination.currentPage} of {recordsPagination.totalPages}
               </div>
 
               <button
                 onClick={() =>
-                  setCurrentPage(Math.min(totalPages, currentPage + 1))
+                  setRecordsPagination((prev) => ({
+                    ...prev,
+                    currentPage: Math.min(prev.totalPages, prev.currentPage + 1),
+                  }))
                 }
-                disabled={currentPage === totalPages}
+                disabled={recordsPagination.currentPage === recordsPagination.totalPages}
                 className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
               >
                 Next
               </button>
 
               <button
-                onClick={() => setCurrentPage(totalPages)}
-                disabled={currentPage === totalPages}
+                onClick={() => setRecordsPagination((prev) => ({ ...prev, currentPage: prev.totalPages }))}
+                disabled={recordsPagination.currentPage === recordsPagination.totalPages}
                 className="px-3 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
                 title="Last Page"
               >
@@ -851,17 +542,17 @@ const ClientsTable = () => {
                 <input
                   type="number"
                   min="1"
-                  max={totalPages}
+                  max={recordsPagination.totalPages}
                   value={gotoPageInput}
-                  onChange={(e) => setGotoPageInput(e.target.value)}
+                  onChange={(e) => {
+                    setGotoPageInput(e.target.value);
+                    if (gotoInvalid) setGotoInvalid(false);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleGoto();
                   }}
                   placeholder="Page #"
-                  className={`w-20 px-3 py-2 rounded-lg text-sm font-medium border focus:ring-2 focus:ring-blue-500 ${gotoInvalid
-                    ? "border-red-500 ring-1 ring-red-300"
-                    : "border-gray-300"
-                    }`}
+                  className={`w-20 px-3 py-2 rounded-lg text-sm border ${gotoInvalid ? "border-red-500" : "border-gray-300"}`}
                 />
                 <button
                   onClick={handleGoto}
