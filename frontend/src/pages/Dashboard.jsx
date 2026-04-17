@@ -3,13 +3,13 @@ import { useAuth } from '../contexts/AuthContext.jsx'
 import { useTimezone } from '../contexts/TimezoneContext.jsx'
 import axios from 'axios'
 import { toast } from 'react-toastify'
-import { 
+import {
   Users, FolderOpen, Activity, Mail, Phone, TrendingUp, TrendingDown,
   AlertTriangle, CheckCircle, Clock, RefreshCw, BarChart3, Zap,
   ArrowRight, Loader2, XCircle, MessageSquare
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { 
+import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, PieChart, Pie, Cell
 } from 'recharts'
@@ -20,7 +20,7 @@ const Dashboard = () => {
   const { formatDateTime, getCurrentHour } = useTimezone()
   const navigate = useNavigate()
   const { hasFullAccess, hasPermission, canViewClients, canViewUsers, isTeamManager } = usePermissions(user)
-  
+
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     totalEmployees: 0,
@@ -46,10 +46,10 @@ const Dashboard = () => {
     try {
       // 🚀 OPTIMIZED: Single consolidated API call instead of 9 separate calls
       const response = await axios.get('/api/dashboard/overview')
-      
+
       if (response.data?.success && response.data?.data) {
         const { stats, emailMetrics, voicemailMetrics, smsMetrics, syncStatus: syncData } = response.data.data
-        
+
         // Update all state at once
         setStats(stats || {
           totalEmployees: 0,
@@ -59,17 +59,17 @@ const Dashboard = () => {
           totalManagers: 0,
           totalAdmins: 0
         })
-        
+
         setEmailMetrics(emailMetrics || null)
         setVoicemailMetrics(voicemailMetrics || null)
         setSmsMetrics(smsMetrics || null)
-        
+
         setSyncStatus({
           mautic: { data: syncData?.mautic || null },
           dropCowboy: { data: syncData?.dropCowboy || null },
           sms: { data: syncData?.sms || null }
         })
-        
+
         // Generate insights based on metrics
         generateInsights(emailMetrics, voicemailMetrics)
       }
@@ -81,7 +81,7 @@ const Dashboard = () => {
 
   const generateInsights = (email, voicemail) => {
     const newInsights = []
-    
+
     if (email && email.totalSent > 0) {
       if (email.avgReadRate < 25) {
         newInsights.push({
@@ -102,7 +102,7 @@ const Dashboard = () => {
         })
       }
     }
-    
+
     if (voicemail?.overall && voicemail.overall.totalSent > 0) {
       if (voicemail.overall.averageSuccessRate < 70) {
         newInsights.push({
@@ -114,7 +114,7 @@ const Dashboard = () => {
         })
       }
     }
-    
+
     setInsights(newInsights)
   }
 
@@ -147,7 +147,7 @@ const Dashboard = () => {
     const diffMins = Math.floor(diffMs / 60000)
     const diffHours = Math.floor(diffMs / 3600000)
     const diffDays = Math.floor(diffMs / 86400000)
-    
+
     if (diffMins < 1) return 'Just now'
     if (diffMins < 60) return `${diffMins}m ago`
     if (diffHours < 24) return `${diffHours}h ago`
@@ -156,14 +156,14 @@ const Dashboard = () => {
 
   const emailChartData = useMemo(() => {
     if (!emailMetrics?.topEmails) return []
-    
+
     // Track used names to ensure uniqueness
     const usedNames = new Set()
-    
+
     return emailMetrics.topEmails.slice(0, 6).map((email, idx) => {
       const fullName = email.name || `Email ${idx + 1}`
       let displayName = fullName.length > 15 ? fullName.substring(0, 12) + '...' : fullName
-      
+
       // Ensure unique display names by appending number if needed
       let uniqueName = displayName
       let counter = 1
@@ -172,7 +172,7 @@ const Dashboard = () => {
         counter++
       }
       usedNames.add(uniqueName)
-      
+
       return {
         id: `email-${idx}-${email.id || email.emailId || idx}`, // Unique key for chart
         name: uniqueName,
@@ -246,19 +246,19 @@ const Dashboard = () => {
       {hasFullAccess() && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
-            <SyncIndicator 
-              label="Autovation" 
-              status={syncStatus.mautic?.data} 
+            <SyncIndicator
+              label="Autovation"
+              status={syncStatus.mautic?.data}
               lastSync={syncStatus.mautic?.data?.lastUpdated || syncStatus.mautic?.data?.lastSync || syncStatus.mautic?.data?.lastSyncAt}
             />
-            <SyncIndicator 
-              label="Ringless Voicemail" 
-              status={syncStatus.dropCowboy?.data} 
+            <SyncIndicator
+              label="Ringless Voicemail"
+              status={syncStatus.dropCowboy?.data}
               lastSync={syncStatus.dropCowboy?.data?.lastSyncAt || syncStatus.dropCowboy?.data?.lastUpdated || voicemailMetrics?.lastUpdated}
             />
-            <SyncIndicator 
-              label="SMS Clients" 
-              status={syncStatus.sms?.data} 
+            <SyncIndicator
+              label="SMS Clients"
+              status={syncStatus.sms?.data}
               lastSync={syncStatus.sms?.data?.lastSyncAt || syncStatus.sms?.data?.lastUpdated || syncStatus.sms?.data?.lastSync}
             />
           </div>
@@ -319,7 +319,7 @@ const Dashboard = () => {
                 <Mail className="text-blue-600" size={20} />
                 Email Performance
               </h2>
-              <button 
+              <button
                 onClick={() => {
                   localStorage.setItem('selectedService', 'mautic');
                   navigate('/services');
@@ -329,34 +329,34 @@ const Dashboard = () => {
                 View All <ArrowRight size={14} />
               </button>
             </div>
-            
+
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
-              <MetricBox 
-                label="Total Sent" 
-                value={formatNumber(emailMetrics.totalSent)} 
+              <MetricBox
+                label="Total Sent"
+                value={formatNumber(emailMetrics.totalSent)}
                 icon={Mail}
               />
-              <MetricBox 
-                label="Opened" 
-                value={formatNumber(emailMetrics.totalRead)} 
+              <MetricBox
+                label="Opened"
+                value={formatNumber(emailMetrics.totalRead)}
                 icon={CheckCircle}
                 color="green"
               />
-              <MetricBox 
-                label="Clicks" 
-                value={formatNumber(emailMetrics.totalClicked)} 
+              <MetricBox
+                label="Clicks"
+                value={formatNumber(emailMetrics.totalClicked)}
                 icon={TrendingUp}
                 color="blue"
               />
-              <MetricBox 
-                label="Unique Clicks" 
-                value={formatNumber(emailMetrics.totalUniqueClicks)} 
+              <MetricBox
+                label="Unique Clicks"
+                value={formatNumber(emailMetrics.totalUniqueClicks)}
                 icon={Users}
                 color="purple"
               />
-              <MetricBox 
-                label="Bounced" 
-                value={formatNumber(emailMetrics.totalBounced)} 
+              <MetricBox
+                label="Bounced"
+                value={formatNumber(emailMetrics.totalBounced)}
                 icon={AlertTriangle}
                 color="red"
               />
@@ -373,15 +373,15 @@ const Dashboard = () => {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={emailChartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                    <XAxis 
-                      dataKey="name" 
-                      tick={{ fontSize: 10 }} 
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fontSize: 10 }}
                       angle={-15}
                       textAnchor="end"
                       height={50}
                     />
                     <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip 
+                    <Tooltip
                       content={({ active, payload }) => {
                         if (active && payload && payload.length) {
                           const data = payload[0].payload
@@ -421,7 +421,7 @@ const Dashboard = () => {
                 <Phone className="text-green-600" size={20} />
                 Voicemail Performance
               </h2>
-              <button 
+              <button
                 onClick={() => {
                   localStorage.setItem('selectedService', 'dropcowboy');
                   navigate('/services');
@@ -431,31 +431,33 @@ const Dashboard = () => {
                 View All <ArrowRight size={14} />
               </button>
             </div>
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-              <MetricBox 
-                label="Total Sent" 
-                value={formatNumber(voicemailMetrics.overall.totalSent)} 
+
+            <div className={`grid grid-cols-2 ${hasFullAccess() ? "md:grid-cols-4" : "md:grid-cols-3"} gap-4 mb-4`}>
+              <MetricBox
+                label="Total Sent"
+                value={formatNumber(voicemailMetrics.overall.totalSent)}
                 icon={Phone}
               />
-              <MetricBox 
-                label="Delivered" 
-                value={formatNumber(voicemailMetrics.overall.successfulDeliveries)} 
+              <MetricBox
+                label="Delivered"
+                value={formatNumber(voicemailMetrics.overall.successfulDeliveries)}
                 icon={CheckCircle}
                 color="green"
               />
-              <MetricBox 
-                label="Failed" 
-                value={formatNumber(voicemailMetrics.overall.failedSends)} 
+              <MetricBox
+                label="Failed"
+                value={formatNumber(voicemailMetrics.overall.failedSends)}
                 icon={AlertTriangle}
                 color="red"
               />
-              <MetricBox 
-                label="Total Cost" 
-                value={formatCurrency(voicemailMetrics.overall.totalCost)} 
-                icon={BarChart3}
-                color="purple"
-              />
+              {hasFullAccess() &&
+                <MetricBox
+                  label="Total Cost"
+                  value={formatCurrency(voicemailMetrics.overall.totalCost)}
+                  icon={BarChart3}
+                  color="purple"
+                />
+              }
             </div>
 
             <div className="flex items-center justify-between mb-4">
@@ -463,7 +465,7 @@ const Dashboard = () => {
                 <div className="text-sm text-gray-600 mb-1">Success Rate</div>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 bg-gray-200 rounded-full h-3">
-                    <div 
+                    <div
                       className="bg-green-500 h-3 rounded-full transition-all duration-500"
                       style={{ width: `${Math.min(voicemailMetrics.overall.averageSuccessRate, 100)}%` }}
                     />
@@ -562,33 +564,33 @@ const Dashboard = () => {
         <div className="card">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <QuickActionButton 
-              icon={RefreshCw} 
+            <QuickActionButton
+              icon={RefreshCw}
               label={isSyncing ? "Syncing..." : "Sync All Data"}
               disabled={isSyncing}
               onClick={async () => {
                 try {
                   setIsSyncing(true)
                   toast.info('Syncing Mautic automation clients and voicemail data...', { autoClose: 3000 })
-                  
+
                   // 🚀 OPTIMIZED: Single consolidated sync endpoint
                   const response = await axios.post('/api/dashboard/sync-all?syncDropCowboy=true')
-                  
+
                   // Show specific results
                   if (response.data?.success) {
                     const mautic = response.data.data?.mautic
                     const dropCowboy = response.data.data?.dropCowboy
-                    
+
                     if (mautic?.success) {
                       toast.success(mautic.message || 'Mautic automation clients synced!', { autoClose: 4000 })
                     } else if (mautic?.message) {
                       toast.warning(mautic.message, { autoClose: 4000 })
                     }
-                    
+
                     if (dropCowboy?.success) {
                       toast.success('Voicemail data synced!', { autoClose: 3000 })
                     }
-                    
+
                     // Refresh dashboard data
                     await fetchAllData()
                   } else {
@@ -601,19 +603,19 @@ const Dashboard = () => {
                 }
               }}
             />
-            <QuickActionButton 
-              icon={FolderOpen} 
-              label="Manage Clients" 
+            <QuickActionButton
+              icon={FolderOpen}
+              label="Manage Clients"
               onClick={() => navigate('/clients')}
             />
-            <QuickActionButton 
-              icon={Users} 
-              label="Manage Users" 
+            <QuickActionButton
+              icon={Users}
+              label="Manage Users"
               onClick={() => navigate('/users')}
             />
-            <QuickActionButton 
-              icon={Activity} 
-              label="View Activity" 
+            <QuickActionButton
+              icon={Activity}
+              label="View Activity"
               onClick={() => navigate('/activities')}
             />
           </div>
@@ -665,7 +667,7 @@ const MetricBox = ({ label, value, icon: Icon, color = 'gray' }) => {
 
 const RateBox = ({ label, value, isNegative = false }) => {
   const numValue = parseFloat(value || 0)
-  const colorClass = isNegative 
+  const colorClass = isNegative
     ? (numValue > 5 ? 'text-red-600' : 'text-green-600')
     : (numValue > 20 ? 'text-green-600' : numValue > 10 ? 'text-yellow-600' : 'text-red-600')
 
@@ -681,12 +683,12 @@ const SyncIndicator = ({ label, status, lastSync, isActive }) => {
   const { formatDateTime } = useTimezone()
   // Determine if credentials are configured
   const hasCredentials = status?.hasCredentials ?? true
-  
+
   // Determine sync state
   const isRecent = lastSync && (new Date() - new Date(lastSync)) < 3600000
   const neverSynced = !lastSync && hasCredentials
   const notConfigured = !hasCredentials
-  
+
   // Determine indicator color and icon
   const getIndicatorState = () => {
     if (isActive) return { color: 'bg-blue-500', icon: <Loader2 size={14} className="animate-spin text-blue-600" /> }
@@ -695,9 +697,9 @@ const SyncIndicator = ({ label, status, lastSync, isActive }) => {
     if (isRecent) return { color: 'bg-green-500', icon: <CheckCircle size={14} className="text-green-600" /> }
     return { color: 'bg-yellow-500', icon: <Clock size={14} className="text-yellow-600" /> }
   }
-  
+
   const indicatorState = getIndicatorState()
-  
+
   // Determine display text
   const getDisplayText = () => {
     if (isActive) return 'Syncing...'
@@ -763,11 +765,10 @@ const QuickActionButton = ({ icon: Icon, label, onClick, disabled = false }) => 
   <button
     onClick={onClick}
     disabled={disabled}
-    className={`flex flex-col items-center gap-2 p-4 rounded-lg transition-colors ${
-      disabled 
-        ? 'bg-gray-100 cursor-not-allowed opacity-60' 
+    className={`flex flex-col items-center gap-2 p-4 rounded-lg transition-colors ${disabled
+        ? 'bg-gray-100 cursor-not-allowed opacity-60'
         : 'bg-gray-50 hover:bg-gray-100'
-    }`}
+      }`}
   >
     {disabled ? (
       <Loader2 size={24} className="text-primary-600 animate-spin" />

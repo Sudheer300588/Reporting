@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { Phone, CheckCircle, AlertTriangle, Loader2, BarChart3 } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import axios from 'axios'
+import { useAuth } from '../../contexts/AuthContext';
+import { hasFullAccess } from '../../utils/permissions';
 
 const formatNumber = (num) => {
   if (num === null || num === undefined) return '0'
@@ -44,6 +46,9 @@ const VoicemailPerformanceWidget = ({ clientName }) => {
   const [error, setError] = useState(null)
   const [clientStats, setClientStats] = useState(null)
 
+  const { user } = useAuth();
+  const showCostForFullSystemAccessRoles = hasFullAccess(user);
+
   useEffect(() => {
     const fetchClientStats = async () => {
       if (!clientName) {
@@ -55,7 +60,7 @@ const VoicemailPerformanceWidget = ({ clientName }) => {
         setLoading(true)
         setError(null)
         const response = await axios.get(`/api/clients/${encodeURIComponent(clientName)}/dropcowboy/stats`)
-        
+
         if (response.data?.success) {
           setClientStats(response.data.data)
         } else {
@@ -73,7 +78,7 @@ const VoicemailPerformanceWidget = ({ clientName }) => {
 
   const pieChartData = useMemo(() => {
     if (!clientStats) return []
-    
+
     const data = []
     if (clientStats.successfulDeliveries > 0) {
       data.push({ name: 'Delivered', value: clientStats.successfulDeliveries, color: COLORS[0] })
@@ -131,31 +136,33 @@ const VoicemailPerformanceWidget = ({ clientName }) => {
           <span className="font-bold bg-green-100 px-2 rounded text-gray-700">{clientName}</span>
         )}
       </div>
-      
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <MetricBox 
-          label="Total Sent" 
-          value={formatNumber(clientStats.totalSent)} 
+
+      <div className={`grid grid-cols-2 ${showCostForFullSystemAccessRoles ? "md:grid-cols-4" : "md:grid-cols-3"} gap-3 mb-4`}>
+        <MetricBox
+          label="Total Sent"
+          value={formatNumber(clientStats.totalSent)}
           icon={Phone}
         />
-        <MetricBox 
-          label="Delivered" 
-          value={formatNumber(clientStats.successfulDeliveries)} 
+        <MetricBox
+          label="Delivered"
+          value={formatNumber(clientStats.successfulDeliveries)}
           icon={CheckCircle}
           color="green"
         />
-        <MetricBox 
-          label="Failed" 
-          value={formatNumber(clientStats.failedSends)} 
+        <MetricBox
+          label="Failed"
+          value={formatNumber(clientStats.failedSends)}
           icon={AlertTriangle}
           color="red"
         />
-        <MetricBox 
-          label="Total Cost" 
-          value={formatCurrency(clientStats.totalCost)} 
-          icon={BarChart3}
-          color="purple"
-        />
+        {showCostForFullSystemAccessRoles &&
+          <MetricBox
+            label="Total Cost"
+            value={formatCurrency(clientStats.totalCost)}
+            icon={BarChart3}
+            color="purple"
+          />
+        }
       </div>
 
       <div className="flex items-center justify-between mb-4">
@@ -163,7 +170,7 @@ const VoicemailPerformanceWidget = ({ clientName }) => {
           <div className="text-sm text-gray-600 mb-1">Success Rate</div>
           <div className="flex items-center gap-2">
             <div className="flex-1 bg-gray-200 rounded-full h-3">
-              <div 
+              <div
                 className="bg-green-500 h-3 rounded-full transition-all duration-500"
                 style={{ width: `${Math.min(parseFloat(clientStats.avgSuccessRate || clientStats.averageSuccessRate) || 0, 100)}%` }}
               />

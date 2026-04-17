@@ -3,10 +3,15 @@ import MetricsCards from "./MetricsCards";
 import useViewLevel from "../../zustand/useViewLevel";
 import ExportButton from "../ExportButton";
 import dropCowboyService from "../../services/dropCowboy/dropCowboyService";
+import { useAuth } from "../../contexts/AuthContext";
+import { hasFullAccess } from "../../utils/permissions";
 
 const RECORDS_PER_PAGE = 50;
 
 const ClientsTable = ({ refreshTick = 0 }) => {
+  const { user } = useAuth();
+  const showCostForFullSystemAccessRoles = hasFullAccess(user);
+
   const { dropcowboy, setDCViewLevel, setDCSelectedCampaign } = useViewLevel();
   const { viewLevel, selectedClient, selectedCampaign } = dropcowboy;
 
@@ -375,9 +380,11 @@ const ClientsTable = ({ refreshTick = 0 }) => {
                     <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-700">
                       Other
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-700">
-                      Cost
-                    </th>
+                    {showCostForFullSystemAccessRoles &&
+                      <th className="px-4 py-3 text-left text-xs font-bold uppercase text-gray-700">
+                        Cost
+                      </th>
+                    }
                   </tr>
                 )}
 
@@ -432,7 +439,9 @@ const ClientsTable = ({ refreshTick = 0 }) => {
                     <td className="px-4 py-3">{campaign.successfulDeliveries}</td>
                     <td className="px-4 py-3">{campaign.failedSends}</td>
                     <td className="px-4 py-3">{campaign.otherStatus}</td>
-                    <td className="px-4 py-3">${(campaign.totalCost || 0).toFixed(2)}</td>
+                    {showCostForFullSystemAccessRoles &&
+                      <td className="px-4 py-3">${(campaign.totalCost || 0).toFixed(2)}</td>
+                    }
                   </tr>
                 ))}
 
@@ -449,10 +458,10 @@ const ClientsTable = ({ refreshTick = 0 }) => {
                     <td className="px-4 py-3">
                       {record.date
                         ? new Date(record.date).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })
                         : "-"}
                     </td>
                     <td className="px-4 py-3">{record.firstName}</td>
