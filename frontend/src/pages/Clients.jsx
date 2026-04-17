@@ -471,7 +471,7 @@ const Clients = () => {
                                         </td>
 
                                         {/* Actions */}
-                                        <td className="px-4 py-3 flex justify-center gap-2">
+                                        <td className="px-4 py-3 text-center">
                                             {canAssignClients && (
                                                 <button
                                                     onClick={(e) => {
