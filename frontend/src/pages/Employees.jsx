@@ -7,7 +7,7 @@ import { usePermissions } from '../utils/permissions'
 
 const Employees = () => {
   const { user } = useAuth()
-  const { hasFullAccess, hasPermission } = usePermissions(user)
+  const { hasFullAccess, hasPermission, canCreateUsers, canEditUsers, canDeleteUsers } = usePermissions(user)
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -107,6 +107,16 @@ const Employees = () => {
     // Prevent double submission
     if (isSubmitting) return;
 
+    // Permission guard
+    if (editingUser && !canEditEmployee) {
+      toast.error('You do not have permission to update users');
+      return;
+    }
+    if (!editingUser && !canCreateEmployee) {
+      toast.error('You do not have permission to create users');
+      return;
+    }
+
     // Password validation for new employee
     if (!editingUser) {
       if (!formData.password) {
@@ -170,6 +180,7 @@ const Employees = () => {
   }
 
   const handleEdit = (employeeToEdit) => {
+    if (!canEditEmployee) return;
     setEditingUser(employeeToEdit)
     setFormData({
       name: employeeToEdit.name,
@@ -184,6 +195,7 @@ const Employees = () => {
   }
 
   const handleDelete = async (employeeId) => {
+    if (!canDeleteEmployee) return;
     if (window.confirm('Are you sure you want to delete this employee?')) {
       try {
         await axios.delete(`/api/users/${employeeId}`)
@@ -320,8 +332,10 @@ const Employees = () => {
     telecaller: 'badge-telecaller',
   };
 
-  // Check if user can create employees based on their permissions
-  const canCreateEmployee = hasFullAccess() || hasPermission('Users', 'Create');
+  // Permission checks for user management
+  const canCreateEmployee = canCreateUsers();
+  const canEditEmployee = canEditUsers();
+  const canDeleteEmployee = canDeleteUsers();
 
   if (loading || rolesLoading) {
     return (
@@ -418,7 +432,7 @@ const Employees = () => {
                           <span className="text-gray-300 cursor-not-allowed" title="Owner account cannot be deactivated">
                             <ToggleRight size={22} />
                           </span>
-                        ) : (
+                        ) : canEditEmployee ? (
                           <button
                             onClick={() => toggleActivity(userItem)}
                             className="focus:outline-none"
@@ -430,19 +444,29 @@ const Employees = () => {
                               <ToggleLeft className="text-gray-400" size={22} />
                             )}
                           </button>
+                        ) : (
+                          <span className={`cursor-not-allowed opacity-40`} title="No permission to change status">
+                            {userItem.isActive ? (
+                              <ToggleRight className="text-green-500" size={22} />
+                            ) : (
+                              <ToggleLeft className="text-gray-400" size={22} />
+                            )}
+                          </span>
                         )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleEdit(userItem)}
-                          className="text-indigo-600 hover:text-indigo-900"
-                          title="Edit Employee"
-                        >
-                          <Edit size={16} />
-                        </button>
-                        {!isOwner(userItem.id) && (
+                        {canEditEmployee && (
+                          <button
+                            onClick={() => handleEdit(userItem)}
+                            className="text-indigo-600 hover:text-indigo-900"
+                            title="Edit Employee"
+                          >
+                            <Edit size={16} />
+                          </button>
+                        )}
+                        {canDeleteEmployee && !isOwner(userItem.id) && (
                           <button
                             onClick={() => handleDelete(userItem.id)}
                             className="text-red-600 hover:text-red-900"
@@ -450,6 +474,9 @@ const Employees = () => {
                           >
                             <Trash2 size={16} />
                           </button>
+                        )}
+                        {!canEditEmployee && !canDeleteEmployee && (
+                          <span className="text-xs text-gray-400 italic">Read only</span>
                         )}
                       </div>
                     </td>

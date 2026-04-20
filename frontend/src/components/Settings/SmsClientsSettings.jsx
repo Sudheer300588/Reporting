@@ -4,9 +4,13 @@ import { toast } from 'react-toastify';
 import axios from 'axios';
 import SettingsSection from './SettingsSection';
 import { useSettings } from './SettingsLayout';
+import { useAuth } from '../../contexts/AuthContext';
+import { usePermissions } from '../../utils/permissions';
 
 const SmsClientsSettings = () => {
   const { canAccessSetting } = useSettings();
+  const { user } = useAuth();
+  const { canCreateClients, canEditClients, canDeleteClients } = usePermissions(user);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -49,6 +53,8 @@ const SmsClientsSettings = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (editingClient && !canEditClients()) return;
+    if (!editingClient && !canCreateClients()) return;
     const toastId = toast.loading(editingClient ? '⚙️ Updating SMS client...' : '⚙️ Creating SMS client...');
 
     try {
@@ -77,6 +83,7 @@ const SmsClientsSettings = () => {
   };
 
   const handleEdit = (client) => {
+    if (!canEditClients()) return;
     setEditingClient(client);
     setFormData({
       name: client.name,
@@ -88,6 +95,7 @@ const SmsClientsSettings = () => {
   };
 
   const handleDelete = async (clientId) => {
+    if (!canDeleteClients()) return;
     if (!confirm('⚠️ Are you sure you want to delete this SMS client?\n\nThis will permanently remove:\n• The SMS client\n• All associated SMS campaigns\n• All SMS statistics\n\nThis action cannot be undone.')) {
       return;
     }
@@ -226,27 +234,31 @@ const SmsClientsSettings = () => {
                 Configure SMS clients to sync campaigns from your Mautic instances
               </div>
               <div className="flex items-center gap-3">
-                <button
-                  onClick={() => {
-                    setEditingClient(null);
-                    setShowPassword(false);
-                    setFormData({ name: '', mauticUrl: '', username: '', password: '' });
-                    setIsModalOpen(true);
-                  }}
-                  className="btn btn-primary flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Client
-                </button>
-                <button
-                  onClick={handleSyncAll}
-                  disabled={clients.length === 0 || syncingClientId !== null}
-                  className="btn btn-secondary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Sync all SMS clients"
-                >
-                  <RefreshCw className={`w-4 h-4 ${syncingClientId !== null ? 'animate-spin' : ''}`} />
-                  Sync
-                </button>
+                {canCreateClients() && (
+                  <button
+                    onClick={() => {
+                      setEditingClient(null);
+                      setShowPassword(false);
+                      setFormData({ name: '', mauticUrl: '', username: '', password: '' });
+                      setIsModalOpen(true);
+                    }}
+                    className="btn btn-primary flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Client
+                  </button>
+                )}
+                {(canCreateClients() || canEditClients()) && (
+                  <button
+                    onClick={handleSyncAll}
+                    disabled={clients.length === 0 || syncingClientId !== null}
+                    className="btn btn-secondary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Sync all SMS clients"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${syncingClientId !== null ? 'animate-spin' : ''}`} />
+                    Sync
+                  </button>
+                )}
               </div>
             </div>
 
@@ -326,28 +338,37 @@ const SmsClientsSettings = () => {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => handleSync(client.id)}
-                              disabled={syncingClientId === client.id}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                              title="Sync SMS campaigns"
-                            >
-                              <RefreshCw className={`w-4 h-4 ${syncingClientId === client.id ? 'animate-spin' : ''}`} />
-                            </button>
-                            <button
-                              onClick={() => handleEdit(client)}
-                              className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                              title="Edit client"
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(client.id)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Delete client"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {canEditClients() && (
+                              <button
+                                onClick={() => handleSync(client.id)}
+                                disabled={syncingClientId === client.id}
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                title="Sync SMS campaigns"
+                              >
+                                <RefreshCw className={`w-4 h-4 ${syncingClientId === client.id ? 'animate-spin' : ''}`} />
+                              </button>
+                            )}
+                            {canEditClients() && (
+                              <button
+                                onClick={() => handleEdit(client)}
+                                className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                title="Edit client"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                            )}
+                            {canDeleteClients() && (
+                              <button
+                                onClick={() => handleDelete(client.id)}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Delete client"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                            {!canEditClients() && !canDeleteClients() && (
+                              <span className="text-xs text-gray-400 italic">Read only</span>
+                            )}
                           </div>
                         </td>
                       </tr>

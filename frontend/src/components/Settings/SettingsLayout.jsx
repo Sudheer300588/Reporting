@@ -123,7 +123,16 @@ const SettingsLayout = ({ children, myPermissions = [] }) => {
     return false;
   };
 
-  const visibleSections = SECTION_CONFIG.filter(({ key, superadminOnly }) => {
+  /**
+   * Check if the user can perform write operations (create/update/delete)
+   * within a settings section. Full-access users always can; others need
+   * the section permission AND a write-capable role (no read-only restriction
+   * exists at the Settings level, so section access implies write access).
+   * This is kept as a separate helper so future read-only roles can be added.
+   */
+  const canWriteSetting = (settingKey) => {
+    return canAccessSetting(settingKey);
+  };  const visibleSections = SECTION_CONFIG.filter(({ key, superadminOnly }) => {
     // Roles section is superadmin-only by design
     if (superadminOnly && !hasFullAccess()) return false;
 
@@ -158,6 +167,7 @@ const SettingsLayout = ({ children, myPermissions = [] }) => {
     registerSection,
     scrollToSection,
     canAccessSetting,
+    canWriteSetting,
     isInteractingRef,
     user,
     myPermissions

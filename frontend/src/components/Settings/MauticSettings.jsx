@@ -6,10 +6,14 @@ import ClientsTable from '../mautic/ClientsTable';
 import AddClientModal from '../mautic/AddClientModal';
 import SettingsSection from './SettingsSection';
 import { useSettings } from './SettingsLayout';
+import { useAuth } from '../../contexts/AuthContext';
+import { usePermissions } from '../../utils/permissions';
 
 const MauticSettings = () => {
   const { canAccessSetting } = useSettings();
-  const { clients, loading: mauticLoading, refetch: refetchClients } = useClients();
+  const { user } = useAuth();
+  const { canCreateClients, canEditClients, canDeleteClients } = usePermissions(user);
+  const { clients, refetch: refetchClients } = useClients();
   const [isMauticModalOpen, setIsMauticModalOpen] = useState(false);
   const [editingMauticClient, setEditingMauticClient] = useState(null);
   const { syncAllClients, isSyncing } = useSync();
@@ -61,23 +65,27 @@ const MauticSettings = () => {
         <div className="mb-4 flex items-center justify-between">
           <div />
           <div className="flex gap-2">
-            <button
-              onClick={() => { setEditingMauticClient(null); setIsMauticModalOpen(true); }}
-              className="btn btn-primary"
-            >
-              <Plus className="w-4 h-4" />
-              Add Client
-            </button>
-            <button
-              onClick={handleSyncClients}
-              className="btn btn-secondary flex items-center"
-              disabled={isSyncing}
-            >
-              {isSyncing ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-              ) : null}
-              Sync
-            </button>
+            {canCreateClients() && (
+              <button
+                onClick={() => { setEditingMauticClient(null); setIsMauticModalOpen(true); }}
+                className="btn btn-primary"
+              >
+                <Plus className="w-4 h-4" />
+                Add Client
+              </button>
+            )}
+            {(canCreateClients() || canEditClients()) && (
+              <button
+                onClick={handleSyncClients}
+                className="btn btn-secondary flex items-center"
+                disabled={isSyncing}
+              >
+                {isSyncing ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                ) : null}
+                Sync
+              </button>
+            )}
           </div>
         </div>
 
@@ -86,16 +94,21 @@ const MauticSettings = () => {
             clients={mauticOnlyClients}
             onEdit={(c) => { setEditingMauticClient(c); setIsMauticModalOpen(true); }}
             onRefresh={refetchClients}
+            canCreate={canCreateClients()}
+            canUpdate={canEditClients()}
+            canDelete={canDeleteClients()}
           />
         </div>
       </div>
 
-      <AddClientModal
-        isOpen={isMauticModalOpen}
-        onClose={() => { setIsMauticModalOpen(false); setEditingMauticClient(null); }}
-        editClient={editingMauticClient}
-        onSuccess={refetchClients}
-      />
+      {(editingMauticClient ? canEditClients() : canCreateClients()) && (
+        <AddClientModal
+          isOpen={isMauticModalOpen}
+          onClose={() => { setIsMauticModalOpen(false); setEditingMauticClient(null); }}
+          editClient={editingMauticClient}
+          onSuccess={refetchClients}
+        />
+      )}
     </SettingsSection>
   );
 };
