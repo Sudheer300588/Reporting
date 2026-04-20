@@ -8,7 +8,7 @@ import { Edit, ToggleLeft, ToggleRight, CheckCircle, XCircle, EyeOff, EyeIcon, T
 import { useClientManagement } from '../../hooks/mautic';
 import { useState } from 'react';
 
-const ClientsTable = ({ clients, onEdit, onRefresh }) => {
+const ClientsTable = ({ clients, onEdit, onRefresh, canCreate = false, canUpdate = false, canDelete = false }) => {
   const { deleteClient, hardDeleteClient, isDeleting } = useClientManagement();
   const [visibleUsers, setVisibleUsers] = useState({});
 
@@ -156,31 +156,40 @@ const ClientsTable = ({ clients, onEdit, onRefresh }) => {
 
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <div className="flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => onEdit(client)}
-                      className="text-blue-600 hover:text-blue-900 p-1.5 hover:bg-blue-50 rounded transition-colors"
-                      title="Edit client"
-                    >
-                      <Edit size={16} />
-                    </button>
-                    <button
-                      onClick={() => handleToggleActive(client)}
-                      disabled={isDeleting}
-                      className={`p-1.5 rounded transition-colors disabled:opacity-50 ${client.isActive ? 'text-green-600 hover:text-green-900 hover:bg-green-50' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}
-                      title={client.isActive ? 'Deactivate client' : 'Activate client'}
-                      aria-label={client.isActive ? 'Deactivate client' : 'Activate client'}
-                    >
-                      {client.isActive ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
-                    </button>
-                    <button
-                      onClick={() => handlePermanentDelete(client)}
-                      disabled={isDeleting}
-                      className="text-red-600 hover:text-red-900 p-1.5 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
-                      title="Permanently delete client"
-                      aria-label="Permanently delete client"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    {canUpdate && (
+                      <button
+                        onClick={() => onEdit(client)}
+                        className="text-blue-600 hover:text-blue-900 p-1.5 hover:bg-blue-50 rounded transition-colors"
+                        title="Edit client"
+                      >
+                        <Edit size={16} />
+                      </button>
+                    )}
+                    {canUpdate && (
+                      <button
+                        onClick={() => handleToggleActive(client)}
+                        disabled={isDeleting}
+                        className={`p-1.5 rounded transition-colors disabled:opacity-50 ${client.isActive ? 'text-green-600 hover:text-green-900 hover:bg-green-50' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}
+                        title={client.isActive ? 'Deactivate client' : 'Activate client'}
+                        aria-label={client.isActive ? 'Deactivate client' : 'Activate client'}
+                      >
+                        {client.isActive ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button
+                        onClick={() => handlePermanentDelete(client)}
+                        disabled={isDeleting}
+                        className="text-red-600 hover:text-red-900 p-1.5 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                        title="Permanently delete client"
+                        aria-label="Permanently delete client"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                    {!canUpdate && !canDelete && (
+                      <span className="text-xs text-gray-400 italic">Read only</span>
+                    )}
                   </div>
                 </td>
               </tr>

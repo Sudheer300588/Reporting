@@ -14,7 +14,7 @@ import {
 } from "../../../../utils/emailHelper.js";
 import DropCowboyDataService from "../../../dropCowboy/services/dataService.js";
 import DropCowboyScheduler from "../../../dropCowboy/services/schedulerService.js";
-import { authenticate, hasFullAccess, getAccessibleClientIds } from '../../../../middleware/auth.js';
+import { authenticate, requirePermission, hasFullAccess, getAccessibleClientIds } from '../../../../middleware/auth.js';
 import smsClientRoutes from '../../sms/routes/smsClient.js';
 
 const router = express.Router();
@@ -511,7 +511,7 @@ router.get("/clients/:clientId/reports/aggregated/summary", async (req, res) => 
  * POST /api/mautic/clients
  * Create a new Mautic client
  */
-router.post("/clients", async (req, res) => {
+router.post("/clients", authenticate, requirePermission("Settings", "Autovation Clients"), async (req, res) => {
   try {
     let {
       name,
@@ -879,7 +879,7 @@ router.get("/clients/:id/password", async (req, res) => {
  * PUT /api/mautic/clients/:id
  * Update a Mautic client (also supports backfilling historical reports)
  */
-router.put("/clients/:id", async (req, res) => {
+router.put("/clients/:id", authenticate, requirePermission("Settings", "Autovation Clients"), async (req, res) => {
   try {
     const { id } = req.params;
     const { name, mauticUrl, username, isActive, fromDate, toDate, limit } =
@@ -958,7 +958,7 @@ router.put("/clients/:id", async (req, res) => {
  * Trigger month-by-month historical backfill for a client
  * Accepts optional JSON body: { fromDate: 'YYYY-MM-DD', toDate: 'YYYY-MM-DD', pageLimit: 5000 }
  */
-router.post("/clients/:id/backfill", async (req, res) => {
+router.post("/clients/:id/backfill", authenticate, requirePermission("Settings", "Autovation Clients"), async (req, res) => {
   try {
     const { id } = req.params;
     const { fromDate, toDate, pageLimit } = req.body || {};
@@ -1093,7 +1093,7 @@ router.post("/clients/:id/backfill", async (req, res) => {
  *
  * Default range if not provided: from 2025-01-01 to today.
  */
-router.post("/clients/backfill-all", async (req, res) => {
+router.post("/clients/backfill-all", authenticate, requirePermission("Settings", "Autovation Clients"), async (req, res) => {
   try {
     const { fromDate, toDate, pageLimit } = req.body || {};
 
@@ -1248,7 +1248,7 @@ router.post("/clients/backfill-all", async (req, res) => {
  * DELETE /api/mautic/clients/:id
  * Delete a Mautic client and its associated records
  */
-router.delete("/clients/:id", async (req, res) => {
+router.delete("/clients/:id", authenticate, requirePermission("Settings", "Autovation Clients"), async (req, res) => {
   try {
     const { id } = req.params;
     const clientId = parseInt(id);
@@ -1320,7 +1320,7 @@ router.delete("/clients/:id", async (req, res) => {
  * DELETE /api/mautic/clients/:id/permanent
  * Permanently delete a Mautic client and all associated records
  */
-router.delete("/clients/:id/permanent", async (req, res) => {
+router.delete("/clients/:id/permanent", authenticate, requirePermission("Settings", "Autovation Clients"), async (req, res) => {
   try {
     const { id } = req.params;
     const clientId = parseInt(id);
@@ -1396,7 +1396,7 @@ router.delete("/clients/:id/permanent", async (req, res) => {
  * PATCH /api/mautic/clients/:id/toggle
  * Toggle active status of a Mautic client
  */
-router.patch("/clients/:id/toggle", async (req, res) => {
+router.patch("/clients/:id/toggle", authenticate, requirePermission("Settings", "Autovation Clients"), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -2034,7 +2034,7 @@ router.get("/sync/status", async (req, res) => {
  * POST /api/mautic/sync/all
  * Manually trigger sync for all clients
  */
-router.post("/sync/all", async (req, res) => {
+router.post("/sync/all", authenticate, requirePermission("Settings", "Autovation Clients"), async (req, res) => {
   try {
     // Check if sync is already in progress
     if (isSyncInProgress) {
@@ -2115,7 +2115,7 @@ router.post("/sync/all", async (req, res) => {
  * POST /api/mautic/sync/:clientId
  * Manually trigger sync for specific client
  */
-router.post("/sync/:clientId", async (req, res) => {
+router.post("/sync/:clientId", authenticate, requirePermission("Settings", "Autovation Clients"), async (req, res) => {
   try {
     const { clientId } = req.params;
 

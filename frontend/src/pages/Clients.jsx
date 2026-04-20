@@ -22,7 +22,7 @@ const Clients = () => {
     } = useViewLevel();
 
     const { user } = useAuth();
-    const { hasFullAccess, hasPermission, isTeamManager } = usePermissions(user);
+    const { hasFullAccess, hasPermission, isTeamManager, canCreateClients, canEditClients, canDeleteClients } = usePermissions(user);
     const [clients, setClients] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -284,7 +284,7 @@ const Clients = () => {
     const currentClients = filteredClients.slice(startIndex, endIndex);
 
     // Users who can assign clients are those with Clients.Update permission or team management
-    const canAssignClients = hasPermission('Clients', 'Update') || canManageTeam();
+    const canAssignClients = canEditClients() || canManageTeam();
 
     if (loading) {
         return (

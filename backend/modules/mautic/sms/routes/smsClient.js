@@ -6,6 +6,7 @@ import mauticAPIService from '../../mauticAPI.js';
 import smsService from '../services/smsService.js';
 import smsSyncService from '../services/smsSyncService.js';
 import logger from '../../../../utils/logger.js';
+import { authenticate, requirePermission } from '../../../../middleware/auth.js';
 
 const router = express.Router();
 
@@ -174,7 +175,7 @@ router.get('/sms-clients', async (req, res) => {
  * POST /api/mautic/sms-clients
  * Create a new SMS client
  */
-router.post('/sms-clients', async (req, res) => {
+router.post('/sms-clients', authenticate, requirePermission("Settings", "SMS Clients"), async (req, res) => {
   try {
     const { name, mauticUrl, username, password } = req.body;
 
@@ -244,7 +245,7 @@ router.post('/sms-clients', async (req, res) => {
  * PUT /api/mautic/sms-clients/:id
  * Update an SMS client
  */
-router.put('/sms-clients/:id', async (req, res) => {
+router.put('/sms-clients/:id', authenticate, requirePermission("Settings", "SMS Clients"), async (req, res) => {
   try {
     const { id } = req.params;
     const { name, mauticUrl, username, password, isActive } = req.body;
@@ -308,7 +309,7 @@ router.put('/sms-clients/:id', async (req, res) => {
  * Delete an SMS client and ALL related data
  * ✅ ENHANCED: Deletes ALL campaigns originally fetched by these credentials (regardless of current grouping)
  */
-router.delete('/sms-clients/:id', async (req, res) => {
+router.delete('/sms-clients/:id', authenticate, requirePermission("Settings", "SMS Clients"), async (req, res) => {
   try {
     const { id } = req.params;
     const smsClientId = parseInt(id);
@@ -431,7 +432,7 @@ router.delete('/sms-clients/:id', async (req, res) => {
  * POST /api/mautic/sms-clients/:id/sync
  * Trigger manual sync for an SMS client
  */
-router.post('/sms-clients/:id/sync', async (req, res) => {
+router.post('/sms-clients/:id/sync', authenticate, requirePermission("Settings", "SMS Clients"), async (req, res) => {
   try {
     const { id } = req.params;
     const syncResult = await syncSmsClientData(parseInt(id));
