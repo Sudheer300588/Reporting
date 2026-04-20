@@ -89,7 +89,8 @@ const Dashboard = () => {
           title: 'Low Email Open Rates',
           description: `Average open rate is ${email.avgReadRate?.toFixed(2)}%. Consider optimizing subject lines.`,
           action: 'View Emails',
-          link: '/services'
+          link: '/services',
+          service: 'mautic'
         })
       }
       if (email.bounceRate > 5) {
@@ -98,7 +99,8 @@ const Dashboard = () => {
           title: 'High Bounce Rate',
           description: `Bounce rate is ${email.bounceRate}%. Clean your email list to improve deliverability.`,
           action: 'View Details',
-          link: '/services'
+          link: '/services',
+          service: 'mautic'
         })
       }
     }
@@ -110,7 +112,8 @@ const Dashboard = () => {
           title: 'Voicemail Delivery Issues',
           description: `Only ${voicemail.overall.averageSuccessRate}% delivery success. Check phone number quality.`,
           action: 'View Records',
-          link: '/services'
+          link: '/services',
+          service: 'dropcowboy'
         })
       }
     }
@@ -138,6 +141,11 @@ const Dashboard = () => {
       minimumFractionDigits: 2
     }).format(amount || 0)
   }
+
+  const handleNavigate = (insight) => {
+    localStorage.setItem('selectedService', insight.service);
+    navigate(insight.link);
+  };
 
   const formatTimeAgo = (dateString) => {
     if (!dateString) return 'Never'
@@ -305,7 +313,7 @@ const Dashboard = () => {
           <h2 className="text-lg font-semibold text-gray-900 mb-3">Insights & Alerts</h2>
           <div className="grid gap-3">
             {insights.map((insight, idx) => (
-              <InsightCard key={idx} insight={insight} onClick={() => navigate(insight.link)} />
+              <InsightCard key={idx} insight={insight} onClick={() => handleNavigate(insight)} />
             ))}
           </div>
         </div>
