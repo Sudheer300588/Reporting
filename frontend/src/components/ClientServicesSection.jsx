@@ -5,6 +5,8 @@ import EmailPerformanceWidget from "./widgets/EmailPerformanceWidget";
 import VoicemailPerformanceWidget from "./widgets/VoicemailPerformanceWidget";
 import SmsPerformanceWidget from "./widgets/SmsPerformanceWidget";
 import useViewLevel from "../zustand/useViewLevel";
+import AICallingPerformanceWidget from "./widgets/AICallingPerformanceWidget";
+import OutboundPerformanceWidget from "./widgets/OutboundPerformanceWidget";
 
 const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCampaigns, openDropcowboyCampaigns, openSmsCampaigns }) => {
 
@@ -57,7 +59,7 @@ const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCamp
                 `}
                                 >
                                     <span className="text-lg"></span>
-                                    <span>Autovation</span>
+                                    <span>Email Automation</span>
                                 </button>
                                 : <></>
                             }
@@ -95,6 +97,39 @@ const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCamp
                                 </button>
                                 : <></>
                             }
+
+                            {
+                                <button
+                                    onClick={() => setSelectedService('aiagentcalling')}
+                                    className={`
+                  flex items-center gap-2 px-4 py-4 border-b-2 font-medium text-sm transition-colors
+                  ${selectedService === 'aiagentcalling'
+                                            ? 'border-blue-500 text-blue-600'
+                                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        }
+                `}
+                                >
+                                    <span className="text-lg"></span>
+                                    <span>AI Agent Calling</span>
+                                </button>
+                                // : <></>
+                            }
+                            {
+                                <button
+                                    onClick={() => setSelectedService('outboundcalling')}
+                                    className={`
+                  flex items-center gap-2 px-4 py-4 border-b-2 font-medium text-sm transition-colors
+                  ${selectedService === 'outboundcalling'
+                                            ? 'border-blue-500 text-blue-600'
+                                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        }
+                `}
+                                >
+                                    <span className="text-lg"></span>
+                                    <span>Outbound Calling</span>
+                                </button>
+                                // : <></>
+                            }
                         </nav>
                     </div>
                 </div>
@@ -122,6 +157,16 @@ const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCamp
                     <SmsPerformanceWidget
                         key={`sms-${selectedClient.mauticApiId}`}
                         clientId={selectedClient.mauticApiId}
+                        clientName={selectedClient.name}
+                    />
+                ) : selectedService === 'aiagentcalling' ? (
+                    <AICallingPerformanceWidget
+                        key={`aiagentcalling-${selectedClient.name}`}
+                        clientName={selectedClient.name}
+                    />
+                ) : selectedService === 'outboundcalling' ? (
+                    <OutboundPerformanceWidget
+                        key={`outboundcalling-${selectedClient.name}`}
                         clientName={selectedClient.name}
                     />
                 ) : null}
@@ -155,7 +200,7 @@ const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCamp
                                 <div className="p-3 bg-blue-100 rounded-lg">
                                     <Mail className="w-6 h-6 text-blue-600" />
                                 </div>
-                                <span className="text-gray-900 font-medium">Autovation</span>
+                                <span className="text-gray-900 font-medium">Email Automation</span>
                             </td>
                             <td className="px-4 py-3 text-gray-600">Email Marketing Campaigns</td>
                             <td className="px-4 py-3 text-center">

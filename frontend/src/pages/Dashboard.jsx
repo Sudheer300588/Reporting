@@ -255,7 +255,7 @@ const Dashboard = () => {
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
             <SyncIndicator
-              label="Autovation"
+              label="Email Automation"
               status={syncStatus.mautic?.data}
               lastSync={syncStatus.mautic?.data?.lastUpdated || syncStatus.mautic?.data?.lastSync || syncStatus.mautic?.data?.lastSyncAt}
             />
@@ -325,7 +325,7 @@ const Dashboard = () => {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                 <Mail className="text-blue-600" size={20} />
-                Email Performance
+                Email Automation Performance
               </h2>
               <button
                 onClick={() => {
