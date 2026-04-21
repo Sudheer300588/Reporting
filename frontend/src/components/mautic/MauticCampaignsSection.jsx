@@ -188,7 +188,7 @@ const MauticCampaignsSection = ({ campaigns, selectedClient, loadingCampaigns, g
             <div className="mb-8">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-900">Autovation Campaigns</h1>
+                        <h1 className="text-3xl font-bold text-gray-900">Email Automation Campaigns</h1>
                         <p className="text-gray-500 mt-2">Viewing campaigns for <span className="font-semibold">{selectedClient?.name}</span></p>
                     </div>
                     <ExportButton
