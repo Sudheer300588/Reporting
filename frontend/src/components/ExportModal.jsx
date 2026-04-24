@@ -3,55 +3,6 @@ import { X, Loader, SlidersHorizontal, ChevronDown, ChevronUp } from 'lucide-rea
 import { exportData } from '../utils/exportHelpers';
 import { toast } from 'react-toastify';
 
-const humanizeFieldName = (key) => {
-  return key
-    .replace(/\./g, ' ')
-    .replace(/_/g, ' ')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/(^\w)|\s+(\w)/g, (m) => m.toUpperCase());
-};
-
-const collectFieldPaths = (rows, maxDepth = 3) => {
-  const paths = new Set();
-
-  const walk = (value, prefix = '', depth = 0) => {
-    if (value === null || value === undefined || depth > maxDepth) return;
-
-    if (Array.isArray(value)) {
-      if (prefix) paths.add(prefix);
-      return;
-    }
-
-    if (value instanceof Date) {
-      if (prefix) paths.add(prefix);
-      return;
-    }
-
-    if (typeof value === 'object') {
-      const entries = Object.entries(value);
-      if (entries.length === 0 && prefix) {
-        paths.add(prefix);
-      }
-      entries.forEach(([k, v]) => {
-        const next = prefix ? `${prefix}.${k}` : k;
-        if (v !== null && typeof v === 'object' && !(v instanceof Date) && !Array.isArray(v)) {
-          walk(v, next, depth + 1);
-        } else {
-          paths.add(next);
-        }
-      });
-      return;
-    }
-
-    if (prefix) paths.add(prefix);
-  };
-
-  (rows || []).forEach((row) => walk(row));
-  return Array.from(paths);
-};
-
 /**
  * Export Modal Component
  * Allows users to:
@@ -78,16 +29,7 @@ export default function ExportModal({
 
   const effectiveColumns = useMemo(() => {
     const explicitColumns = columns || {};
-    const detectedFields = collectFieldPaths(data || []);
-
-    const merged = { ...explicitColumns };
-    detectedFields.forEach((fieldKey) => {
-      if (!merged[fieldKey]) {
-        merged[fieldKey] = humanizeFieldName(fieldKey);
-      }
-    });
-
-    return merged;
+    return explicitColumns;
   }, [columns, data]);
 
   useEffect(() => {
@@ -285,11 +227,10 @@ export default function ExportModal({
                 <button
                   key={format.value}
                   onClick={() => setSelectedFormat(format.value)}
-                  className={`p-3 rounded-lg border-2 font-medium text-sm transition-all ${
-                    selectedFormat === format.value
+                  className={`p-3 rounded-lg border-2 font-medium text-sm transition-all ${selectedFormat === format.value
                       ? 'border-blue-500 bg-blue-50 text-blue-700'
                       : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                  }`}
+                    }`}
                 >
                   <span className="text-lg">{format.icon}</span>
                   {format.label}
@@ -382,7 +323,7 @@ export default function ExportModal({
                     </div>
                   </div>
                 </div>
-            </div>
+              </div>
             )}
           </div>
 
