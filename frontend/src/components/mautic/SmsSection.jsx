@@ -68,6 +68,7 @@ const SmsSection = ({ clientId, refreshKey, accessibleClientIds }) => {
             'category.title': 'Category',
             'sentCount': 'Total Sent',
             'mauticId': 'Mautic ID',
+            'clientId': 'Client ID',
             'createdAt': 'Created Date'
           }}
           campaignType="sms"
