@@ -62,7 +62,7 @@ const MetricsCards = ({ metrics, onMetricClick, viewLevel }) => {
 
   return (
     // Use a horizontal single-line layout with horizontal scrolling on small viewports
-    <div className={`grid ${showCostForFullSystemAccessRoles ? 'grid-cols-5' : 'grid-cols-4'} gap-4 overflow-x-auto py-1`}>
+    <div className={`grid ${showCostForFullSystemAccessRoles ? 'grid-cols-5' : 'grid-cols-4'} bg-gray-50 gap-4 overflow-x-auto p-1`}>
       <MetricCard
         title="Total VoiceMails Sent"
         value={overall.totalSent.toLocaleString()}
