@@ -47,8 +47,23 @@ const Clients = () => {
             
             // ✅ Use optimized client service with caching
             const unifiedClients = await clientService.getUnifiedClients();
+
+            // order active clients first
+            const orderedClients = [];
+
+            unifiedClients.forEach(c => {
+                if (c.isActive) {
+                    orderedClients.push(c);
+                }
+            });
+
+            unifiedClients.forEach(c => {
+                if (!c.isActive) {
+                    orderedClients.push(c);
+                }
+            });
             
-            setClients(unifiedClients);
+            setClients(orderedClients);
         } catch (error) {
         } finally {
             setLoading(false);
