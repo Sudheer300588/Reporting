@@ -22,9 +22,9 @@ const MetricCard = ({ title, value, subtitle, icon: Icon, color = 'blue', clicka
     >
       <div className="flex items-start justify-between gap-2 mb-1">
         <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{title}</p>
-          <h3 className="text-xl font-bold text-gray-900 mb-1">{value}</h3>
-          {subtitle && <p className="text-xs text-gray-500 font-medium">{subtitle}</p>}
+          <p className="text-[10px] md:text-xs font-semibold text-gray-500 uppercase tracking-wide">{title}</p>
+          <h3 className="md:text-xl font-bold text-gray-900 mb-1">{value}</h3>
+          {subtitle && <p className="text-[10px] text-xs text-gray-500 font-medium">{subtitle}</p>}
 
         </div>
         {Icon && (
@@ -62,7 +62,7 @@ const MetricsCards = ({ metrics, onMetricClick, viewLevel }) => {
 
   return (
     // Use a horizontal single-line layout with horizontal scrolling on small viewports
-    <div className={`grid ${showCostForFullSystemAccessRoles ? 'grid-cols-5' : 'grid-cols-4'} bg-gray-50 gap-4 overflow-x-auto p-1`}>
+    <div className={`grid ${showCostForFullSystemAccessRoles ? 'grid-cols-5' : 'grid-cols-4'} max-lg:grid-cols-2 bg-gray-50 gap-4 overflow-x-auto p-1`}>
       <MetricCard
         title="Total VoiceMails Sent"
         value={overall.totalSent.toLocaleString()}
