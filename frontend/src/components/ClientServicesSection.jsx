@@ -43,7 +43,7 @@ const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCamp
 
             {/* Service selector for metric cards */}
             <div className="bg-white border-b border-gray-200 sticky z-40">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="w-full overflow-auto md:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-gray-500 py-4">Service Stats:</span>
                         <nav className="flex space-x-4" aria-label="Services">
@@ -198,15 +198,15 @@ const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCamp
                         >
                             <td className="px-4 py-3 flex items-center gap-3">
                                 <div className="p-3 bg-blue-100 rounded-lg">
-                                    <Mail className="w-6 h-6 text-blue-600" />
+                                    <Mail className="w-4 h-4 md:w-6 md:h-6 text-blue-600" />
                                 </div>
-                                <span className="text-gray-900 font-medium">Email Automation</span>
+                                <span className="text-gray-900 max-md:text-sm font-medium">Email Automation</span>
                             </td>
-                            <td className="px-4 py-3 text-gray-600">Email Marketing Campaigns</td>
+                            <td className="px-4 py-3 max-md:text-sm text-gray-600">Email Marketing Campaigns</td>
                             <td className="px-4 py-3 text-center">
                                 <span className="flex items-center justify-center gap-2">
-                                    <span className={`w-3 h-3 rounded-full ${selectedClient.isActive ? "bg-green-500" : "bg-gray-400"}`}></span>
-                                    <span className="text-sm font-medium">
+                                    <span className={`w-2 h-2 md:w-3 md:h-3 rounded-full ${selectedClient.isActive ? "bg-green-500" : "bg-gray-400"}`}></span>
+                                    <span className="text-sm max-md:text-xs font-medium">
                                         {selectedClient.isActive ? "Active" : "Inactive"}
                                     </span>
                                 </span>
@@ -220,15 +220,15 @@ const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCamp
                         >
                             <td className="px-4 py-3 flex items-center gap-3">
                                 <div className="p-3 bg-green-100 rounded-lg">
-                                    <PhoneOff className="w-6 h-6 text-green-500" />
+                                    <PhoneOff className="w-4 h-4 md:w-6 md:h-6 text-green-500" />
                                 </div>
-                                <span className="text-gray-900 font-medium">Ringless Voicemail</span>
+                                <span className="text-gray-900 max-md:text-sm font-medium">Ringless Voicemail</span>
                             </td>
-                            <td className="px-4 py-3 text-gray-600">Voicemail Campaigns</td>
+                            <td className="px-4 py-3 max-md:text-sm text-gray-600">Voicemail Campaigns</td>
                             <td className="px-4 py-3 text-center">
                                 <span className="flex items-center justify-center gap-2">
-                                    <span className={`w-3 h-3 rounded-full ${selectedClient.isActive ? "bg-green-500" : "bg-gray-400"}`}></span>
-                                    <span className="text-sm font-medium">
+                                    <span className={`w-2 h-2 md:w-3 md:h-3 rounded-full ${selectedClient.isActive ? "bg-green-500" : "bg-gray-400"}`}></span>
+                                    <span className="text-sm max-md:text-xs font-medium">
                                         {selectedClient.isActive ? "Active" : "Inactive"}
                                     </span>
                                 </span>
@@ -242,15 +242,15 @@ const ClientServicesSection = ({ selectedClient, goBackToClients, openMauticCamp
                         >
                             <td className="px-4 py-3 flex items-center gap-3">
                                 <div className="p-3 bg-purple-100 rounded-lg">
-                                    <MessageSquare className="w-6 h-6 text-purple-600" />
+                                    <MessageSquare className="w-4 h-4 md:w-6 md:h-6 text-purple-600" />
                                 </div>
-                                <span className="text-gray-900 font-medium">SMS Campaigns</span>
+                                <span className="text-gray-900 max-md:text-sm font-medium">SMS Campaigns</span>
                             </td>
-                            <td className="px-4 py-3 text-gray-600">SMS Marketing Messages</td>
+                            <td className="px-4 py-3 max-md:text-sm text-gray-600">SMS Marketing Messages</td>
                             <td className="px-4 py-3 text-center">
                                 <span className="flex items-center justify-center gap-2">
-                                    <span className={`w-3 h-3 rounded-full ${selectedClient.isActive ? "bg-green-500" : "bg-gray-400"}`}></span>
-                                    <span className="text-sm font-medium">
+                                    <span className={`w-2 h-2 md:w-3 md:h-3 rounded-full ${selectedClient.isActive ? "bg-green-500" : "bg-gray-400"}`}></span>
+                                    <span className="text-sm max-md:text-xs font-medium">
                                         {selectedClient.isActive ? "Active" : "Inactive"}
                                     </span>
                                 </span>

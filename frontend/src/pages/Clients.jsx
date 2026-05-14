@@ -406,13 +406,13 @@ const Clients = () => {
                                         className="hover:bg-gray-50 cursor-pointer transition-colors"
                                     >
                                         {/* Client Name + Avatar */}
-                                        <td className="px-4 py-3 flex items-center gap-3">
-                                            <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                        <td className="px-4 py-3 flex items-center gap-1 md:gap-3">
+                                            <div className="h-6 w-6 md:h-10 md:w-10 bg-blue-100 rounded-full flex items-center justify-center">
                                                 <span className="text-blue-600 font-semibold">
                                                     {client.name.charAt(0).toUpperCase()}
                                                 </span>
                                             </div>
-                                            <span className="text-gray-900 font-medium">
+                                            <span className="text-gray-900 max-md:text-sm font-medium">
                                                 {client.name}
                                             </span>
                                         </td>
@@ -439,7 +439,7 @@ const Clients = () => {
                                                             const roleLabel = a.user?.customRole?.name || (a.user?.role ? a.user.role.charAt(0).toUpperCase() + a.user.role.slice(1) : 'Unknown');
                                                             return (
                                                                 <div key={a.id || a.user?.id} className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                                                    <span className={`inline-flex items-center gap-2 px-2 py-1 rounded-md text-sm ${badgeClass}`}>
+                                                                    <span className={`inline-flex items-center gap-2 px-2 py-1 max-md:p-1 rounded-md text-sm ${badgeClass}`}>
                                                                         <span className="font-medium">
                                                                             {((a.user?.name || a.userName || "Unknown") ?? "")
                                                                                 .replace(/^\w/, c => c.toUpperCase())}
@@ -473,13 +473,13 @@ const Clients = () => {
 
                                         {/* Status */}
                                         <td className="px-4 py-3 text-center">
-                                            <span className="flex items-center justify-center gap-2">
+                                            <span className="flex items-center justify-center gap-1 md:gap-2">
                                                 <span
-                                                    className={`w-3 h-3 rounded-full ${client.isActive ? "bg-green-500" : "bg-gray-400"
+                                                    className={`w-2 h-2 md:w-3 md:h-3 rounded-full ${client.isActive ? "bg-green-500" : "bg-gray-400"
                                                         }`}
                                                 ></span>
 
-                                                <span className="text-sm font-medium">
+                                                <span className="text-xs md:text-sm font-medium">
                                                     {client.isActive ? "Active" : "Inactive"}
                                                 </span>
                                             </span>
@@ -496,7 +496,7 @@ const Clients = () => {
                                                     className="px-3 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100"
                                                 >
                                                     <svg
-                                                        className="w-5 h-5"
+                                                        className="w-4 h-4 md:w-5 md:h-5"
                                                         fill="none"
                                                         stroke="currentColor"
                                                         viewBox="0 0 24 24"
